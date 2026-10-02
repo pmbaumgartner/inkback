@@ -1,7 +1,7 @@
+import { parseRfmEndmatter } from "@inkback/rfm";
 import { tables, taskListItems } from "@joplin/turndown-plugin-gfm";
 import { marked } from "marked";
 import TurndownService from "turndown";
-import { parse as parseYaml } from "yaml";
 
 export const rawMarkdownBlockAttribute = "data-markdown-raw-block";
 
@@ -176,46 +176,6 @@ function isYamlFrontmatterDelimiter(line: string): boolean {
   return /^(?:---|\.\.\.)[ \t]*$/.test(line.replace(/\r$/, ""));
 }
 
-function isReviewEndmatterMap(value: unknown): boolean {
-  return Boolean(value && typeof value === "object" && !Array.isArray(value));
-}
-
-function hasDocumentLevelComment(value: unknown): boolean {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-
-  return Object.values(value as Record<string, unknown>).some(
-    (entry) =>
-      Boolean(entry) &&
-      typeof entry === "object" &&
-      !Array.isArray(entry) &&
-      typeof (entry as Record<string, unknown>).body === "string" &&
-      typeof (entry as Record<string, unknown>).by === "string" &&
-      typeof (entry as Record<string, unknown>).at === "string" &&
-      typeof (entry as Record<string, unknown>).re !== "string",
-  );
-}
-
-function isInkbackReviewEndmatter(endmatter: string): boolean {
-  const yamlText = endmatter.replace(/^---[ \t]*(?:\r\n|\n)/, "");
-  let parsed: unknown;
-
-  try {
-    parsed = parseYaml(yamlText);
-  } catch {
-    return false;
-  }
-
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return false;
-  }
-
-  const record = parsed as Record<string, unknown>;
-  return (
-    isReviewEndmatterMap(record.comments) ||
-    isReviewEndmatterMap(record.suggestions)
-  );
-}
-
 export function splitYamlFrontmatter(markdown: string): YamlFrontmatterSplit {
   const openingDelimiter = markdown.match(/^---[ \t]*(?:\r\n|\n)/);
   if (!openingDelimiter) return { frontmatter: null, body: markdown };
@@ -269,32 +229,12 @@ export function splitYamlDocumentMetadata(
   markdown: string,
 ): YamlDocumentMetadataSplit {
   const { frontmatter, body } = splitYamlFrontmatter(markdown);
-  const matches = [...body.matchAll(/\n---[ \t]*\r?\n/g)];
-  const match = matches.at(-1);
-
-  if (!match || match.index === undefined) {
-    return { frontmatter, body, endmatter: null };
-  }
-
-  const endmatter = body.slice(match.index);
-  const candidate = endmatter.replace(/^\n/, "");
-
-  const precedingBody = body.slice(0, match.index);
-  if (!isInkbackReviewEndmatter(candidate)) {
-    return { frontmatter, body, endmatter: null };
-  }
-  if (!precedingBody.includes("{#")) {
-    const yamlText = candidate.replace(/^---[ \t]*(?:\r\n|\n)/, "");
-    const parsed = parseYaml(yamlText) as Record<string, unknown> | null;
-    if (!hasDocumentLevelComment(parsed?.comments)) {
-      return { frontmatter, body, endmatter: null };
-    }
-  }
-
+  const parsed = parseRfmEndmatter(body);
+  if (parsed.offset === null) return { frontmatter, body, endmatter: null };
   return {
     frontmatter,
-    body: body.slice(0, match.index).replace(/\s*$/, "\n"),
-    endmatter: candidate,
+    body: body.slice(0, parsed.offset).replace(/\s*$/, "\n"),
+    endmatter: parsed.raw?.replace(/^\n/, "") ?? null,
   };
 }
 

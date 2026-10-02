@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useSyncExternalStore,
   useState,
 } from "react";
 import {
@@ -15,15 +16,11 @@ import {
   joinPath,
   syncRequestedPathInUrl,
 } from "./app-navigation";
+import { DocumentSaveController } from "./DocumentSaveController";
 import { DocumentWorkspace } from "./DocumentWorkspace";
 import { detectBackend } from "./detect-backend";
 import type { DocumentSaveState } from "./PageCard";
-import {
-  type CompleteReviewOptions,
-  MarkdownFileConflictError,
-  type Page,
-  type StorageBackend,
-} from "./storage";
+import type { CompleteReviewOptions, StorageBackend } from "./storage";
 
 export type DocumentDiskChangeState =
   | "clean"
@@ -70,51 +67,45 @@ export function App() {
   const initialRequestedPathState = getRequestedPathState();
   const [requestedPathState] = useState(initialRequestedPathState);
   const [backend, setBackend] = useState<StorageBackend | null>(null);
-  const [documentPage, setDocumentPage] = useState<Page | null>(null);
   const [activeDocumentPath, setActiveDocumentPath] = useState<string | null>(
     initialRequestedPathState.documentPath,
   );
-  const [documentSaveState, setDocumentSaveState] =
-    useState<DocumentSaveState>("saved");
-  const [documentDiskChangeState, setDocumentDiskChangeState] =
-    useState<DocumentDiskChangeState>("clean");
-  const [documentForceResetKey, setDocumentForceResetKey] = useState<
-    string | null
-  >(null);
+  const [saveController, setSaveController] =
+    useState<DocumentSaveController | null>(null);
+  const snapshot = useSyncExternalStore(
+    saveController?.subscribe ?? (() => () => {}),
+    saveController?.getSnapshot ?? (() => null),
+  );
+  const documentPage = snapshot?.page ?? null;
+  const documentDiskChangeState = snapshot?.diskState ?? "clean";
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [documentEditorViewMode, setDocumentEditorViewMode] = useState(() =>
     getDocumentEditorViewModeFromLocation("rich-text"),
   );
   const backendRef = useRef<StorageBackend | null>(null);
-  const documentPageRef = useRef<Page | null>(null);
-  const activeDocumentPathRef = useRef<string | null>(activeDocumentPath);
-  const documentDirtyRef = useRef(false);
-  const documentSaveStateRef = useRef<DocumentSaveState>("saved");
-  const documentDraftContentRef = useRef<string | null>(null);
-
+  const saveControllerRef = useRef<DocumentSaveController | null>(null);
   backendRef.current = backend;
-  documentPageRef.current = documentPage;
-  activeDocumentPathRef.current = activeDocumentPath;
-  documentSaveStateRef.current = documentSaveState;
-
-  const applyDocumentPage = useCallback((nextDocument: Page) => {
-    // Handoff may read the saved version before React commits the next render.
-    documentPageRef.current = nextDocument;
-    setDocumentPage(nextDocument);
-    documentDraftContentRef.current = nextDocument.content;
-  }, []);
 
   const loadDocument = useCallback(
-    async (nextBackend: StorageBackend, relativePath: string) => {
+    async (
+      nextBackend: StorageBackend,
+      relativePath: string,
+      isCancelled: () => boolean,
+    ) => {
       const nextDocument = await nextBackend.getMarkdownFile(relativePath);
-      applyDocumentPage(nextDocument);
+      if (isCancelled()) return;
+      saveControllerRef.current?.dispose();
+      const controller = new DocumentSaveController(
+        relativePath,
+        nextDocument,
+        nextBackend,
+      );
+      saveControllerRef.current = controller;
+      setSaveController(controller);
       setActiveDocumentPath(relativePath);
-      documentDirtyRef.current = false;
-      setDocumentDiskChangeState("clean");
-      return nextDocument;
     },
-    [applyDocumentPage],
+    [],
   );
 
   useEffect(() => {
@@ -155,7 +146,6 @@ export function App() {
     const initialize = async () => {
       setLoading(true);
       setLoadError(null);
-      setDocumentPage(null);
 
       try {
         const detectedBackend = await detectBackend();
@@ -165,7 +155,7 @@ export function App() {
 
         if (detectedBackend.info.kind === "remote") {
           const documentPath = detectedBackend.info.detail || "remote.md";
-          await loadDocument(detectedBackend, documentPath);
+          await loadDocument(detectedBackend, documentPath, () => cancelled);
           if (cancelled) return;
           setLoading(false);
           return;
@@ -195,7 +185,11 @@ export function App() {
 
         if (cancelled) return;
 
-        await loadDocument(detectedBackend, requestedPathState.documentPath);
+        await loadDocument(
+          detectedBackend,
+          requestedPathState.documentPath,
+          () => cancelled,
+        );
         if (cancelled) return;
 
         setLoading(false);
@@ -213,6 +207,8 @@ export function App() {
 
     return () => {
       cancelled = true;
+      saveControllerRef.current?.dispose();
+      saveControllerRef.current = null;
     };
   }, [
     loadDocument,
@@ -233,69 +229,15 @@ export function App() {
     document.title = workspaceTitlePath ?? "Inkback";
   }, [activeDocumentPath, backend, requestedPathState.rawPath]);
 
-  const handleSaveDocument = useCallback(
-    async (id: string, content: string) => {
-      if (!activeDocumentPath) return;
-      const expectedVersion =
-        documentPageRef.current?.id === id
-          ? documentPageRef.current.version
-          : undefined;
-
-      let savedDocument: Page | undefined;
-      try {
-        savedDocument = await backendRef.current?.saveMarkdownFile(
-          activeDocumentPath,
-          content,
-          expectedVersion,
-        );
-      } catch (error) {
-        if (error instanceof MarkdownFileConflictError) {
-          setDocumentDiskChangeState("conflict");
-        }
-        throw error;
-      }
-
-      const firstLine = content.split("\n")[0] || "";
-      const fallbackTitle = id.split("/").at(-1) || id;
-      const title = firstLine.replace(/^#*\s*/, "") || fallbackTitle;
-      const nextDocument = savedDocument ?? {
-        id,
-        content,
-        title,
-        version: expectedVersion,
-      };
-
-      applyDocumentPage(nextDocument);
-      documentDirtyRef.current = false;
-      setDocumentDiskChangeState("clean");
-    },
-    [activeDocumentPath, applyDocumentPage],
-  );
-
-  const handleDocumentDirtyStateChange = useCallback((isDirty: boolean) => {
-    documentDirtyRef.current = isDirty;
-  }, []);
-
-  const handleDocumentSaveStateChange = useCallback(
-    (state: DocumentSaveState) => {
-      documentSaveStateRef.current = state;
-      setDocumentSaveState(state);
-    },
-    [],
-  );
-
-  const handleDocumentLocalContentChange = useCallback((markdown: string) => {
-    documentDraftContentRef.current = markdown;
-  }, []);
-
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       if (
         !shouldWarnBeforeUnload({
-          activeDocumentPath: activeDocumentPathRef.current,
-          isDirty: documentDirtyRef.current,
-          saveState: documentSaveStateRef.current,
-          diskChangeState: documentDiskChangeState,
+          activeDocumentPath: saveControllerRef.current?.path ?? null,
+          isDirty: saveControllerRef.current?.getSnapshot().dirty ?? false,
+          saveState: saveControllerRef.current?.getSnapshot().status ?? "saved",
+          diskChangeState:
+            saveControllerRef.current?.getSnapshot().diskState ?? "clean",
         })
       ) {
         return;
@@ -307,144 +249,51 @@ export function App() {
 
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [documentDiskChangeState]);
+  }, []);
 
   const handleReloadDocumentFromDisk = useCallback(async () => {
-    const currentBackend = backendRef.current;
-    const currentPath = activeDocumentPathRef.current;
-    if (!currentBackend || !currentPath) return;
-
-    const nextDocument = await currentBackend.getMarkdownFile(currentPath);
-    applyDocumentPage(nextDocument);
-    documentDirtyRef.current = false;
-    setDocumentDiskChangeState("clean");
-    setDocumentForceResetKey(
-      `${currentPath}:${nextDocument.version ?? Date.now()}`,
-    );
-  }, [applyDocumentPage]);
+    await saveControllerRef.current?.reload();
+  }, []);
 
   const handleKeepEditingWithoutAutosave = useCallback(() => {
-    setDocumentDiskChangeState("paused");
+    saveControllerRef.current?.setDiskState("paused");
   }, []);
 
   const handleOverwriteDocumentOnDisk = useCallback(async () => {
-    const currentBackend = backendRef.current;
-    const currentPath = activeDocumentPathRef.current;
-    const currentDocument = documentPageRef.current;
-    if (!currentBackend || !currentPath || !currentDocument) return;
-
-    const content = documentDraftContentRef.current ?? currentDocument.content;
-    const firstLine = content.split("\n")[0] || "";
-    const fallbackTitle =
-      currentDocument.id.split("/").at(-1) || currentDocument.id;
-    const title = firstLine.replace(/^#*\s*/, "") || fallbackTitle;
-    const savedDocument = (await currentBackend.saveMarkdownFile(
-      currentPath,
-      content,
-    )) ?? {
-      ...currentDocument,
-      content,
-      title,
-    };
-
-    applyDocumentPage(savedDocument);
-    documentDirtyRef.current = false;
-    handleDocumentSaveStateChange("saved");
-    setDocumentDiskChangeState("clean");
-    setDocumentForceResetKey(
-      `${currentPath}:${savedDocument.version ?? Date.now()}:overwrite`,
-    );
-  }, [applyDocumentPage, handleDocumentSaveStateChange]);
+    await saveControllerRef.current?.overwrite();
+  }, []);
 
   const handleCompleteReview = useCallback(
     async (options?: CompleteReviewOptions) => {
+      const controller = saveControllerRef.current;
       const currentBackend = backendRef.current;
-      const currentPath = activeDocumentPathRef.current;
-      const currentDocument = documentPageRef.current;
-      if (!currentBackend || !currentPath || !currentDocument) {
-        return { delivered: false };
-      }
-
-      const content =
-        documentDraftContentRef.current ?? currentDocument.content;
-      const expectedVersion = currentDocument.version;
-      const firstLine = content.split("\n")[0] || "";
-      const fallbackTitle =
-        currentDocument.id.split("/").at(-1) || currentDocument.id;
-      const title = firstLine.replace(/^#*\s*/, "") || fallbackTitle;
-
-      const savedDocument = (await currentBackend.saveMarkdownFile(
-        currentPath,
-        content,
-        expectedVersion,
-      )) ?? {
-        ...currentDocument,
-        content,
-        title,
-      };
-
-      applyDocumentPage(savedDocument);
-      documentDirtyRef.current = false;
-      setDocumentDiskChangeState("clean");
-
+      if (!controller || !currentBackend) return { delivered: false };
+      const result = await controller.flushSave();
+      if (result.status !== "saved")
+        throw result.status === "error"
+          ? result.error
+          : new Error("Document save is blocked");
+      if (saveControllerRef.current !== controller) return { delivered: false };
       return currentBackend.completeReview
-        ? currentBackend.completeReview(currentPath, options)
+        ? currentBackend.completeReview(controller.path, options)
         : { delivered: false };
     },
-    [applyDocumentPage],
+    [],
   );
 
   useEffect(() => {
     if (!backend?.watchMarkdownFile || !activeDocumentPath) return;
 
-    let disposed = false;
+    const controller = saveController;
+    if (!controller) return;
     const stopWatching = backend.watchMarkdownFile(
       activeDocumentPath,
       (event) => {
-        if (disposed || event.path !== activeDocumentPath) return;
-
-        const currentDocument = documentPageRef.current;
-        if (event.version && currentDocument?.version === event.version) {
-          return;
-        }
-
-        if (!event.exists) {
-          setDocumentDiskChangeState("changed");
-          return;
-        }
-
-        if (documentDiskChangeState === "paused") {
-          return;
-        }
-
-        if (documentDirtyRef.current) {
-          setDocumentDiskChangeState("changed");
-          return;
-        }
-
-        void (async () => {
-          const currentBackend = backendRef.current;
-          const currentPath = activeDocumentPathRef.current;
-          if (!currentBackend || !currentPath || disposed) return;
-
-          try {
-            const nextDocument =
-              await currentBackend.getMarkdownFile(currentPath);
-            if (disposed) return;
-            applyDocumentPage(nextDocument);
-            setDocumentDiskChangeState("clean");
-          } catch (error) {
-            console.error("Failed to reload changed markdown file:", error);
-          }
-        })();
+        void controller.onDiskEvent(event);
       },
     );
-
-    return () => {
-      disposed = true;
-      stopWatching();
-    };
-  }, [activeDocumentPath, applyDocumentPage, backend, documentDiskChangeState]);
+    return () => stopWatching();
+  }, [activeDocumentPath, backend, saveController]);
 
   const handleDocumentEditorViewModeChange = useCallback(
     (nextMode: DocumentEditorViewMode) => {
@@ -494,12 +343,8 @@ export function App() {
         documentFilenameLabel={documentFilenameLabel}
         documentEditorViewMode={documentEditorViewMode}
         onDocumentEditorViewModeChange={handleDocumentEditorViewModeChange}
-        onSaveDocument={handleSaveDocument}
-        onDocumentSaveStateChange={handleDocumentSaveStateChange}
-        onDocumentDirtyStateChange={handleDocumentDirtyStateChange}
-        onDocumentLocalContentChange={handleDocumentLocalContentChange}
+        saveController={saveController}
         documentDiskChangeState={documentDiskChangeState}
-        documentForceResetKey={documentForceResetKey}
         onReloadDocumentFromDisk={handleReloadDocumentFromDisk}
         onKeepEditingWithoutAutosave={handleKeepEditingWithoutAutosave}
         onOverwriteDocumentOnDisk={handleOverwriteDocumentOnDisk}

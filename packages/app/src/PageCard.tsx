@@ -4,7 +4,7 @@ import { TextSelection } from "@tiptap/pm/state";
 import type { Editor } from "@tiptap/react";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-
+import { buildLocationForLinkedMarkdownDocument } from "./app-navigation";
 import { CommentEditorList } from "./CommentEditorList";
 import {
   type CriticChangeAttrs,
@@ -20,6 +20,7 @@ import {
   type CriticChangeRailItem,
   DocumentReviewRail,
 } from "./DocumentReviewRail";
+import type { DocumentSaveController } from "./DocumentSaveController";
 import {
   collectAnchoredThreadComments,
   getPreferredCommentId,
@@ -34,22 +35,16 @@ import {
 } from "./editor-extensions";
 import { cn } from "./lib/utils";
 import { MarkdownCodeEditor } from "./MarkdownCodeEditor";
-import { buildLocationForLinkedMarkdownDocument } from "./app-navigation";
 import { toHtml } from "./markdown";
 import type { Page, StorageBackend } from "./storage";
 import { useCommentAnchorLayout } from "./useCommentAnchorLayout";
 import { useReviewLayoutShiftAnimation } from "./useReviewLayoutShiftAnimation";
 
-export type DocumentSaveState = "saved" | "unsaved" | "saving" | "error";
-
-export type ManualSaveResult =
-  | { status: "saved" }
-  | { status: "blocked" }
-  | { status: "error"; error: unknown };
-
-export interface DocumentSaveController {
-  flushSave: () => Promise<ManualSaveResult>;
-}
+export type {
+  DocumentSaveController,
+  DocumentSaveState,
+  ManualSaveResult,
+} from "./DocumentSaveController";
 
 type EditorViewMode = "rich-text" | "code";
 export type DocumentInteractionMode = "viewing" | "suggesting" | "editing";
@@ -59,18 +54,12 @@ interface PageCardProps {
   activeDocumentPath?: string | null;
   selected?: boolean;
   focusRequestKey?: string | null;
-  onSave: (id: string, content: string) => Promise<void>;
-  onSaveStateChange?: (state: DocumentSaveState) => void;
   editorViewMode?: EditorViewMode;
   interactionMode?: DocumentInteractionMode;
   backend: StorageBackend;
   onEditorReady?: (editor: Editor | null) => void;
   onCommentRailPresenceChange?: (hasCommentRailSpace: boolean) => void;
-  onDirtyStateChange?: (isDirty: boolean) => void;
-  onLocalContentChange?: (markdown: string) => void;
-  onSaveControllerChange?: (controller: DocumentSaveController | null) => void;
-  saveBlocked?: boolean;
-  forceResetKey?: string | null;
+  saveController: DocumentSaveController;
 }
 
 interface PageCardEditorSurfaceProps {
@@ -78,18 +67,12 @@ interface PageCardEditorSurfaceProps {
   activeDocumentPath: string | null;
   selected: boolean;
   focusRequestKey: string | null;
-  onSave: (id: string, content: string) => Promise<void>;
-  onSaveStateChange: (state: DocumentSaveState) => void;
   editorViewMode: EditorViewMode;
   interactionMode: DocumentInteractionMode;
   backend: StorageBackend;
   onEditorReady?: (editor: Editor | null) => void;
   onCommentRailPresenceChange?: (hasCommentRailSpace: boolean) => void;
-  onDirtyStateChange?: (isDirty: boolean) => void;
-  onLocalContentChange?: (markdown: string) => void;
-  onSaveControllerChange?: (controller: DocumentSaveController | null) => void;
-  saveBlocked?: boolean;
-  forceResetKey?: string | null;
+  saveController: DocumentSaveController;
 }
 
 interface RichTextEditorSurfaceProps {
@@ -2097,215 +2080,37 @@ const PageCardEditorSurface = memo(function PageCardEditorSurface({
   activeDocumentPath,
   selected,
   focusRequestKey,
-  onSave,
-  onSaveStateChange,
   editorViewMode,
   interactionMode,
   backend,
   onEditorReady,
   onCommentRailPresenceChange,
-  onDirtyStateChange,
-  onLocalContentChange,
-  onSaveControllerChange,
-  saveBlocked = false,
-  forceResetKey = null,
+  saveController,
 }: PageCardEditorSurfaceProps) {
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const inFlightSaveRef = useRef<Promise<ManualSaveResult> | null>(null);
-  const pendingMarkdownRef = useRef(page.content);
-  const recentMarkdownRef = useRef<Set<string>>(new Set());
   const previousEditorViewModeRef = useRef<EditorViewMode>(editorViewMode);
-  const lastAcceptedMarkdownRef = useRef(page.content);
-  const localDirtyRef = useRef(false);
-  const forceResetKeyRef = useRef(forceResetKey);
   const [markdown, setMarkdown] = useState(page.content);
   const [richTextSourceMarkdown, setRichTextSourceMarkdown] = useState(
     page.content,
   );
   const [richTextSourceVersion, setRichTextSourceVersion] = useState(0);
 
-  const reportDirtyState = useCallback(
-    (isDirty: boolean) => {
-      if (localDirtyRef.current === isDirty) return;
-      localDirtyRef.current = isDirty;
-      onDirtyStateChange?.(isDirty);
-    },
-    [onDirtyStateChange],
-  );
-
-  const acceptMarkdown = useCallback(
-    (nextMarkdown: string) => {
-      pendingMarkdownRef.current = nextMarkdown;
-      lastAcceptedMarkdownRef.current = nextMarkdown;
-      setMarkdown(nextMarkdown);
-      setRichTextSourceMarkdown(nextMarkdown);
-      setRichTextSourceVersion((current) => current + 1);
-      onLocalContentChange?.(nextMarkdown);
-      reportDirtyState(false);
-      onSaveStateChange("saved");
-    },
-    [onLocalContentChange, onSaveStateChange, reportDirtyState],
-  );
-
-  const rememberRecentMarkdown = useCallback((nextMarkdown: string) => {
-    recentMarkdownRef.current.add(nextMarkdown);
-    if (recentMarkdownRef.current.size > 10) {
-      const iterator = recentMarkdownRef.current.values();
-      recentMarkdownRef.current.delete(iterator.next().value as string);
-    }
-  }, []);
-
-  const performSave = useCallback(
-    async (nextMarkdown: string): Promise<ManualSaveResult> => {
-      if (saveBlocked) {
-        onSaveStateChange(
-          nextMarkdown === lastAcceptedMarkdownRef.current
-            ? "saved"
-            : "unsaved",
-        );
-        return { status: "blocked" };
-      }
-
-      rememberRecentMarkdown(nextMarkdown);
-      onSaveStateChange("saving");
-
-      try {
-        await onSave(page.id, nextMarkdown);
-        lastAcceptedMarkdownRef.current = nextMarkdown;
-        reportDirtyState(pendingMarkdownRef.current !== nextMarkdown);
-        onSaveStateChange(
-          pendingMarkdownRef.current === nextMarkdown ? "saved" : "saving",
-        );
-        return { status: "saved" };
-      } catch (error) {
-        console.error("Failed to save page:", error);
-        onSaveStateChange("error");
-        return { status: "error", error };
-      }
-    },
-    [
-      onSave,
-      onSaveStateChange,
-      page.id,
-      rememberRecentMarkdown,
-      reportDirtyState,
-      saveBlocked,
-    ],
-  );
-
-  const scheduleSave = useCallback(
-    (nextMarkdown: string) => {
-      if (saveTimer.current) {
-        clearTimeout(saveTimer.current);
-        saveTimer.current = null;
-      }
-
-      if (saveBlocked) {
-        onSaveStateChange(
-          nextMarkdown === lastAcceptedMarkdownRef.current
-            ? "saved"
-            : "unsaved",
-        );
-        return;
-      }
-
-      onSaveStateChange("saving");
-      saveTimer.current = setTimeout(() => {
-        saveTimer.current = null;
-        inFlightSaveRef.current = performSave(nextMarkdown).finally(() => {
-          inFlightSaveRef.current = null;
-        });
-        void inFlightSaveRef.current;
-      }, 500);
-    },
-    [onSaveStateChange, performSave, saveBlocked],
-  );
-
-  const flushSave = useCallback(async (): Promise<ManualSaveResult> => {
-    if (saveTimer.current) {
-      clearTimeout(saveTimer.current);
-      saveTimer.current = null;
-    }
-
-    const currentMarkdown = pendingMarkdownRef.current;
-
-    if (
-      currentMarkdown === lastAcceptedMarkdownRef.current &&
-      !inFlightSaveRef.current
-    ) {
-      onSaveStateChange("saved");
-      return { status: "saved" };
-    }
-
-    if (inFlightSaveRef.current) {
-      await inFlightSaveRef.current;
-      if (pendingMarkdownRef.current === lastAcceptedMarkdownRef.current) {
-        onSaveStateChange("saved");
-        return { status: "saved" };
-      }
-    }
-
-    return await performSave(pendingMarkdownRef.current);
-  }, [onSaveStateChange, performSave]);
-
-  useEffect(() => {
-    onSaveControllerChange?.({ flushSave });
-    return () => onSaveControllerChange?.(null);
-  }, [flushSave, onSaveControllerChange]);
-
+  const lastPageContentRef = useRef(page.content);
   const handleMarkdownChange = useCallback(
     (nextMarkdown: string) => {
-      pendingMarkdownRef.current = nextMarkdown;
+      lastPageContentRef.current = nextMarkdown;
       setMarkdown(nextMarkdown);
-      onLocalContentChange?.(nextMarkdown);
-      reportDirtyState(nextMarkdown !== lastAcceptedMarkdownRef.current);
-      scheduleSave(nextMarkdown);
+      saveController.edit(nextMarkdown);
     },
-    [onLocalContentChange, reportDirtyState, scheduleSave],
+    [saveController],
   );
 
   useEffect(() => {
-    const forceResetChanged = forceResetKeyRef.current !== forceResetKey;
-    forceResetKeyRef.current = forceResetKey;
-
-    if (forceResetChanged) {
-      recentMarkdownRef.current.delete(page.content);
-      acceptMarkdown(page.content);
-      return;
-    }
-
-    if (recentMarkdownRef.current.has(page.content)) {
-      recentMarkdownRef.current.delete(page.content);
-      lastAcceptedMarkdownRef.current = page.content;
-      pendingMarkdownRef.current = markdown;
-      reportDirtyState(markdown !== page.content);
-      return;
-    }
-
-    if (localDirtyRef.current && markdown !== page.content) {
-      return;
-    }
-
-    if (markdown === page.content) {
-      lastAcceptedMarkdownRef.current = page.content;
-      pendingMarkdownRef.current = page.content;
-      reportDirtyState(false);
-      return;
-    }
-
-    acceptMarkdown(page.content);
-  }, [acceptMarkdown, forceResetKey, markdown, page.content, reportDirtyState]);
-
-  useEffect(() => {
-    if (!saveBlocked || !saveTimer.current) return;
-    clearTimeout(saveTimer.current);
-    saveTimer.current = null;
-    onSaveStateChange(
-      pendingMarkdownRef.current === lastAcceptedMarkdownRef.current
-        ? "saved"
-        : "unsaved",
-    );
-  }, [onSaveStateChange, saveBlocked]);
+    if (lastPageContentRef.current === page.content) return;
+    lastPageContentRef.current = page.content;
+    setMarkdown(page.content);
+    setRichTextSourceMarkdown(page.content);
+    setRichTextSourceVersion((current) => current + 1);
+  }, [page.content]);
 
   useEffect(() => {
     const previousEditorViewMode = previousEditorViewModeRef.current;
@@ -2318,14 +2123,6 @@ const PageCardEditorSurface = memo(function PageCardEditorSurface({
     setRichTextSourceMarkdown(markdown);
     setRichTextSourceVersion((current) => current + 1);
   }, [editorViewMode, markdown]);
-
-  useEffect(() => {
-    return () => {
-      if (saveTimer.current) {
-        clearTimeout(saveTimer.current);
-      }
-    };
-  }, []);
 
   const hasCommentRailSpace = useMemo(
     () => criticMarkdownHasReviewRail(markdown),
@@ -2348,21 +2145,14 @@ const PageCardEditorSurface = memo(function PageCardEditorSurface({
     );
   }
 
-  const effectiveRichTextSourceMarkdown =
-    !localDirtyRef.current &&
-    !recentMarkdownRef.current.has(page.content) &&
-    markdown !== page.content
-      ? page.content
-      : richTextSourceMarkdown;
-
   return (
     <RichTextEditorSurface
-      key={`${page.id}:${richTextSourceVersion}:${effectiveRichTextSourceMarkdown}`}
+      key={`${page.id}:${richTextSourceVersion}:${richTextSourceMarkdown}`}
       page={page}
       activeDocumentPath={activeDocumentPath}
       selected={selected}
       focusRequestKey={focusRequestKey}
-      sourceMarkdown={effectiveRichTextSourceMarkdown}
+      sourceMarkdown={richTextSourceMarkdown}
       onMarkdownChange={handleMarkdownChange}
       interactionMode={interactionMode}
       onCommentRailPresenceChange={onCommentRailPresenceChange}
@@ -2377,25 +2167,13 @@ export function PageCard({
   activeDocumentPath = null,
   selected = false,
   focusRequestKey = null,
-  onSave,
-  onSaveStateChange,
   editorViewMode = "rich-text",
   interactionMode = "editing",
   backend,
   onEditorReady,
   onCommentRailPresenceChange,
-  onDirtyStateChange,
-  onLocalContentChange,
-  onSaveControllerChange,
-  saveBlocked,
-  forceResetKey,
+  saveController,
 }: PageCardProps) {
-  const [saveState, setSaveState] = useState<DocumentSaveState>("saved");
-
-  useEffect(() => {
-    onSaveStateChange?.(saveState);
-  }, [onSaveStateChange, saveState]);
-
   return (
     <div className="w-full">
       <PageCardEditorSurface
@@ -2403,18 +2181,12 @@ export function PageCard({
         activeDocumentPath={activeDocumentPath}
         selected={selected}
         focusRequestKey={focusRequestKey}
-        onSave={onSave}
-        onSaveStateChange={setSaveState}
         editorViewMode={editorViewMode}
         interactionMode={interactionMode}
         backend={backend}
         onEditorReady={onEditorReady}
         onCommentRailPresenceChange={onCommentRailPresenceChange}
-        onDirtyStateChange={onDirtyStateChange}
-        onLocalContentChange={onLocalContentChange}
-        onSaveControllerChange={onSaveControllerChange}
-        saveBlocked={saveBlocked}
-        forceResetKey={forceResetKey}
+        saveController={saveController}
       />
     </div>
   );

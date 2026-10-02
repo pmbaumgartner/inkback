@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import { CommentEditorList } from "./CommentEditorList";
 import type { CriticComment } from "./critic-markup";
 import {
@@ -7,10 +7,10 @@ import {
   type CommentThreadRailItem,
   getPreferredCommentId,
   getRootThreadIdForCommentId,
-  normalizeCommentMeasurement,
   resolveCommentThreadRailLayouts,
 } from "./document-comments";
 import { cn } from "./lib/utils";
+import { useRailItemHeights } from "./useRailItemHeights";
 
 interface DocumentCommentRailProps {
   commentGroups: CommentGroupAnchor[];
@@ -45,11 +45,6 @@ export function DocumentCommentRail({
   pendingFocusCommentId = null,
   onAutoFocusComment,
 }: DocumentCommentRailProps) {
-  const threadRefs = useRef(new Map<string, HTMLDivElement>());
-  const [threadHeights, setThreadHeights] = useState<Record<string, number>>(
-    {},
-  );
-
   const activeRootThreadId = useMemo(
     () => getRootThreadIdForCommentId(selectedCommentId, comments),
     [comments, selectedCommentId],
@@ -80,71 +75,12 @@ export function DocumentCommentRail({
     [commentGroups, comments],
   );
 
-  const setThreadRef = useCallback(
-    (key: string, node: HTMLDivElement | null) => {
-      if (node) {
-        threadRefs.current.set(key, node);
-      } else {
-        threadRefs.current.delete(key);
-      }
-    },
-    [],
+  const threadKeys = useMemo(
+    () => visibleThreads.map((thread) => thread.key),
+    [visibleThreads],
   );
-
-  useLayoutEffect(() => {
-    if (visibleThreads.length === 0) {
-      setThreadHeights({});
-      return;
-    }
-
-    const updateHeights = () => {
-      setThreadHeights((current) => {
-        const next: Record<string, number> = {};
-        let changed = false;
-
-        for (const thread of visibleThreads) {
-          const element = threadRefs.current.get(thread.key);
-          const measuredHeight = Math.ceil(
-            element?.getBoundingClientRect().height ?? 0,
-          );
-          const height =
-            measuredHeight > 0
-              ? Math.ceil(normalizeCommentMeasurement(measuredHeight, 1))
-              : (current[thread.key] ?? 0);
-          next[thread.key] = height;
-          if (current[thread.key] !== height) {
-            changed = true;
-          }
-        }
-
-        if (
-          !changed &&
-          Object.keys(current).length === Object.keys(next).length
-        ) {
-          return current;
-        }
-
-        return next;
-      });
-    };
-
-    updateHeights();
-
-    const resizeObserver = new ResizeObserver(() => {
-      updateHeights();
-    });
-
-    for (const thread of visibleThreads) {
-      const element = threadRefs.current.get(thread.key);
-      if (element) {
-        resizeObserver.observe(element);
-      }
-    }
-
-    return () => {
-      resizeObserver.disconnect();
-    };
-  }, [visibleThreads]);
+  const { heights: threadHeights, setRef: setThreadRef } =
+    useRailItemHeights(threadKeys);
 
   const layouts = useMemo(() => {
     const baseLayouts = resolveCommentThreadRailLayouts(

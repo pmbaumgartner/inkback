@@ -488,6 +488,7 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
   function markdownPathFromRequest(
     req: Request,
     res: Response,
+    options?: { queryPathOnly?: boolean },
   ): { relativePath: string; absolutePath: string; projectDir: string } | null {
     const projectDir = projectDirFromRequest(req, res);
     if (!projectDir) return null;
@@ -495,7 +496,7 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
     const relativePath =
       typeof req.query.path === "string"
         ? req.query.path
-        : typeof req.body?.path === "string"
+        : !options?.queryPathOnly && typeof req.body?.path === "string"
           ? req.body.path
           : "";
     const absolutePath = ensureProjectPath(projectDir, relativePath);
@@ -545,43 +546,17 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
   });
 
   app.get("/api/markdown-file", (req, res) => {
-    const projectDir = projectDirFromRequest(req, res);
-    if (!projectDir) return;
-
-    const relativePath =
-      typeof req.query.path === "string" ? req.query.path : "";
-    const absolutePath = ensureProjectPath(projectDir, relativePath);
-
-    if (!absolutePath?.toLowerCase().endsWith(".md")) {
-      res.status(404).json({ error: "Markdown file not found" });
-      return;
-    }
-
-    if (!fs.existsSync(absolutePath)) {
-      res.status(404).json({ error: "Markdown file not found" });
-      return;
-    }
+    const target = markdownPathFromRequest(req, res, { queryPathOnly: true });
+    if (!target) return;
+    const { relativePath, absolutePath } = target;
 
     res.json(markdownPageFromFile(relativePath, absolutePath));
   });
 
   app.get("/api/markdown-file/events", (req, res) => {
-    const projectDir = projectDirFromRequest(req, res);
-    if (!projectDir) return;
-
-    const relativePath =
-      typeof req.query.path === "string" ? req.query.path : "";
-    const absolutePath = ensureProjectPath(projectDir, relativePath);
-
-    if (!absolutePath?.toLowerCase().endsWith(".md")) {
-      res.status(404).json({ error: "Markdown file not found" });
-      return;
-    }
-
-    if (!fs.existsSync(absolutePath)) {
-      res.status(404).json({ error: "Markdown file not found" });
-      return;
-    }
+    const target = markdownPathFromRequest(req, res, { queryPathOnly: true });
+    if (!target) return;
+    const { relativePath, absolutePath } = target;
 
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache, no-transform");
@@ -867,22 +842,9 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
   });
 
   app.put("/api/markdown-file", (req, res) => {
-    const projectDir = projectDirFromRequest(req, res);
-    if (!projectDir) return;
-
-    const relativePath =
-      typeof req.query.path === "string" ? req.query.path : "";
-    const absolutePath = ensureProjectPath(projectDir, relativePath);
-
-    if (!absolutePath?.toLowerCase().endsWith(".md")) {
-      res.status(404).json({ error: "Markdown file not found" });
-      return;
-    }
-
-    if (!fs.existsSync(absolutePath)) {
-      res.status(404).json({ error: "Markdown file not found" });
-      return;
-    }
+    const target = markdownPathFromRequest(req, res, { queryPathOnly: true });
+    if (!target) return;
+    const { relativePath, absolutePath } = target;
 
     const { content, expectedVersion } = req.body as {
       content: string;

@@ -126,7 +126,7 @@ interface ParsedSuggestion {
   endOffset: number;
 }
 
-interface YamlMetadataEntry {
+export interface RfmEndmatterEntry {
   body?: string;
   by?: string;
   at?: string;
@@ -136,9 +136,9 @@ interface YamlMetadataEntry {
   [key: string]: unknown;
 }
 
-interface InkbackEndmatter {
-  comments: Map<string, YamlMetadataEntry>;
-  suggestions: Map<string, YamlMetadataEntry>;
+export interface RfmEndmatter {
+  comments: Map<string, RfmEndmatterEntry>;
+  suggestions: Map<string, RfmEndmatterEntry>;
   data: Record<string, unknown> | null;
   raw: string | null;
   offset: number | null;
@@ -153,7 +153,7 @@ const attributeNamePattern = /^[A-Za-z][A-Za-z0-9_-]*$/;
 
 export function validateInkbackMarkdown(markdown: string): RfmValidationResult {
   const lineStarts = createLineStarts(markdown);
-  const endmatter = parseInkbackEndmatter(markdown);
+  const endmatter = parseRfmEndmatter(markdown);
   const diagnostics: RfmDiagnostic[] = [];
   const ids = new Map<string, IdReference>();
   const replies: ReplyReference[] = [];
@@ -449,7 +449,7 @@ export function validateInkbackMarkdown(markdown: string): RfmValidationResult {
 export function extractInkbackReviewIndex(markdown: string): RfmReviewIndex {
   const lineStarts = createLineStarts(markdown);
   const validation = validateInkbackMarkdown(markdown);
-  const endmatter = parseInkbackEndmatter(markdown);
+  const endmatter = parseRfmEndmatter(markdown);
   const items: RfmReviewItem[] = [];
   const noopDiagnostic = () => {};
 
@@ -602,7 +602,7 @@ export function appendInkbackDocumentComment(
   assertSafeCommentBodyText(options.message);
 
   const index = extractInkbackReviewIndex(markdown);
-  const endmatter = parseInkbackEndmatter(markdown);
+  const endmatter = parseRfmEndmatter(markdown);
   const commentId = options.id ?? nextCommentId(index.items);
   const comments = new Map(endmatter.comments);
   comments.set(commentId, {
@@ -611,10 +611,7 @@ export function appendInkbackDocumentComment(
     at: options.at ?? new Date().toISOString(),
   });
 
-  return writeInkbackEndmatter(markdown, {
-    comments,
-    suggestions: endmatter.suggestions,
-  });
+  return updateRfmEndmatter(markdown, comments, endmatter.suggestions);
 }
 
 export function appendInkbackReply(
@@ -629,7 +626,7 @@ export function appendInkbackReply(
     throw new Error(`Review item not found: ${options.parentId}`);
   }
 
-  const endmatter = parseInkbackEndmatter(markdown);
+  const endmatter = parseRfmEndmatter(markdown);
   if (isEndmatterBackedItem(markdown, parent)) {
     const replyId = options.id ?? nextCommentId(index.items);
     const comments = new Map(endmatter.comments);
@@ -639,10 +636,7 @@ export function appendInkbackReply(
       at: options.at ?? new Date().toISOString(),
       re: options.parentId,
     });
-    return writeInkbackEndmatter(markdown, {
-      comments,
-      suggestions: endmatter.suggestions,
-    });
+    return updateRfmEndmatter(markdown, comments, endmatter.suggestions);
   }
 
   const reply = `{>>${options.message}<<}${serializeMetadataAttributes({
@@ -674,7 +668,7 @@ export function markInkbackResolved(
     throw new Error(`Review item not found: ${options.targetId}`);
   }
 
-  const endmatter = parseInkbackEndmatter(markdown);
+  const endmatter = parseRfmEndmatter(markdown);
   const endmatterKind = endmatter.comments.has(options.targetId)
     ? "comment"
     : endmatter.suggestions.has(options.targetId)
@@ -691,7 +685,7 @@ export function markInkbackResolved(
       status: "resolved",
       ...(options.summary ? { resolved: options.summary } : {}),
     });
-    return writeInkbackEndmatter(markdown, { comments, suggestions });
+    return updateRfmEndmatter(markdown, comments, suggestions);
   }
 
   const metadataStart = findCanonicalMetadataStart(markdown, target.endOffset);
@@ -1096,8 +1090,8 @@ function parseLegacyAttributes(metadata: string): Map<string, string> {
   return attrs;
 }
 
-function parseInkbackEndmatter(markdown: string): InkbackEndmatter {
-  const empty: InkbackEndmatter = {
+export function parseRfmEndmatter(markdown: string): RfmEndmatter {
+  const empty: RfmEndmatter = {
     comments: new Map(),
     suggestions: new Map(),
     data: null,
@@ -1179,13 +1173,13 @@ function findFinalYamlEndmatter(
   };
 }
 
-function readEndmatterEntries(value: unknown): Map<string, YamlMetadataEntry> {
-  const entries = new Map<string, YamlMetadataEntry>();
+function readEndmatterEntries(value: unknown): Map<string, RfmEndmatterEntry> {
+  const entries = new Map<string, RfmEndmatterEntry>();
   if (!isPlainObject(value)) return entries;
 
   for (const [id, entry] of Object.entries(value)) {
     if (!isPlainObject(entry)) continue;
-    entries.set(id, entry as YamlMetadataEntry);
+    entries.set(id, entry as RfmEndmatterEntry);
   }
 
   return entries;
@@ -1197,7 +1191,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function hydrateMetadataAttrs(
   metadata: Metadata | null,
-  endmatter: InkbackEndmatter,
+  endmatter: RfmEndmatter,
   kind: "comment" | "suggestion",
 ): Map<string, string> {
   const attrs = new Map(metadata?.attrs ?? []);
@@ -1221,7 +1215,7 @@ function hydrateMetadataAttrs(
 
 function validateEndmatterEntry(
   id: string,
-  entry: YamlMetadataEntry,
+  entry: RfmEndmatterEntry,
   offset: number,
   addDiagnostic: (
     severity: RfmDiagnosticSeverity,
@@ -1261,14 +1255,73 @@ function validateEndmatterEntry(
   }
 }
 
-function writeInkbackEndmatter(
+/** Update review entries while retaining unrelated YAML and unchanged source verbatim. */
+export function updateRfmEndmatter(
+  markdown: string,
+  comments: Map<string, RfmEndmatterEntry>,
+  suggestions: Map<string, RfmEndmatterEntry>,
+): string {
+  const existing = parseRfmEndmatter(markdown);
+  if (
+    existing.offset !== null &&
+    existing.raw &&
+    existing.data &&
+    entriesEqual(existing.comments, comments) &&
+    entriesEqual(existing.suggestions, suggestions)
+  ) {
+    return markdown;
+  }
+  return writeRfmEndmatter(markdown, { comments, suggestions });
+}
+
+function entriesEqual(
+  left: Map<string, RfmEndmatterEntry>,
+  right: Map<string, RfmEndmatterEntry>,
+): boolean {
+  if (left.size !== right.size) return false;
+  for (const [id, entry] of left) {
+    const other = right.get(id);
+    if (
+      !other ||
+      Object.keys(entry).length !== Object.keys(other).length ||
+      Object.entries(entry).some(
+        ([key, value]) => !yamlValuesEqual(value, other[key]),
+      )
+    )
+      return false;
+  }
+  return true;
+}
+
+function yamlValuesEqual(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  if (Array.isArray(left) && Array.isArray(right)) {
+    return (
+      left.length === right.length &&
+      left.every((value, index) => yamlValuesEqual(value, right[index]))
+    );
+  }
+  if (isPlainObject(left) && isPlainObject(right)) {
+    const keys = Object.keys(left);
+    return (
+      keys.length === Object.keys(right).length &&
+      keys.every(
+        (key) =>
+          Object.hasOwn(right, key) && yamlValuesEqual(left[key], right[key]),
+      )
+    );
+  }
+  return false;
+}
+
+function writeRfmEndmatter(
   markdown: string,
   endmatter: {
-    comments: Map<string, YamlMetadataEntry>;
-    suggestions: Map<string, YamlMetadataEntry>;
+    comments: Map<string, RfmEndmatterEntry>;
+    suggestions: Map<string, RfmEndmatterEntry>;
   },
 ): string {
-  const existing = parseInkbackEndmatter(markdown);
+  const existing = parseRfmEndmatter(markdown);
   const body =
     existing.offset === null
       ? markdown.replace(/\s*$/, "\n")
@@ -1285,6 +1338,7 @@ function writeInkbackEndmatter(
     delete data.suggestions;
   }
 
+  if (Object.keys(data).length === 0) return body;
   return `${body}\n---\n${stringifyYaml(data)}`;
 }
 

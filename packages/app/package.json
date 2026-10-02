@@ -16,6 +16,7 @@
     "@codemirror/state": "^6.6.0",
     "@codemirror/view": "^6.41.1",
     "@fontsource-variable/inter": "^5.2.8",
+    "@inkback/rfm": "workspace:*",
     "@joplin/turndown-plugin-gfm": "^1.0.64",
     "@tiptap/core": "^3.22.4",
     "@tiptap/extension-code": "^3.22.4",

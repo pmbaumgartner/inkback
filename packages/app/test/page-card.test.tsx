@@ -2,6 +2,7 @@ import type { Editor } from "@tiptap/react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DocumentSaveController as SaveController } from "../src/DocumentSaveController";
 import {
   type DocumentSaveController,
   type ManualSaveResult,
@@ -301,14 +302,24 @@ async function renderPageCard(
   const onSave = vi.fn().mockResolvedValue(undefined);
   const onSaveStateChange = vi.fn();
   let editor: Editor | null = null;
-  let saveController: DocumentSaveController | null = null;
+  const page = options.page ?? {
+    id: "page-1",
+    title: "Page 1",
+    content: "Start",
+  };
+  const saveController = new SaveController(page.id, page, {
+    ...backend,
+    saveMarkdownFile: async (_path, content) => {
+      await onSave(page.id, content);
+      return undefined;
+    },
+  });
+  const unsubscribe = saveController.subscribe(() =>
+    onSaveStateChange(saveController.status),
+  );
 
   let props = {
-    page: options.page ?? {
-      id: "page-1",
-      title: "Page 1",
-      content: "Start",
-    },
+    page,
     activeDocumentPath: options.activeDocumentPath ?? null,
     selected: options.selected ?? true,
     focusRequestKey: options.focusRequestKey ?? null,
@@ -320,10 +331,7 @@ async function renderPageCard(
     onEditorReady: (nextEditor: Editor | null) => {
       editor = nextEditor;
     },
-    onSaveControllerChange: (controller: DocumentSaveController | null) => {
-      saveController = controller;
-    },
-    saveBlocked: options.saveBlocked ?? false,
+    saveController,
   } as const;
 
   const render = async () => {
@@ -339,6 +347,8 @@ async function renderPageCard(
   await render();
 
   const unmount = async () => {
+    unsubscribe();
+    saveController.dispose();
     await act(async () => {
       root.unmount();
     });
@@ -365,6 +375,11 @@ async function renderPageCard(
         ...overrides,
         page: overrides.page ?? props.page,
       };
+      if (overrides.page) saveController.accept(overrides.page, true);
+      if (overrides.saveBlocked !== undefined)
+        saveController.setDiskState(
+          overrides.saveBlocked ? "changed" : "clean",
+        );
       await render();
     },
     unmount,

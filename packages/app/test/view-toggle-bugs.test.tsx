@@ -6,6 +6,7 @@ import {
   type DocumentEditorViewMode,
   getDocumentEditorViewModeFromLocation,
 } from "../src/app-navigation";
+import { DocumentSaveController } from "../src/DocumentSaveController";
 import {
   DocumentSaveStatusIndicator,
   DocumentWorkspace,
@@ -312,12 +313,21 @@ describe("saving/saved status indicator (issue 2 fix)", () => {
           documentFilenameLabel="test.md"
           documentEditorViewMode="rich-text"
           onDocumentEditorViewModeChange={() => {}}
-          onSaveDocument={onSaveDocument}
-          onDocumentSaveStateChange={() => {}}
-          onDocumentDirtyStateChange={() => {}}
-          onDocumentLocalContentChange={() => {}}
+          saveController={
+            new DocumentSaveController(
+              "test.md",
+              createPage(documentContent),
+              {
+                ...createBackend({ watcherCount }),
+                saveMarkdownFile: async (_path, content) => {
+                  await onSaveDocument("test.md", content);
+                  return undefined;
+                },
+              },
+              () => {},
+            )
+          }
           documentDiskChangeState={documentDiskChangeState}
-          documentForceResetKey={null}
           onReloadDocumentFromDisk={() => {}}
           onKeepEditingWithoutAutosave={() => {}}
           onOverwriteDocumentOnDisk={() => {}}
@@ -703,12 +713,15 @@ describe("interaction mode preserved across view toggle (issue 3 fix)", () => {
             documentFilenameLabel="test.md"
             documentEditorViewMode={viewMode}
             onDocumentEditorViewModeChange={() => {}}
-            onSaveDocument={async () => {}}
-            onDocumentSaveStateChange={() => {}}
-            onDocumentDirtyStateChange={() => {}}
-            onDocumentLocalContentChange={() => {}}
+            saveController={
+              new DocumentSaveController(
+                "test.md",
+                createPage(),
+                createBackend(),
+                () => {},
+              )
+            }
             documentDiskChangeState="clean"
-            documentForceResetKey={null}
             onReloadDocumentFromDisk={() => {}}
             onKeepEditingWithoutAutosave={() => {}}
             onOverwriteDocumentOnDisk={() => {}}
@@ -777,12 +790,15 @@ describe("review handoff watcher affordance", () => {
           documentFilenameLabel="test.md"
           documentEditorViewMode="rich-text"
           onDocumentEditorViewModeChange={() => {}}
-          onSaveDocument={async () => {}}
-          onDocumentSaveStateChange={() => {}}
-          onDocumentDirtyStateChange={() => {}}
-          onDocumentLocalContentChange={() => {}}
+          saveController={
+            new DocumentSaveController(
+              documentPath,
+              { ...createPage(), id: documentPath },
+              createBackend(),
+              () => {},
+            )
+          }
           documentDiskChangeState="clean"
-          documentForceResetKey={null}
           onReloadDocumentFromDisk={() => {}}
           onKeepEditingWithoutAutosave={() => {}}
           onOverwriteDocumentOnDisk={() => {}}

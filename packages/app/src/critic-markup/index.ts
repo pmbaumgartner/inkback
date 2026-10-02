@@ -1,3 +1,8 @@
+import {
+  parseRfmEndmatter,
+  updateRfmEndmatter,
+  type RfmEndmatter,
+} from "@inkback/rfm";
 import { generateHTML, generateJSON, type JSONContent } from "@tiptap/core";
 import {
   Marked,
@@ -8,7 +13,6 @@ import {
   type Tokens,
 } from "marked";
 import type TurndownService from "turndown";
-import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import {
   type CriticChangeAttrs,
   type CriticChangeKind,
@@ -79,11 +83,7 @@ const metadataAttributePattern =
 const metadataReferencePattern = /^\{#([A-Za-z][A-Za-z0-9_-]*)\}$/;
 const unanchoredCommentSentinel = "\u2060";
 
-interface ParsedEndmatter {
-  comments: Map<string, Record<string, unknown>>;
-  suggestions: Map<string, Record<string, unknown>>;
-  data: Record<string, unknown> | null;
-}
+type ParsedEndmatter = RfmEndmatter;
 
 function escapeHtml(value: string): string {
   return value
@@ -223,45 +223,7 @@ function serializeChangeMetadata(change: CriticChangeAttrs): string {
 }
 
 function parseReviewEndmatter(endmatter?: string | null): ParsedEndmatter {
-  if (!endmatter) {
-    return { comments: new Map(), suggestions: new Map(), data: null };
-  }
-
-  const yamlText = endmatter.replace(/^---[ \t]*(?:\r\n|\n)/, "");
-  let parsed: unknown;
-  try {
-    parsed = parseYaml(yamlText);
-  } catch {
-    return { comments: new Map(), suggestions: new Map(), data: null };
-  }
-
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return { comments: new Map(), suggestions: new Map(), data: null };
-  }
-
-  const record = parsed as Record<string, unknown>;
-  return {
-    comments: parseEndmatterMap(record.comments),
-    suggestions: parseEndmatterMap(record.suggestions),
-    data: record,
-  };
-}
-
-function parseEndmatterMap(
-  value: unknown,
-): Map<string, Record<string, unknown>> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return new Map();
-  }
-
-  return new Map(
-    Object.entries(value as Record<string, unknown>).filter(
-      (entry): entry is [string, Record<string, unknown>] =>
-        Boolean(entry[1]) &&
-        typeof entry[1] === "object" &&
-        !Array.isArray(entry[1]),
-    ),
-  );
+  return parseRfmEndmatter(endmatter ? `{#rfm}\n${endmatter}` : "");
 }
 
 function addEndmatterFeedback(
@@ -286,35 +248,6 @@ function addEndmatterFeedback(
       }),
     );
   }
-}
-
-function areEndmatterEntriesEqual(
-  left: Record<string, unknown>,
-  right: Record<string, unknown>,
-): boolean {
-  const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
-
-  for (const key of keys) {
-    if (left[key] !== right[key]) return false;
-  }
-
-  return true;
-}
-
-function areEndmatterMapsEqual(
-  left: Map<string, Record<string, unknown>>,
-  right: Map<string, Record<string, unknown>>,
-): boolean {
-  if (left.size !== right.size) return false;
-
-  for (const [id, leftEntry] of left) {
-    const rightEntry = right.get(id);
-    if (!rightEntry || !areEndmatterEntriesEqual(leftEntry, rightEntry)) {
-      return false;
-    }
-  }
-
-  return true;
 }
 
 function endmatterEntryForComment(
@@ -363,6 +296,7 @@ function serializeReviewEndmatter(
   if (!existingEndmatter) return null;
 
   const parsed = parseReviewEndmatter(existingEndmatter);
+  if (parsed.diagnostics.length) return existingEndmatter;
   const commentEntries = new Map<string, Record<string, unknown>>();
   const suggestionEntries = new Map<string, Record<string, unknown>>();
 
@@ -380,28 +314,15 @@ function serializeReviewEndmatter(
     );
   }
 
-  if (
-    areEndmatterMapsEqual(parsed.comments, commentEntries) &&
-    areEndmatterMapsEqual(parsed.suggestions, suggestionEntries)
-  ) {
-    return existingEndmatter;
-  }
-
-  const data: Record<string, unknown> = { ...(parsed.data ?? {}) };
-  if (commentEntries.size > 0) {
-    data.comments = Object.fromEntries(commentEntries);
-  } else {
-    delete data.comments;
-  }
-  if (suggestionEntries.size > 0) {
-    data.suggestions = Object.fromEntries(suggestionEntries);
-  } else {
-    delete data.suggestions;
-  }
-
-  if (Object.keys(data).length === 0) return null;
-
-  return `---\n${stringifyYaml(data)}`;
+  const source = `{#rfm}\n${existingEndmatter}`;
+  const updated = updateRfmEndmatter(source, commentEntries, suggestionEntries);
+  if (updated === source) return existingEndmatter;
+  const body = source
+    .slice(0, parsed.offset ?? source.length)
+    .replace(/\s*$/, "\n");
+  return updated.startsWith(body)
+    ? updated.slice(body.length).replace(/^\n/, "") || null
+    : null;
 }
 
 export function createNextCommentId(

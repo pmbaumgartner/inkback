@@ -266,6 +266,53 @@ describe("CriticMarkup comments", () => {
     expect(output).not.toContain("Stale reply.");
   });
 
+  it("removes the last comment without leaving empty YAML, retaining unrelated fields when present", () => {
+    const source = [
+      "Note.{>>Review this.<<}{#c1}",
+      "",
+      "---",
+      "comments:",
+      "  c1:",
+      "    by: Nora",
+      '    at: "2026-05-24T10:45:00.000Z"',
+      "",
+    ].join("\n");
+    for (const suffix of ["", "workflow:\n  owner: editorial\n"]) {
+      const { doc, comments } = criticMarkdownToEditorState(source + suffix);
+      const output = editorStateToCriticMarkdown(
+        doc,
+        new Map([...comments].filter(([id]) => id !== "c1")),
+      );
+      expect(output).not.toContain("comments:");
+      expect(output.includes("---")).toBe(Boolean(suffix));
+      if (suffix) expect(output).toContain("owner: editorial");
+    }
+  });
+
+  it("preserves unchanged nested unrelated entry YAML verbatim", () => {
+    const source = [
+      "Note.{>>Review this.<<}{#c1}",
+      "",
+      "---",
+      "comments:",
+      "  c1:",
+      "    by: Nora",
+      '    at: "2026-05-24T10:45:00.000Z"',
+      "    extra: {labels: [one, two]} # keep this formatting",
+      "",
+    ].join("\n");
+    const { doc, comments } = criticMarkdownToEditorState(source);
+    expect(editorStateToCriticMarkdown(doc, comments)).toBe(source);
+  });
+
+  it("roundtrips supported malformed review YAML without dropping its source", () => {
+    const source =
+      "Note.{>>Review this.<<}{#c1}\n\n---\ncomments: [broken # {#c1}\n";
+    const { doc, comments, endmatter } = criticMarkdownToEditorState(source);
+    expect(endmatter).toBe("---\ncomments: [broken # {#c1}\n");
+    expect(editorStateToCriticMarkdown(doc, comments)).toBe(source);
+  });
+
   it("preserves unknown top-level YAML endmatter keys on save", () => {
     const input = [
       "Please revisit {==this claim==}{>>Needs a source.<<}{#c1}.",

@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import request from "supertest";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "./index";
 
 describe("createApp", () => {
@@ -249,6 +249,53 @@ describe("createApp", () => {
 
     expect(response.status).toBe(404);
     expect(response.body).toEqual({ error: "Markdown file not found" });
+  });
+
+  it("rejects invalid markdown targets consistently across reads, writes, and events", async () => {
+    const { app } = createApp({ homeDir, staticDirPath: projectDir });
+    for (const target of ["../outside.md", "missing.md", "notes.txt"]) {
+      for (const route of ["/api/markdown-file", "/api/markdown-file/events"]) {
+        const response = await request(app)
+          .get(route)
+          .query({ projectPath: projectDir, path: target });
+        expect(response.status).toBe(404);
+        expect(response.body).toEqual({ error: "Markdown file not found" });
+      }
+      const write = await request(app)
+        .put("/api/markdown-file")
+        .query({ projectPath: projectDir, path: target })
+        .send({ content: "# New" });
+      expect(write.status).toBe(404);
+      expect(write.body).toEqual({ error: "Markdown file not found" });
+    }
+  });
+
+  it("closes markdown event watchers when the client disconnects", async () => {
+    const filePath = path.join(projectDir, "draft.md");
+    fs.writeFileSync(filePath, "# Draft\n");
+    const { app } = createApp({ homeDir, staticDirPath: projectDir });
+    const server = app.listen(0);
+    const unwatch = vi.spyOn(fs, "unwatchFile");
+    try {
+      const port = (server.address() as AddressInfo).port;
+      const controller = new AbortController();
+      const response = await fetch(
+        `http://127.0.0.1:${port}/api/markdown-file/events?${new URLSearchParams({ projectPath: projectDir, path: "draft.md" })}`,
+        { signal: controller.signal },
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toContain(
+        "text/event-stream",
+      );
+      await response.body?.getReader().read();
+      controller.abort();
+      await vi.waitFor(() =>
+        expect(unwatch).toHaveBeenCalledWith(filePath, expect.any(Function)),
+      );
+    } finally {
+      unwatch.mockRestore();
+      server.close();
+    }
   });
 
   it("accepts review completed events for a markdown file inside the project", async () => {

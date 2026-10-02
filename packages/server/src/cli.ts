@@ -151,17 +151,7 @@ interface ParsedCommandOptions {
   positionals: string[];
 }
 
-interface ParsedWatchOptions {
-  batchWindowSeconds: number;
-  help: boolean;
-  json: boolean;
-  positionals: string[];
-  replay: boolean;
-  serverUrl?: string;
-  stateDir?: string;
-  stateFile?: string;
-  timeoutSeconds?: number;
-}
+type ParsedWatchOptions = ParsedCommandOptions & { serverUrl?: string };
 
 const currentServerRoot = path.resolve(
   fileURLToPath(new URL("../../..", import.meta.url)),
@@ -253,14 +243,48 @@ function takeFlagValue(
   return { value, nextIndex: index + 1 };
 }
 
-function parseCommandOptions(
+type OptionFlag =
+  | "all"
+  | "no-open"
+  | "review-id"
+  | "print-url"
+  | "watch"
+  | "no-watch"
+  | "replay"
+  | "timeout"
+  | "batch-window"
+  | "port"
+  | "state-file"
+  | "state-dir";
+
+const commandFlags: Record<
+  "open" | "start" | "status" | "stop" | "watch" | "mcp" | "doctor",
+  readonly OptionFlag[]
+> = {
+  open: [
+    "no-open",
+    "review-id",
+    "print-url",
+    "watch",
+    "no-watch",
+    "replay",
+    "timeout",
+    "batch-window",
+    "port",
+    "state-file",
+    "state-dir",
+  ],
+  start: ["port", "state-file", "state-dir"],
+  status: ["state-file", "state-dir"],
+  stop: ["all", "state-file", "state-dir"],
+  watch: ["replay", "timeout", "batch-window", "state-file", "state-dir"],
+  mcp: ["state-file", "state-dir"],
+  doctor: ["state-file", "state-dir"],
+};
+
+function parseOptions(
   args: string[],
-  options: {
-    allowAll?: boolean;
-    allowOpen?: boolean;
-    allowPort?: boolean;
-    allowWatch?: boolean;
-  },
+  allowed: readonly OptionFlag[],
 ): ParsedCommandOptions {
   const parsed: ParsedCommandOptions = {
     all: false,
@@ -274,261 +298,71 @@ function parseCommandOptions(
     replay: false,
     watch: false,
   };
-
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
-
     if (arg === "--") {
       parsed.positionals.push(...args.slice(index + 1));
       break;
     }
-
     if (arg === "-h" || arg === "--help") {
       parsed.help = true;
       continue;
     }
-
     if (arg === "--json") {
       parsed.json = true;
       continue;
     }
-
-    if (arg === "--all") {
-      if (!options.allowAll) throw new Error(`Unknown flag: ${arg}`);
-      parsed.all = true;
+    const equals = arg.indexOf("=");
+    const name = arg.startsWith("--")
+      ? arg.slice(2, equals < 0 ? undefined : equals)
+      : "";
+    const inline = equals < 0 ? undefined : arg.slice(equals + 1);
+    if (
+      !allowed.includes(name as OptionFlag) ||
+      (inline !== undefined &&
+        ![
+          "timeout",
+          "batch-window",
+          "port",
+          "state-file",
+          "state-dir",
+        ].includes(name))
+    ) {
+      if (arg.startsWith("-")) {
+        throw new Error(
+          `Unknown flag: ${inline === undefined ? arg : `--${name}`}`,
+        );
+      }
+      parsed.positionals.push(arg);
       continue;
     }
-
-    if (arg === "--no-open") {
-      if (!options.allowOpen) throw new Error(`Unknown flag: ${arg}`);
-      parsed.noOpen = true;
-      continue;
-    }
-
-    if (arg === "--review-id") {
-      if (!options.allowOpen) throw new Error(`Unknown flag: ${arg}`);
-      const value = args[++index];
-      if (!value || !/^[a-zA-Z0-9-]{1,128}$/.test(value))
-        throw new Error("--review-id requires a review session ID");
-      parsed.reviewId = value;
-      continue;
-    }
-
-    if (arg === "--print-url") {
-      if (!options.allowOpen) throw new Error(`Unknown flag: ${arg}`);
+    if (name === "all") parsed.all = true;
+    else if (name === "no-open") parsed.noOpen = true;
+    else if (name === "print-url") {
       parsed.printUrl = true;
       parsed.noOpen = true;
-      continue;
+    } else if (name === "watch") parsed.watch = true;
+    else if (name === "no-watch") parsed.noWatch = true;
+    else if (name === "replay") parsed.replay = true;
+    else if (name === "review-id") {
+      const value = args[++index];
+      if (!value || !/^[a-zA-Z0-9-]{1,128}$/.test(value)) {
+        throw new Error("--review-id requires a review session ID");
+      }
+      parsed.reviewId = value;
+    } else {
+      const flag = `--${name}`;
+      const value = inline ?? takeFlagValue(args, index, flag).value;
+      if (inline === undefined) index += 1;
+      if (name === "timeout")
+        parsed.timeoutSeconds = parsePositiveNumber(value, flag);
+      else if (name === "batch-window")
+        parsed.batchWindowSeconds = parsePositiveNumber(value, flag);
+      else if (name === "port") parsed.port = value;
+      else if (name === "state-file") parsed.stateFile = value;
+      else if (name === "state-dir") parsed.stateDir = value;
     }
-
-    if (arg === "--watch") {
-      if (!options.allowWatch) throw new Error(`Unknown flag: ${arg}`);
-      parsed.watch = true;
-      continue;
-    }
-
-    if (arg === "--no-watch") {
-      if (!options.allowWatch) throw new Error(`Unknown flag: ${arg}`);
-      parsed.noWatch = true;
-      continue;
-    }
-
-    if (arg === "--replay") {
-      if (!options.allowWatch) throw new Error(`Unknown flag: ${arg}`);
-      parsed.replay = true;
-      continue;
-    }
-
-    if (arg === "--timeout") {
-      if (!options.allowWatch) throw new Error(`Unknown flag: ${arg}`);
-      const next = takeFlagValue(args, index, arg);
-      parsed.timeoutSeconds = parsePositiveNumber(next.value, arg);
-      index = next.nextIndex;
-      continue;
-    }
-
-    if (arg.startsWith("--timeout=")) {
-      if (!options.allowWatch) throw new Error(`Unknown flag: --timeout`);
-      parsed.timeoutSeconds = parsePositiveNumber(
-        arg.slice("--timeout=".length),
-        "--timeout",
-      );
-      continue;
-    }
-
-    if (arg === "--batch-window") {
-      if (!options.allowWatch) throw new Error(`Unknown flag: ${arg}`);
-      const next = takeFlagValue(args, index, arg);
-      parsed.batchWindowSeconds = parsePositiveNumber(next.value, arg);
-      index = next.nextIndex;
-      continue;
-    }
-
-    if (arg.startsWith("--batch-window=")) {
-      if (!options.allowWatch) throw new Error(`Unknown flag: --batch-window`);
-      parsed.batchWindowSeconds = parsePositiveNumber(
-        arg.slice("--batch-window=".length),
-        "--batch-window",
-      );
-      continue;
-    }
-
-    if (arg === "--port") {
-      if (!options.allowPort) throw new Error(`Unknown flag: ${arg}`);
-      const next = takeFlagValue(args, index, arg);
-      parsed.port = next.value;
-      index = next.nextIndex;
-      continue;
-    }
-
-    if (arg.startsWith("--port=")) {
-      if (!options.allowPort) throw new Error(`Unknown flag: --port`);
-      parsed.port = arg.slice("--port=".length);
-      continue;
-    }
-
-    if (arg === "--state-file") {
-      const next = takeFlagValue(args, index, arg);
-      parsed.stateFile = next.value;
-      index = next.nextIndex;
-      continue;
-    }
-
-    if (arg.startsWith("--state-file=")) {
-      parsed.stateFile = arg.slice("--state-file=".length);
-      continue;
-    }
-
-    if (arg === "--state-dir") {
-      const next = takeFlagValue(args, index, arg);
-      parsed.stateDir = next.value;
-      index = next.nextIndex;
-      continue;
-    }
-
-    if (arg.startsWith("--state-dir=")) {
-      parsed.stateDir = arg.slice("--state-dir=".length);
-      continue;
-    }
-
-    if (arg.startsWith("-")) {
-      throw new Error(`Unknown flag: ${arg}`);
-    }
-
-    parsed.positionals.push(arg);
   }
-
-  return parsed;
-}
-
-function applyCliEnvOverrides(
-  deps: CliDependencies,
-  options: ParsedCommandOptions,
-): CliDependencies {
-  return {
-    ...deps,
-    env: {
-      ...deps.env,
-      ...(options.port ? { INKBACK_PORT: options.port } : {}),
-      ...(options.stateDir ? { INKBACK_STATE_DIR: options.stateDir } : {}),
-      ...(options.stateFile ? { INKBACK_STATE_FILE: options.stateFile } : {}),
-    },
-  };
-}
-
-function parseWatchOptions(args: string[]): ParsedWatchOptions {
-  const parsed: ParsedWatchOptions = {
-    batchWindowSeconds: 0.25,
-    help: false,
-    json: false,
-    positionals: [],
-    replay: false,
-  };
-
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-
-    if (arg === "--") {
-      parsed.positionals.push(...args.slice(index + 1));
-      break;
-    }
-
-    if (arg === "-h" || arg === "--help") {
-      parsed.help = true;
-      continue;
-    }
-
-    if (arg === "--json") {
-      parsed.json = true;
-      continue;
-    }
-
-    if (arg === "--replay") {
-      parsed.replay = true;
-      continue;
-    }
-
-    if (arg === "--timeout") {
-      const next = takeFlagValue(args, index, arg);
-      parsed.timeoutSeconds = parsePositiveNumber(next.value, arg);
-      index = next.nextIndex;
-      continue;
-    }
-
-    if (arg.startsWith("--timeout=")) {
-      parsed.timeoutSeconds = parsePositiveNumber(
-        arg.slice("--timeout=".length),
-        "--timeout",
-      );
-      continue;
-    }
-
-    if (arg === "--batch-window") {
-      const next = takeFlagValue(args, index, arg);
-      parsed.batchWindowSeconds = parsePositiveNumber(next.value, arg);
-      index = next.nextIndex;
-      continue;
-    }
-
-    if (arg.startsWith("--batch-window=")) {
-      parsed.batchWindowSeconds = parsePositiveNumber(
-        arg.slice("--batch-window=".length),
-        "--batch-window",
-      );
-      continue;
-    }
-
-    if (arg === "--state-file") {
-      const next = takeFlagValue(args, index, arg);
-      parsed.stateFile = next.value;
-      index = next.nextIndex;
-      continue;
-    }
-
-    if (arg.startsWith("--state-file=")) {
-      parsed.stateFile = arg.slice("--state-file=".length);
-      continue;
-    }
-
-    if (arg === "--state-dir") {
-      const next = takeFlagValue(args, index, arg);
-      parsed.stateDir = next.value;
-      index = next.nextIndex;
-      continue;
-    }
-
-    if (arg.startsWith("--state-dir=")) {
-      parsed.stateDir = arg.slice("--state-dir=".length);
-      continue;
-    }
-
-    if (arg.startsWith("-")) {
-      throw new Error(`Unknown flag: ${arg}`);
-    }
-
-    parsed.positionals.push(arg);
-  }
-
   return parsed;
 }
 
@@ -540,14 +374,15 @@ function parsePositiveNumber(value: string, flag: string): number {
   return parsed;
 }
 
-function applyWatchEnvOverrides(
+function applyEnvOverrides(
   deps: CliDependencies,
-  options: ParsedWatchOptions,
+  options: ParsedCommandOptions,
 ): CliDependencies {
   return {
     ...deps,
     env: {
       ...deps.env,
+      ...(options.port ? { INKBACK_PORT: options.port } : {}),
       ...(options.stateDir ? { INKBACK_STATE_DIR: options.stateDir } : {}),
       ...(options.stateFile ? { INKBACK_STATE_FILE: options.stateFile } : {}),
     },
@@ -2203,27 +2038,29 @@ export async function runCli(
     return USAGE_ERROR;
   }
 
+  let options: ParsedCommandOptions;
+  try {
+    options = parseOptions(
+      rest,
+      commandFlags[command as keyof typeof commandFlags],
+    );
+  } catch (error) {
+    deps.error(error instanceof Error ? error.message : "Invalid usage.");
+    return USAGE_ERROR;
+  }
+  if (options.help) {
+    printCommandHelp(command as KnownCommand, deps.log);
+    return 0;
+  }
+  deps = applyEnvOverrides(deps, options);
+  const json = parsed.global.json || options.json;
+
   if (command === "start") {
-    let options: ParsedCommandOptions;
-    try {
-      options = parseCommandOptions(rest, { allowPort: true });
-    } catch (error) {
-      deps.error(error instanceof Error ? error.message : "Invalid usage.");
-      return USAGE_ERROR;
-    }
-
-    if (options.help) {
-      printCommandHelp("start", deps.log);
-      return 0;
-    }
-
     if (options.positionals.length > 0) {
       deps.error("Usage: inkback start [--port <port>] [--json]");
       return USAGE_ERROR;
     }
 
-    deps = applyCliEnvOverrides(deps, options);
-    const json = parsed.global.json || options.json;
     const result = await ensureServerRunning(deps);
     if (json) {
       emitJson(deps.log, {
@@ -2259,26 +2096,11 @@ export async function runCli(
   }
 
   if (command === "status") {
-    let options: ParsedCommandOptions;
-    try {
-      options = parseCommandOptions(rest, {});
-    } catch (error) {
-      deps.error(error instanceof Error ? error.message : "Invalid usage.");
-      return USAGE_ERROR;
-    }
-
-    if (options.help) {
-      printCommandHelp("status", deps.log);
-      return 0;
-    }
-
     if (options.positionals.length > 0) {
       deps.error("Usage: inkback status [--json]");
       return USAGE_ERROR;
     }
 
-    deps = applyCliEnvOverrides(deps, options);
-    const json = parsed.global.json || options.json;
     const server = await findReusableServer(deps);
     if (!server) {
       if (json) {
@@ -2315,26 +2137,11 @@ export async function runCli(
   }
 
   if (command === "stop") {
-    let options: ParsedCommandOptions;
-    try {
-      options = parseCommandOptions(rest, { allowAll: true });
-    } catch (error) {
-      deps.error(error instanceof Error ? error.message : "Invalid usage.");
-      return USAGE_ERROR;
-    }
-
-    if (options.help) {
-      printCommandHelp("stop", deps.log);
-      return 0;
-    }
-
     if (options.positionals.length > 0) {
       deps.error("Usage: inkback stop [--all]");
       return USAGE_ERROR;
     }
 
-    deps = applyCliEnvOverrides(deps, options);
-    const json = parsed.global.json || options.json;
     const stateFilePath = getServerStateFilePath(deps.env);
     const stopResult = await stopTrackedServer(deps);
 
@@ -2486,41 +2293,15 @@ export async function runCli(
   }
 
   if (command === "watch") {
-    let options: ParsedWatchOptions;
-    try {
-      options = parseWatchOptions(rest);
-    } catch (error) {
-      deps.error(error instanceof Error ? error.message : "Invalid usage.");
-      return USAGE_ERROR;
-    }
-
-    if (options.help) {
-      printCommandHelp("watch", deps.log);
-      return 0;
-    }
-
     if (options.positionals.length !== 1) {
       deps.error("Usage: inkback watch <path> [--json]");
       return USAGE_ERROR;
     }
 
-    deps = applyWatchEnvOverrides(deps, options);
-    const json = parsed.global.json || options.json;
     return runWatch(deps, options.positionals[0] ?? "", options, json);
   }
 
   if (command === "mcp") {
-    let options: ParsedCommandOptions;
-    try {
-      options = parseCommandOptions(rest, {});
-    } catch (error) {
-      deps.error(error instanceof Error ? error.message : "Invalid usage.");
-      return USAGE_ERROR;
-    }
-    if (options.help) {
-      printCommandHelp("mcp", deps.log);
-      return 0;
-    }
     if (options.positionals.length > 0) {
       deps.error("Usage: inkback mcp");
       return USAGE_ERROR;
@@ -2532,26 +2313,11 @@ export async function runCli(
   }
 
   if (command === "doctor") {
-    let options: ParsedCommandOptions;
-    try {
-      options = parseCommandOptions(rest, {});
-    } catch (error) {
-      deps.error(error instanceof Error ? error.message : "Invalid usage.");
-      return USAGE_ERROR;
-    }
-
-    if (options.help) {
-      printCommandHelp("doctor", deps.log);
-      return 0;
-    }
-
     if (options.positionals.length > 1) {
       deps.error("Usage: inkback doctor [path] [--json]");
       return USAGE_ERROR;
     }
 
-    deps = applyCliEnvOverrides(deps, options);
-    const json = parsed.global.json || options.json;
     if (options.positionals.length === 1) {
       return runMarkdownDoctor(deps, options.positionals[0] ?? "", json);
     }
@@ -2560,23 +2326,6 @@ export async function runCli(
   }
 
   if (command === "open") {
-    let options: ParsedCommandOptions;
-    try {
-      options = parseCommandOptions(rest, {
-        allowOpen: true,
-        allowPort: true,
-        allowWatch: true,
-      });
-    } catch (error) {
-      deps.error(error instanceof Error ? error.message : "Invalid usage.");
-      return USAGE_ERROR;
-    }
-
-    if (options.help) {
-      printCommandHelp("open", deps.log);
-      return 0;
-    }
-
     const target = options.positionals[0];
     if (!target) {
       deps.error("Usage: inkback open <path>");
@@ -2604,8 +2353,6 @@ export async function runCli(
       return USAGE_ERROR;
     }
 
-    deps = applyCliEnvOverrides(deps, options);
-    const json = parsed.global.json || options.json;
     let resolvedTarget: ResolvedTargetPath;
     try {
       resolvedTarget = resolveTargetPath(target);
@@ -2687,6 +2434,7 @@ export async function runCli(
       }
 
       const watchOptions: ParsedWatchOptions = {
+        ...options,
         batchWindowSeconds: options.batchWindowSeconds,
         help: false,
         json,

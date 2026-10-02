@@ -1,19 +1,11 @@
 import type { Editor } from "@tiptap/react";
 import { Check, Reply, X } from "lucide-react";
+import { type CSSProperties, useEffect, useMemo, useRef } from "react";
 import {
-  type CSSProperties,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import {
-  CommentEditorList,
   type CommentActionDefinition,
   type CommentActionsRenderContext,
   type CommentContentRenderContext,
+  CommentEditorList,
 } from "./CommentEditorList";
 import type {
   CriticChangeAttrs,
@@ -26,12 +18,12 @@ import {
   type CommentThreadRailItem,
   getPreferredCommentId,
   getRootThreadIdForCommentId,
-  normalizeCommentMeasurement,
   resolveAnchoredRailLayouts,
 } from "./document-comments";
 import { SUGGESTED_PARAGRAPH_SENTINEL } from "./editor-extensions";
 import { cn } from "./lib/utils";
 import type { DraftSuggestionState } from "./PageCard";
+import { useRailItemHeights } from "./useRailItemHeights";
 
 const SUGGESTION_QUOTE_PREVIEW_LIMIT = 140;
 
@@ -216,8 +208,6 @@ export function DocumentReviewRail({
   editor = null,
 }: DocumentReviewRailProps) {
   const draftTextareaRef = useRef<HTMLTextAreaElement>(null);
-  const itemRefs = useRef(new Map<string, HTMLDivElement>());
-  const [itemHeights, setItemHeights] = useState<Record<string, number>>({});
 
   const activeRootThreadId = useMemo(
     () => getRootThreadIdForCommentId(selectedCommentId, comments),
@@ -320,6 +310,18 @@ export function DocumentReviewRail({
     [selectedCommentId, suggestions],
   );
 
+  const itemKeys = useMemo(
+    () =>
+      [
+        ...suggestionEntries,
+        ...commentEntries,
+        ...(draftEntry ? [draftEntry] : []),
+      ].map((entry) => entry.key),
+    [suggestionEntries, commentEntries, draftEntry],
+  );
+  const { heights: itemHeights, setRef: setItemRef } =
+    useRailItemHeights(itemKeys);
+
   const layouts = useMemo(() => {
     const entries = [
       ...suggestionEntries,
@@ -342,71 +344,6 @@ export function DocumentReviewRail({
     selectedChangeId,
     suggestionEntries,
   ]);
-
-  const setItemRef = useCallback((key: string, node: HTMLDivElement | null) => {
-    if (node) {
-      itemRefs.current.set(key, node);
-    } else {
-      itemRefs.current.delete(key);
-    }
-  }, []);
-
-  useLayoutEffect(() => {
-    if (layouts.length === 0) {
-      setItemHeights((current) =>
-        Object.keys(current).length === 0 ? current : {},
-      );
-      return;
-    }
-
-    const updateHeights = () => {
-      setItemHeights((current) => {
-        const next: Record<string, number> = {};
-        let changed = false;
-
-        for (const layout of layouts) {
-          const element = itemRefs.current.get(layout.key);
-          const measuredHeight = Math.ceil(
-            element?.getBoundingClientRect().height ?? 0,
-          );
-          const height =
-            measuredHeight > 0
-              ? Math.ceil(normalizeCommentMeasurement(measuredHeight, 1))
-              : (current[layout.key] ?? 0);
-          next[layout.key] = height;
-          if (current[layout.key] !== height) {
-            changed = true;
-          }
-        }
-
-        if (
-          !changed &&
-          Object.keys(current).length === Object.keys(next).length
-        ) {
-          return current;
-        }
-
-        return next;
-      });
-    };
-
-    updateHeights();
-
-    const resizeObserver = new ResizeObserver(() => {
-      updateHeights();
-    });
-
-    for (const layout of layouts) {
-      const element = itemRefs.current.get(layout.key);
-      if (element) {
-        resizeObserver.observe(element);
-      }
-    }
-
-    return () => {
-      resizeObserver.disconnect();
-    };
-  }, [layouts]);
 
   useEffect(() => {
     if (draftSuggestion && draftTextareaRef.current) {

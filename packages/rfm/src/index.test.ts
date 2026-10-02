@@ -4,6 +4,8 @@ import {
   appendInkbackDocumentComment,
   extractInkbackReviewIndex,
   markInkbackResolved,
+  parseRfmEndmatter,
+  updateRfmEndmatter,
   validateInkbackMarkdown,
 } from "./index";
 
@@ -471,6 +473,44 @@ describe("extractInkbackReviewIndex", () => {
       id: "c1",
       author: "user",
     });
+  });
+});
+
+describe("RFM endmatter API", () => {
+  it("exposes source boundaries and diagnostics for malformed review YAML", () => {
+    const source = "Text {#c1}\n\n---\ncomments: [broken # {#c1}\n";
+    const parsed = parseRfmEndmatter(source);
+    expect(parsed.offset).toBe(source.indexOf("\n---"));
+    expect(parsed.raw).toBe(source.slice(parsed.offset ?? 0));
+    expect(parsed.diagnostics[0]).toMatchObject({
+      code: "invalid-endmatter-yaml",
+      offset: parsed.offset,
+    });
+  });
+
+  it("removes empty review endmatter but retains unrelated fields", () => {
+    const source =
+      'Text {#c1}\n\n---\ncomments:\n  c1:\n    by: Nora\n    at: "2026-05-24T10:45:00.000Z"\n';
+    expect(updateRfmEndmatter(source, new Map(), new Map())).toBe(
+      "Text {#c1}\n",
+    );
+    const withOther = `${source}workflow:\n  owner: editorial\n`;
+    const updated = updateRfmEndmatter(withOther, new Map(), new Map());
+    expect(updated).toContain("owner: editorial");
+    expect(updated).not.toContain("comments:");
+  });
+
+  it("retains raw YAML when nested entry values are structurally unchanged", () => {
+    const source =
+      'Text {#c1}\n\n---\ncomments:\n  c1:\n    by: Nora\n    at: "2026-05-24T10:45:00.000Z"\n    extra: {labels: [one, two]} # retain me\n';
+    const separatelyParsed = parseRfmEndmatter(source);
+    expect(
+      updateRfmEndmatter(
+        source,
+        separatelyParsed.comments,
+        separatelyParsed.suggestions,
+      ),
+    ).toBe(source);
   });
 });
 

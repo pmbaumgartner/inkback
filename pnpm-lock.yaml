@@ -57,6 +57,9 @@ importers:
       '@fontsource-variable/inter':
         specifier: ^5.2.8
         version: 5.2.8
+      '@inkback/rfm':
+        specifier: workspace:*
+        version: link:../rfm
       '@joplin/turndown-plugin-gfm':
         specifier: ^1.0.64
         version: 1.0.64

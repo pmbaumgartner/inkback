@@ -38,10 +38,10 @@ import {
   criticMarkdownHasReviewRail,
   criticMarkdownToRenderedHtml,
 } from "./critic-markup";
+import type { DocumentSaveController } from "./DocumentSaveController";
 import { cn } from "./lib/utils";
 import {
   type DocumentInteractionMode,
-  type DocumentSaveController,
   type DocumentSaveState,
   PageCard,
 } from "./PageCard";
@@ -330,12 +330,8 @@ interface DocumentWorkspaceProps {
   documentFilenameLabel: string;
   documentEditorViewMode: DocumentEditorViewMode;
   onDocumentEditorViewModeChange: (mode: DocumentEditorViewMode) => void;
-  onSaveDocument: (id: string, content: string) => Promise<void>;
-  onDocumentSaveStateChange: (state: DocumentSaveState) => void;
-  onDocumentDirtyStateChange: (isDirty: boolean) => void;
-  onDocumentLocalContentChange: (markdown: string) => void;
+  saveController: DocumentSaveController | null;
   documentDiskChangeState: DiskChangeState;
-  documentForceResetKey: string | null;
   onReloadDocumentFromDisk: () => void | Promise<void>;
   onKeepEditingWithoutAutosave: () => void;
   onOverwriteDocumentOnDisk: () => void | Promise<void>;
@@ -352,12 +348,8 @@ export function DocumentWorkspace({
   documentFilenameLabel,
   documentEditorViewMode,
   onDocumentEditorViewModeChange,
-  onSaveDocument,
-  onDocumentSaveStateChange,
-  onDocumentDirtyStateChange,
-  onDocumentLocalContentChange,
+  saveController,
   documentDiskChangeState,
-  documentForceResetKey,
   onReloadDocumentFromDisk,
   onKeepEditingWithoutAutosave,
   onOverwriteDocumentOnDisk,
@@ -366,7 +358,7 @@ export function DocumentWorkspace({
 }: DocumentWorkspaceProps) {
   const [documentInteractionMode, setDocumentInteractionMode] =
     useState<DocumentInteractionMode>("suggesting");
-  const [saveState, setSaveState] = useState<DocumentSaveState>("saved");
+  const saveState = saveController?.status ?? "saved";
   const [reviewHandoffState, setReviewHandoffState] =
     useState<ReviewHandoffState>("idle");
   const [reviewWatcherCount, setReviewWatcherCount] = useState(0);
@@ -379,19 +371,10 @@ export function DocumentWorkspace({
   const [overallComment, setOverallComment] = useState("");
   const sawNoWatcherAfterNotifiedRef = useRef(false);
   const copiedFileActionTimeoutRef = useRef<number | null>(null);
-  const saveControllerRef = useRef<DocumentSaveController | null>(null);
   const documentGenerationRef = useRef<{
     path: string | null;
     pageId: string | undefined;
   } | null>(null);
-
-  const handleSaveStateChange = useCallback(
-    (state: DocumentSaveState) => {
-      setSaveState(state);
-      onDocumentSaveStateChange(state);
-    },
-    [onDocumentSaveStateChange],
-  );
 
   const [documentHasComments, setDocumentHasComments] = useState(
     () =>
@@ -506,14 +489,14 @@ export function DocumentWorkspace({
 
       if (documentDiskChangeState !== "clean") return;
 
-      void saveControllerRef.current?.flushSave();
+      void saveController?.flushSave();
     };
 
     window.addEventListener("keydown", handleKeyDown, { capture: true });
     return () => {
       window.removeEventListener("keydown", handleKeyDown, { capture: true });
     };
-  }, [documentDiskChangeState, documentPage]);
+  }, [documentDiskChangeState, documentPage, saveController]);
 
   const handleCompleteReview = useCallback(
     async (options?: CompleteReviewOptions) => {
@@ -522,14 +505,7 @@ export function DocumentWorkspace({
       const documentGeneration = documentGenerationRef.current;
       setReviewHandoffState("notifying");
       try {
-        // The button stays enabled while autosave is still pending, so make
-        // sure any debounced edits are persisted before handing off.
-        const flushResult = await saveControllerRef.current?.flushSave();
-        if (flushResult && flushResult.status === "error") {
-          throw flushResult.error;
-        }
-
-        if (documentGenerationRef.current !== documentGeneration) return;
+        // The handler persists pending edits before handing off.
         const result = await onCompleteReview(options);
         if (documentGenerationRef.current !== documentGeneration) return;
         setOverallComment("");
@@ -1087,25 +1063,17 @@ export function DocumentWorkspace({
           </div>
         ) : null}
         {documentPage ? (
-          backend ? (
+          backend && saveController ? (
             <PageCard
               key={`${documentPage.id}:${activeDocumentPath ?? ""}`}
               page={documentPage}
               activeDocumentPath={activeDocumentPath}
               selected
-              onSave={onSaveDocument}
-              onSaveStateChange={handleSaveStateChange}
+              saveController={saveController}
               editorViewMode={documentEditorViewMode}
               interactionMode={documentInteractionMode}
               backend={backend}
               onCommentRailPresenceChange={setDocumentHasComments}
-              onDirtyStateChange={onDocumentDirtyStateChange}
-              onLocalContentChange={onDocumentLocalContentChange}
-              onSaveControllerChange={(controller) => {
-                saveControllerRef.current = controller;
-              }}
-              saveBlocked={documentDiskChangeState !== "clean"}
-              forceResetKey={documentForceResetKey}
             />
           ) : null
         ) : (
