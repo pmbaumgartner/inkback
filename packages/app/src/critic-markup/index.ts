@@ -10,19 +10,19 @@ import {
 import type TurndownService from "turndown";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import {
-  createEditorExtensions,
   type CriticChangeAttrs,
   type CriticChangeKind,
+  createEditorExtensions,
 } from "../editor-extensions";
 import {
+  appendYamlEndmatter,
   createMarkedRenderer,
   createTurndownService,
+  type MarkdownOptions,
   normalizeBlockSpacing,
-  appendYamlEndmatter,
   prependYamlFrontmatter,
   protectRichTextRoundTripMarkdown,
   splitYamlDocumentMetadata,
-  type MarkdownOptions,
 } from "../markdown";
 
 export interface CriticComment {
@@ -609,12 +609,14 @@ export function getCommentDescendantIds(
   }
 
   const descendantIds: string[] = [];
+  const visited = new Set([commentId]);
   const stack = [...(childrenByParentId.get(commentId) ?? [])].reverse();
 
   while (stack.length > 0) {
     const nextCommentId = stack.pop();
-    if (!nextCommentId) continue;
+    if (!nextCommentId || visited.has(nextCommentId)) continue;
 
+    visited.add(nextCommentId);
     descendantIds.push(nextCommentId);
 
     const childIds = childrenByParentId.get(nextCommentId) ?? [];
@@ -1020,42 +1022,88 @@ function addCriticCommentRule(
 
       if (!commentIdsText) return content;
 
-      let commentIds: string[] = [];
-
-      try {
-        commentIds = JSON.parse(commentIdsText) as string[];
-      } catch {
-        return content;
-      }
-
-      const criticChangeElement = (node as HTMLElement).querySelector(
-        "span[data-critic-change-kind]",
-      );
-      if (criticChangeElement instanceof HTMLElement) {
-        return serializeCriticChangeElement(
-          service,
-          criticChangeElement,
-          service.turndown(criticChangeElement.innerHTML).trim(),
-          comments,
-          commentIds,
-          useEndmatter,
-        );
-      }
-
-      const commentBlocks = serializeCommentBlocks(
-        commentIds,
+      return serializeCriticCommentElement(
+        (element) => service.turndown(element.innerHTML).trim(),
+        node as HTMLElement,
+        content,
         comments,
         useEndmatter,
       );
-      if (!commentBlocks) return content;
-      if (content === unanchoredCommentSentinel) return commentBlocks;
-
-      return `{==${content}==}${commentBlocks}`;
     },
   });
 }
 
-function addCriticCodeBlockRule(service: TurndownService) {
+function serializeCriticCommentElement(
+  serializeContent: (element: HTMLElement) => string,
+  element: HTMLElement,
+  content: string,
+  comments: Map<string, CriticComment>,
+  useEndmatter: boolean,
+) {
+  const commentIds = getElementCommentIds(element);
+  const changeElement = element.querySelector("span[data-critic-change-kind]");
+  if (changeElement instanceof HTMLElement) {
+    return serializeCriticChangeElement(
+      serializeContent,
+      changeElement,
+      serializeContent(changeElement),
+      comments,
+      commentIds,
+      useEndmatter,
+    );
+  }
+
+  const commentBlocks = serializeCommentBlocks(
+    commentIds,
+    comments,
+    useEndmatter,
+  );
+  if (!commentBlocks) return content;
+  if (content === unanchoredCommentSentinel) return commentBlocks;
+  return `{==${content}==}${commentBlocks}`;
+}
+
+function serializeCriticCodeContent(
+  element: HTMLElement,
+  comments: Map<string, CriticComment>,
+  useEndmatter: boolean,
+): string {
+  const serializeContent = (child: HTMLElement) =>
+    serializeCriticCodeContent(child, comments, useEndmatter);
+
+  return [...element.childNodes]
+    .map((node) => {
+      if (!(node instanceof HTMLElement)) return node.textContent ?? "";
+      const content = serializeContent(node);
+      if (node.hasAttribute("data-comment-ids")) {
+        return serializeCriticCommentElement(
+          serializeContent,
+          node,
+          content,
+          comments,
+          useEndmatter,
+        );
+      }
+      if (node.hasAttribute("data-critic-change-kind")) {
+        return serializeCriticChangeElement(
+          serializeContent,
+          node,
+          content,
+          comments,
+          [],
+          useEndmatter,
+        );
+      }
+      return content;
+    })
+    .join("");
+}
+
+function addCriticCodeBlockRule(
+  service: TurndownService,
+  comments: Map<string, CriticComment>,
+  useEndmatter: boolean,
+) {
   service.addRule("criticCodeBlock", {
     filter: (node) => {
       if (node.nodeName !== "PRE") return false;
@@ -1079,9 +1127,20 @@ function addCriticCodeBlockRule(service: TurndownService) {
         [...codeElement.classList]
           .find((className) => className.startsWith("language-"))
           ?.slice("language-".length) ?? "";
-      const content = service.turndown(codeElement.innerHTML).trimEnd();
+      // Prose conversion collapses whitespace and escapes code syntax. Read text
+      // nodes verbatim while serializing only the review marks around them.
+      const content = serializeCriticCodeContent(
+        codeElement,
+        comments,
+        useEndmatter,
+      );
+      const fenceLength = Math.max(
+        3,
+        ...[...content.matchAll(/`+/g)].map((match) => match[0].length + 1),
+      );
+      const fence = "`".repeat(fenceLength);
 
-      return `\n\n\`\`\`${language}\n${content}\n\`\`\`\n\n`;
+      return `\n\n${fence}${language}\n${content}\n${fence}\n\n`;
     },
   });
 }
@@ -1154,7 +1213,7 @@ function getChangeCommentBlocks(
 }
 
 function serializeCriticChangeElement(
-  service: TurndownService,
+  serializeContent: (element: HTMLElement) => string,
   element: HTMLElement,
   content: string,
   comments: Map<string, CriticComment>,
@@ -1210,7 +1269,7 @@ function serializeCriticChangeElement(
       change.changeId,
     )
   ) {
-    const replacement = service.turndown(nextElement.innerHTML).trim();
+    const replacement = serializeContent(nextElement);
     return `{~~${content}~>${replacement}~~}${metadata}${commentBlocks}`;
   }
 
@@ -1236,7 +1295,7 @@ function addCriticChangeRule(
     replacement(content, node) {
       const element = node as HTMLElement;
       return serializeCriticChangeElement(
-        service,
+        (child) => service.turndown(child.innerHTML).trim(),
         element,
         content,
         comments,
@@ -1505,7 +1564,7 @@ export function editorStateToCriticMarkdown(
   const useEndmatter = Boolean(sourceEndmatter);
   addCriticCommentRule(service, comments, useEndmatter);
   addCriticChangeRule(service, comments, useEndmatter);
-  addCriticCodeBlockRule(service);
+  addCriticCodeBlockRule(service, comments, useEndmatter);
   const endmatter = serializeReviewEndmatter(
     sourceEndmatter,
     comments,

@@ -473,6 +473,51 @@ describe("createApp", () => {
     await waitingPromise;
   });
 
+  it("removes a disconnected HTTP watcher before the review is finished", async () => {
+    fs.writeFileSync(path.join(projectDir, "draft.md"), "# Draft\n");
+    const { app } = createApp({ homeDir, staticDirPath: projectDir });
+    const server = app.listen(0, "127.0.0.1");
+    await new Promise<void>((resolve) => server.once("listening", resolve));
+    const port = (server.address() as AddressInfo).port;
+    const baseUrl = `http://127.0.0.1:${port}`;
+    const target = { projectPath: projectDir, path: "draft.md" };
+    const controller = new AbortController();
+    const waiting = fetch(`${baseUrl}/api/review-events/watch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(target),
+      signal: controller.signal,
+    }).catch((error: Error) => error);
+    const status = async () => {
+      const response = await fetch(
+        `${baseUrl}/api/review-events/status?${new URLSearchParams(target)}`,
+      );
+      return response.json();
+    };
+
+    try {
+      await expect.poll(status).toMatchObject({ watcherCount: 1 });
+      controller.abort();
+      await expect(waiting).resolves.toMatchObject({ name: "AbortError" });
+      await expect.poll(status).toMatchObject({
+        watching: false,
+        watcherCount: 0,
+      });
+
+      const completion = await fetch(`${baseUrl}/api/review-events`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(target),
+      });
+      expect(await completion.json()).toMatchObject({ delivered: false });
+    } finally {
+      controller.abort();
+      await waiting;
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
   it("rejects page ids that resolve outside the project directory", async () => {
     const outsideName = `${path.basename(projectDir)}-secret`;
     const outsideFilePath = path.join(

@@ -11,7 +11,6 @@ import {
   DocumentWorkspace,
   getReviewHandoffButtonLabel,
   isReviewHandoffDisabled,
-  shouldLatchDocumentChangedSinceOpen,
 } from "../src/DocumentWorkspace";
 import type { DocumentSaveState } from "../src/PageCard";
 import type {
@@ -379,7 +378,7 @@ describe("saving/saved status indicator (issue 2 fix)", () => {
     );
     expect(stack).not.toBeNull();
     expect(doneReviewingButton).toBeDefined();
-    expect(doneReviewingButton?.textContent).toContain("Approve");
+    expect(doneReviewingButton?.textContent).toContain("Finish review");
     expect(doneReviewingButton?.textContent).not.toContain("Saved");
     expect(stack?.textContent).not.toContain("Saved");
     expect(header.textContent).toContain("test.md");
@@ -397,7 +396,7 @@ describe("saving/saved status indicator (issue 2 fix)", () => {
     const header = getByTestId(container, "document-page-header");
     const corner = getByTestId(container, "document-save-status-corner");
     expect(stack).not.toBeNull();
-    expect(stack?.textContent).not.toContain("I'm done");
+    expect(stack?.textContent).not.toContain("Finish review");
     expect(stack?.textContent).not.toContain("Saved");
     expect(header.textContent).toContain("test.md");
     expect(header.textContent).not.toContain("Saved");
@@ -660,34 +659,10 @@ describe("saving/saved status indicator (issue 2 fix)", () => {
     ).toBe(false);
   });
 
-  it("uses approve copy until the user has changed the document", () => {
-    expect(
-      getReviewHandoffButtonLabel({
-        reviewHandoffState: "idle",
-        documentChangedSinceOpen: false,
-      }),
-    ).toBe("Approve");
-    expect(
-      getReviewHandoffButtonLabel({
-        reviewHandoffState: "idle",
-        documentChangedSinceOpen: true,
-      }),
-    ).toBe("I'm done");
-  });
-
-  it("ignores initial editor dirty signals before user input is possible", () => {
-    expect(
-      shouldLatchDocumentChangedSinceOpen({
-        isDirty: true,
-        documentChangeTrackingReady: false,
-      }),
-    ).toBe(false);
-    expect(
-      shouldLatchDocumentChangedSinceOpen({
-        isDirty: true,
-        documentChangeTrackingReady: true,
-      }),
-    ).toBe(true);
+  it("uses a stable completion label for an idle review", () => {
+    expect(getReviewHandoffButtonLabel({ reviewHandoffState: "idle" })).toBe(
+      "Finish review",
+    );
   });
 });
 
@@ -785,9 +760,11 @@ describe("review handoff watcher affordance", () => {
 
   async function renderWorkspace({
     getWatcherCount,
+    documentPath = "test.md",
     onCompleteReview = async () => ({ delivered: false }),
   }: {
     getWatcherCount: () => number;
+    documentPath?: string;
     onCompleteReview?: (
       options?: CompleteReviewOptions,
     ) => Promise<CompleteReviewResult>;
@@ -795,8 +772,8 @@ describe("review handoff watcher affordance", () => {
     await act(async () => {
       root.render(
         <DocumentWorkspace
-          documentPage={createPage()}
-          activeDocumentPath="test.md"
+          documentPage={{ ...createPage(), id: documentPath }}
+          activeDocumentPath={documentPath}
           documentFilenameLabel="test.md"
           documentEditorViewMode="rich-text"
           onDocumentEditorViewModeChange={() => {}}
@@ -824,14 +801,13 @@ describe("review handoff watcher affordance", () => {
 
     await renderWorkspace({ getWatcherCount: () => 0, onCompleteReview });
 
-    expect(container.textContent).not.toContain("Approve");
-    expect(container.textContent).not.toContain("I'm done");
+    expect(container.textContent).not.toContain("Finish review");
     expect(container.textContent).not.toContain("Review ready");
     expect(container.textContent).not.toContain("Copy prompt");
     expect(onCompleteReview).not.toHaveBeenCalled();
   });
 
-  it("shows the done reviewing button only for an active watcher", async () => {
+  it("shows the review completion button when an agent is watching", async () => {
     const onCompleteReview = vi
       .fn<() => Promise<CompleteReviewResult>>()
       .mockResolvedValue({ delivered: true });
@@ -843,18 +819,18 @@ describe("review handoff watcher affordance", () => {
       "review-handoff-button",
     );
     expect(doneReviewingButton).toBeDefined();
-    expect(doneReviewingButton?.textContent).toContain("Approve");
+    expect(doneReviewingButton?.textContent).toContain("Finish review");
     expect(container.textContent).not.toContain("Agent waiting");
     expect(queryByTestId(container, "review-handoff-status")).toBeNull();
 
     if (!doneReviewingButton) {
-      throw new Error("I'm done button not found");
+      throw new Error("Finish review button not found");
     }
     await click(doneReviewingButton);
 
     expect(onCompleteReview).toHaveBeenCalledOnce();
     expect(onCompleteReview).toHaveBeenCalledWith(undefined);
-    expect(container.textContent).toContain("Sent");
+    expect(container.textContent).toContain("Finished");
     expect(queryByTestId(container, "review-handoff-status")).toBeNull();
     expect(container.textContent).not.toContain("Agent notified");
     expect(container.textContent).not.toContain("Review ready");
@@ -903,14 +879,98 @@ describe("review handoff watcher affordance", () => {
       "review-handoff-button",
     );
     if (!doneReviewingButton) {
-      throw new Error("I'm done button not found");
+      throw new Error("Finish review button not found");
     }
     await click(doneReviewingButton);
 
     expect(onCompleteReview).toHaveBeenCalledOnce();
-    expect(container.textContent).toContain("Not sent");
-    expect(container.textContent).not.toContain("Approve");
-    expect(container.textContent).not.toContain("I'm done");
+    expect(container.textContent).toContain("Finished");
+    expect(container.textContent).not.toContain("Finish review");
+  });
+
+  it("keeps Finish review available after the watcher disconnects", async () => {
+    const onCompleteReview = vi
+      .fn<() => Promise<CompleteReviewResult>>()
+      .mockResolvedValue({ delivered: false });
+    await renderWorkspace({ getWatcherCount: () => 1, onCompleteReview });
+    await renderWorkspace({ getWatcherCount: () => 0, onCompleteReview });
+
+    const button = getByTestId<HTMLButtonElement>(
+      container,
+      "review-handoff-button",
+    );
+    expect(button.textContent).toBe("Finish review");
+    expect(button.disabled).toBe(false);
+    await click(button);
+
+    expect(onCompleteReview).toHaveBeenCalledOnce();
+    const status = getByTestId(document.body, "review-handoff-status");
+    expect(status.textContent).toContain("Your review is saved");
+    expect(status.textContent).toContain("No agent was connected");
+    expect(queryByTestId(status, "review-handoff-copy-message")).not.toBeNull();
+  });
+
+  it("does not carry a previous document's watcher into an unwatched file", async () => {
+    await renderWorkspace({ getWatcherCount: () => 1 });
+    await renderWorkspace({ getWatcherCount: () => 0 });
+    expect(queryByTestId(container, "review-handoff-button")).not.toBeNull();
+
+    await renderWorkspace({
+      getWatcherCount: () => 0,
+      documentPath: "other.md",
+    });
+    expect(queryByTestId(container, "review-handoff-button")).toBeNull();
+  });
+
+  it("ignores a previous document's in-flight completion after navigating", async () => {
+    let resolveCompletion: (result: CompleteReviewResult) => void = () => {};
+    const onCompleteReview = vi.fn(
+      () =>
+        new Promise<CompleteReviewResult>((resolve) => {
+          resolveCompletion = resolve;
+        }),
+    );
+    await renderWorkspace({ getWatcherCount: () => 1, onCompleteReview });
+    await click(getByTestId(container, "review-handoff-button"));
+    expect(onCompleteReview).toHaveBeenCalledOnce();
+
+    await renderWorkspace({
+      getWatcherCount: () => 0,
+      documentPath: "other.md",
+    });
+    await act(async () => resolveCompletion({ delivered: true }));
+    expect(queryByTestId(container, "review-handoff-button")).toBeNull();
+    expect(queryByTestId(document.body, "review-handoff-status")).toBeNull();
+  });
+
+  it("lets a failed handoff be retried without losing the overall comment", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const onCompleteReview = vi
+      .fn<(options?: CompleteReviewOptions) => Promise<CompleteReviewResult>>()
+      .mockRejectedValueOnce(new Error("Server unavailable"))
+      .mockResolvedValueOnce({ delivered: false });
+    await renderWorkspace({ getWatcherCount: () => 1, onCompleteReview });
+    await click(getByTestId(container, "review-handoff-comment-trigger"));
+    await change(
+      getByTestId<HTMLTextAreaElement>(
+        document.body,
+        "review-handoff-overall-comment",
+      ),
+      "Please follow up.",
+    );
+    await click(getByTestId(container, "review-handoff-button"));
+
+    const status = getByTestId(document.body, "review-handoff-status");
+    expect(status.textContent).toContain("Could not finish review");
+    const retry = getByTestId(status, "review-handoff-retry");
+    await click(retry);
+    expect(onCompleteReview).toHaveBeenLastCalledWith({
+      overallComment: "Please follow up.",
+    });
+    expect(onCompleteReview).toHaveBeenCalledTimes(2);
+    expect(
+      getByTestId(document.body, "review-handoff-status").textContent,
+    ).toContain("Your review is saved");
   });
 
   it("submits an overall comment from the handoff popover", async () => {
@@ -991,7 +1051,7 @@ describe("review handoff watcher affordance", () => {
       "review-handoff-button",
     );
     if (!doneReviewingButton) {
-      throw new Error("I'm done button not found");
+      throw new Error("Finish review button not found");
     }
     await click(doneReviewingButton);
 
@@ -1019,7 +1079,7 @@ describe("review handoff watcher affordance", () => {
       "review-handoff-button",
     );
     if (!doneReviewingButton) {
-      throw new Error("I'm done button not found");
+      throw new Error("Finish review button not found");
     }
 
     await click(doneReviewingButton);
@@ -1029,10 +1089,9 @@ describe("review handoff watcher affordance", () => {
     });
 
     expect(onCompleteReview).toHaveBeenCalledOnce();
-    expect(container.textContent).toContain("Sent");
+    expect(container.textContent).toContain("Finished");
     expect(container.textContent).not.toContain("Agent notified");
-    expect(container.textContent).not.toContain("Approve");
-    expect(container.textContent).not.toContain("I'm done");
+    expect(container.textContent).not.toContain("Finish review");
   });
 
   it("lets a new watcher start another handoff after sent feedback", async () => {
@@ -1054,7 +1113,7 @@ describe("review handoff watcher affordance", () => {
       "review-handoff-button",
     );
     if (!doneReviewingButton) {
-      throw new Error("I'm done button not found");
+      throw new Error("Finish review button not found");
     }
 
     await click(doneReviewingButton);
@@ -1063,9 +1122,8 @@ describe("review handoff watcher affordance", () => {
       onCompleteReview,
     });
 
-    expect(container.textContent).toContain("Sent");
-    expect(container.textContent).not.toContain("Approve");
-    expect(container.textContent).not.toContain("I'm done");
+    expect(container.textContent).toContain("Finished");
+    expect(container.textContent).not.toContain("Finish review");
 
     watcherCount = 1;
     await renderWorkspace({
@@ -1076,8 +1134,8 @@ describe("review handoff watcher affordance", () => {
       await Promise.resolve();
     });
 
-    expect(container.textContent).toContain("Approve");
-    expect(container.textContent).not.toContain("Sent");
+    expect(container.textContent).toContain("Finish review");
+    expect(container.textContent).not.toContain("Finished");
   });
 
   it("reopens the sent popover from the muted primary button", async () => {
@@ -1108,10 +1166,10 @@ describe("review handoff watcher affordance", () => {
     await click(doneReviewingButton);
 
     expect(onCompleteReview).toHaveBeenCalledTimes(1);
-    expect(container.textContent).toContain("Sent");
+    expect(container.textContent).toContain("Finished");
     expect(document.body.textContent).toContain("Nice one!");
     expect(document.body.textContent).toContain(
-      "Your agent is now working in the background on this, in all likelihood. If our signal didn't make it, just click here to copy a line you can send it to keep going.",
+      "Your review is saved. An agent was connected when you finished, but receipt has not been confirmed.",
     );
     expect(queryByTestId(document.body, "review-handoff-status")).toBeDefined();
     expect(

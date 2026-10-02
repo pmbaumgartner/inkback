@@ -2,6 +2,7 @@ import {
   buildCommentThreads,
   type CriticComment,
   flattenCommentThreads,
+  getCommentDescendantIds,
 } from "./critic-markup";
 
 interface CommentAnchorMeasurement {
@@ -192,6 +193,26 @@ export function groupCommentAnchorMeasurements(
   );
 }
 
+/** Include endmatter-only replies when rendering an inline comment anchor. */
+export function collectAnchoredThreadComments(
+  anchorCommentIds: string[],
+  comments: ReadonlyMap<string, CriticComment>,
+): CriticComment[] {
+  const collected = new Map<string, CriticComment>();
+
+  for (const commentId of anchorCommentIds) {
+    for (const id of [
+      commentId,
+      ...getCommentDescendantIds(commentId, comments),
+    ]) {
+      const comment = comments.get(id);
+      if (comment) collected.set(id, comment);
+    }
+  }
+
+  return [...collected.values()];
+}
+
 export function buildCommentThreadRailItems(
   groups: CommentGroupAnchor[],
   comments: ReadonlyMap<string, CriticComment>,
@@ -199,9 +220,10 @@ export function buildCommentThreadRailItems(
   const items: CommentThreadRailItem[] = [];
 
   for (const group of groups) {
-    const visibleComments = group.commentIds
-      .map((commentId) => comments.get(commentId))
-      .filter((comment): comment is CriticComment => Boolean(comment));
+    const visibleComments = collectAnchoredThreadComments(
+      group.commentIds,
+      comments,
+    );
 
     if (visibleComments.length === 0) continue;
 

@@ -351,30 +351,16 @@ export function isReviewHandoffDisabled({
 
 export function getReviewHandoffButtonLabel({
   reviewHandoffState,
-  documentChangedSinceOpen,
 }: {
   reviewHandoffState: ReviewHandoffState;
-  documentChangedSinceOpen: boolean;
 }) {
   return reviewHandoffState === "notifying"
-    ? "Sending"
-    : reviewHandoffState === "notified"
-      ? "Sent"
-      : reviewHandoffState === "error" || reviewHandoffState === "undelivered"
-        ? "Not sent"
-        : documentChangedSinceOpen
-          ? "I'm done"
-          : "Approve";
-}
-
-export function shouldLatchDocumentChangedSinceOpen({
-  isDirty,
-  documentChangeTrackingReady,
-}: {
-  isDirty: boolean;
-  documentChangeTrackingReady: boolean;
-}) {
-  return isDirty && documentChangeTrackingReady;
+    ? "Finishing"
+    : reviewHandoffState === "notified" || reviewHandoffState === "undelivered"
+      ? "Finished"
+      : reviewHandoffState === "error"
+        ? "Could not finish"
+        : "Finish review";
 }
 
 interface DocumentWorkspaceProps {
@@ -424,6 +410,7 @@ export function DocumentWorkspace({
   const [reviewHandoffState, setReviewHandoffState] =
     useState<ReviewHandoffState>("idle");
   const [reviewWatcherCount, setReviewWatcherCount] = useState(0);
+  const [reviewWatcherSeen, setReviewWatcherSeen] = useState(false);
   const [reviewHandoffPopoverOpen, setReviewHandoffPopoverOpen] =
     useState(false);
   const [reviewCompleteTitle, setReviewCompleteTitle] = useState(() =>
@@ -433,12 +420,13 @@ export function DocumentWorkspace({
   const [copiedFileAction, setCopiedFileAction] =
     useState<FileCopyAction | null>(null);
   const [overallComment, setOverallComment] = useState("");
-  const [documentChangedSinceOpen, setDocumentChangedSinceOpen] =
-    useState(false);
   const sawNoWatcherAfterNotifiedRef = useRef(false);
   const copiedFileActionTimeoutRef = useRef<number | null>(null);
   const saveControllerRef = useRef<DocumentSaveController | null>(null);
-  const documentChangeTrackingReadyRef = useRef(false);
+  const documentGenerationRef = useRef<{
+    path: string | null;
+    pageId: string | undefined;
+  } | null>(null);
 
   const handleSaveStateChange = useCallback(
     (state: DocumentSaveState) => {
@@ -464,16 +452,19 @@ export function DocumentWorkspace({
   }, [documentPage?.content]);
 
   useEffect(() => {
-    const documentIdentity = `${activeDocumentPath ?? ""}:${documentPage?.id ?? ""}`;
-    if (!documentIdentity) return;
-    documentChangeTrackingReadyRef.current = false;
+    documentGenerationRef.current = {
+      path: activeDocumentPath,
+      pageId: documentPage?.id,
+    };
     setReviewHandoffState("idle");
     setReviewHandoffPopoverOpen(false);
-    setDocumentChangedSinceOpen(false);
-    const readyTimer = window.setTimeout(() => {
-      documentChangeTrackingReadyRef.current = true;
-    }, 0);
-    return () => window.clearTimeout(readyTimer);
+    setReviewWatcherCount(0);
+    setReviewWatcherSeen(false);
+    setOverallComment("");
+    sawNoWatcherAfterNotifiedRef.current = false;
+    return () => {
+      documentGenerationRef.current = null;
+    };
   }, [activeDocumentPath, documentPage?.id]);
 
   useEffect(() => {
@@ -487,7 +478,9 @@ export function DocumentWorkspace({
       try {
         const status = await backend.getReviewWatchStatus?.(activeDocumentPath);
         if (!cancelled) {
-          setReviewWatcherCount(status?.watcherCount ?? 0);
+          const watcherCount = status?.watcherCount ?? 0;
+          setReviewWatcherCount(watcherCount);
+          if (watcherCount > 0) setReviewWatcherSeen(true);
         }
       } catch {
         if (!cancelled) {
@@ -571,6 +564,7 @@ export function DocumentWorkspace({
     async (options?: CompleteReviewOptions) => {
       if (!activeDocumentPath || reviewHandoffState === "notifying") return;
 
+      const documentGeneration = documentGenerationRef.current;
       setReviewHandoffState("notifying");
       try {
         // The button stays enabled while autosave is still pending, so make
@@ -580,11 +574,13 @@ export function DocumentWorkspace({
           throw flushResult.error;
         }
 
+        if (documentGenerationRef.current !== documentGeneration) return;
         const result = await onCompleteReview(options);
+        if (documentGenerationRef.current !== documentGeneration) return;
+        setOverallComment("");
         if (result.delivered) {
           setReviewWatcherCount(0);
           setReviewHandoffState("notified");
-          setOverallComment("");
           setReviewHandoffPopoverOpen(true);
         } else {
           setReviewWatcherCount(0);
@@ -592,27 +588,13 @@ export function DocumentWorkspace({
           setReviewHandoffPopoverOpen(true);
         }
       } catch (error) {
+        if (documentGenerationRef.current !== documentGeneration) return;
         console.error("Failed to complete review:", error);
         setReviewHandoffState("error");
         setReviewHandoffPopoverOpen(true);
       }
     },
     [activeDocumentPath, onCompleteReview, reviewHandoffState],
-  );
-
-  const handleDocumentDirtyStateChange = useCallback(
-    (isDirty: boolean) => {
-      if (
-        shouldLatchDocumentChangedSinceOpen({
-          isDirty,
-          documentChangeTrackingReady: documentChangeTrackingReadyRef.current,
-        })
-      ) {
-        setDocumentChangedSinceOpen(true);
-      }
-      onDocumentDirtyStateChange(isDirty);
-    },
-    [onDocumentDirtyStateChange],
   );
 
   const handleCopyFileMenuAction = useCallback(
@@ -675,10 +657,9 @@ export function DocumentWorkspace({
       : conflictNoticeCopy[documentDiskChangeState];
   const showReviewHandoffButton =
     !!activeDocumentPath &&
-    (reviewWatcherCount > 0 || reviewHandoffState !== "idle");
+    (reviewWatcherSeen || reviewHandoffState !== "idle");
   const reviewHandoffButtonLabel = getReviewHandoffButtonLabel({
     reviewHandoffState,
-    documentChangedSinceOpen,
   });
   const ReviewHandoffButtonIcon =
     reviewHandoffState === "notifying"
@@ -687,17 +668,21 @@ export function DocumentWorkspace({
         ? AlertTriangle
         : null;
   const reviewHandoffStatusTitle =
-    reviewHandoffState === "undelivered"
-      ? "No agent is watching now"
-      : reviewHandoffState === "error"
-        ? "Could not notify agent"
-        : reviewCompleteTitle;
+    reviewHandoffState === "notifying"
+      ? "Finishing review"
+      : reviewHandoffState === "undelivered"
+        ? "Review saved"
+        : reviewHandoffState === "error"
+          ? "Could not finish review"
+          : reviewCompleteTitle;
   const reviewHandoffStatusBody =
-    reviewHandoffState === "undelivered"
-      ? "The handoff was not delivered because the watcher is no longer connected."
-      : reviewHandoffState === "error"
-        ? "Roughdraft could not send the handoff. Check that the local server is still running."
-        : null;
+    reviewHandoffState === "notifying"
+      ? "Saving your latest edits and finishing the handoff."
+      : reviewHandoffState === "undelivered"
+        ? "Your review is saved. No agent was connected when you finished. If your agent does not resume, send it the message below."
+        : reviewHandoffState === "error"
+          ? "Roughdraft could not finish the handoff. Check the save status and that the local server is still running, then try again."
+          : "Your review is saved. An agent was connected when you finished, but receipt has not been confirmed.";
   const reviewHandoffCopyMessage = buildReviewHandoffCopyMessage(
     activeDocumentPath ?? documentFilenameLabel,
   );
@@ -707,7 +692,8 @@ export function DocumentWorkspace({
     reviewHandoffState,
   });
   const reviewHandoffButtonDisabled =
-    reviewHandoffDisabled && reviewHandoffState !== "notified";
+    reviewHandoffDisabled &&
+    (reviewHandoffState === "idle" || reviewHandoffState === "notifying");
   const trimmedOverallComment = overallComment.trim();
 
   return (
@@ -758,7 +744,7 @@ export function DocumentWorkspace({
                   disabled={reviewHandoffButtonDisabled}
                   aria-disabled={reviewHandoffButtonDisabled || undefined}
                   onClick={() => {
-                    if (reviewHandoffState === "notified") {
+                    if (reviewHandoffState !== "idle") {
                       setReviewHandoffPopoverOpen(true);
                       return;
                     }
@@ -846,15 +832,18 @@ export function DocumentWorkspace({
                   </form>
                 ) : (
                   <div>
-                    <div className="mb-3 flex h-[170px] items-center justify-center overflow-hidden">
-                      <RobotsHighFiveToy
-                        onHighFive={() =>
-                          setReviewCompleteTitle((currentTitle) =>
-                            getRandomReviewCompleteTitleExcept(currentTitle),
-                          )
-                        }
-                      />
-                    </div>
+                    {reviewHandoffState === "notified" ||
+                    reviewHandoffState === "undelivered" ? (
+                      <div className="mb-3 flex h-[170px] items-center justify-center overflow-hidden">
+                        <RobotsHighFiveToy
+                          onHighFive={() =>
+                            setReviewCompleteTitle((currentTitle) =>
+                              getRandomReviewCompleteTitleExcept(currentTitle),
+                            )
+                          }
+                        />
+                      </div>
+                    ) : null}
                     <div className="flex items-start gap-3">
                       {reviewHandoffState === "notifying" ||
                       reviewHandoffState === "error" ||
@@ -871,30 +860,39 @@ export function DocumentWorkspace({
                         <div className="text-xl font-semibold leading-6 text-stone-950 dark:text-slate-50">
                           {reviewHandoffStatusTitle}
                         </div>
-                        {reviewHandoffStatusBody ? (
-                          <p className="mt-1 text-sm leading-6 text-stone-600 dark:text-slate-300">
-                            {reviewHandoffStatusBody}
-                          </p>
-                        ) : (
-                          <div className="mt-1">
-                            <p className="text-sm leading-[1.32rem] text-stone-500 dark:text-slate-400">
-                              Your agent is now working in the background on
-                              this, in all likelihood. If our signal didn't make
-                              it, just{" "}
-                              <button
-                                type="button"
-                                data-testid="review-handoff-copy-message"
-                                className="font-normal text-inherit underline decoration-stone-300 underline-offset-4 hover:decoration-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-950/25 dark:decoration-slate-600 dark:hover:decoration-slate-200 dark:focus-visible:ring-slate-50/30"
-                                onClick={() =>
-                                  void writePlainTextToClipboard(
-                                    reviewHandoffCopyMessage,
-                                  )
-                                }
-                              >
-                                click here
-                              </button>{" "}
-                              to copy a line you can send it to keep going.
-                            </p>
+                        <p className="mt-1 text-sm leading-6 text-stone-600 dark:text-slate-300">
+                          {reviewHandoffStatusBody}
+                        </p>
+                        {reviewHandoffState === "error" ? (
+                          <Button
+                            type="button"
+                            data-testid="review-handoff-retry"
+                            className="mt-4 w-full"
+                            onClick={() =>
+                              void handleCompleteReview(
+                                trimmedOverallComment
+                                  ? { overallComment: trimmedOverallComment }
+                                  : undefined,
+                              )
+                            }
+                          >
+                            Try again
+                          </Button>
+                        ) : reviewHandoffState === "notifying" ? null : (
+                          <div className="mt-3">
+                            <Button
+                              type="button"
+                              data-testid="review-handoff-copy-message"
+                              variant="outline"
+                              className="w-full"
+                              onClick={() =>
+                                void writePlainTextToClipboard(
+                                  reviewHandoffCopyMessage,
+                                )
+                              }
+                            >
+                              Copy message for agent
+                            </Button>
                             <Button
                               type="button"
                               data-testid="review-handoff-close-window"
@@ -1140,7 +1138,7 @@ export function DocumentWorkspace({
               interactionMode={documentInteractionMode}
               backend={backend}
               onCommentRailPresenceChange={setDocumentHasComments}
-              onDirtyStateChange={handleDocumentDirtyStateChange}
+              onDirtyStateChange={onDocumentDirtyStateChange}
               onLocalContentChange={onDocumentLocalContentChange}
               onSaveControllerChange={(controller) => {
                 saveControllerRef.current = controller;

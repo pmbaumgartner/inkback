@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+  appendInCodeEditor,
   createMarkdownProject,
   logE2eEvent,
   openMarkdownFile,
@@ -52,7 +53,7 @@ test.describe("review handoff", () => {
     await page.getByTestId("review-handoff-button").click();
 
     await expect(page.getByTestId("review-handoff-status")).toContainText(
-      "Your agent is now working",
+      "receipt has not been confirmed",
     );
 
     await expect
@@ -70,6 +71,55 @@ test.describe("review handoff", () => {
       summary: {
         comments: 1,
       },
+    });
+  });
+
+  test("keeps review completion available after the watcher disconnects @smoke", async ({
+    page,
+    request,
+  }) => {
+    const relativePath = "disconnected-handoff.md";
+    const filePath = writeProjectFile(
+      projectDir,
+      relativePath,
+      "# Review\n\nSaved feedback.\n",
+    );
+    pendingWatch = request.post("/api/review-events/watch", {
+      data: { projectPath: projectDir, path: relativePath, timeoutSeconds: 5 },
+    });
+
+    await openMarkdownFile(page, filePath, "code");
+    await expect(page.getByTestId("review-handoff-button")).toBeVisible();
+    const disconnectedStatus = page.waitForResponse(
+      async (response) =>
+        response.url().includes("/api/review-events/status") &&
+        (await response.json()).watcherCount === 0,
+    );
+    await pendingWatch;
+    await disconnectedStatus;
+    logE2eEvent("review-handoff.disconnected", {
+      buttonVisible: await page
+        .getByTestId("review-handoff-button")
+        .isVisible(),
+    });
+    await expect(page.getByTestId("review-handoff-button")).toBeVisible();
+    await appendInCodeEditor(page, "\nPending feedback.");
+    await expect(page.getByTestId("review-handoff-button")).toHaveText(
+      "Finish review",
+    );
+    await page.getByTestId("review-handoff-button").click();
+
+    const status = page.getByTestId("review-handoff-status");
+    await expect(status).toContainText("Your review is saved");
+    expect(readProjectFile(projectDir, relativePath)).toContain(
+      "Pending feedback.",
+    );
+    await expect(status).toContainText("No agent was connected");
+    await expect(
+      status.getByTestId("review-handoff-copy-message"),
+    ).toBeVisible();
+    logE2eEvent("review-handoff.disconnected-completed", {
+      status: await status.innerText(),
     });
   });
 
@@ -95,7 +145,9 @@ test.describe("review handoff", () => {
     await openMarkdownFile(page, filePath);
     await page.getByTestId("review-handoff-button").click();
 
-    await expect(page.getByTestId("review-handoff-button")).toHaveText("Sent");
+    await expect(page.getByTestId("review-handoff-button")).toHaveText(
+      "Finished",
+    );
     await expect(page.getByTestId("review-handoff-status")).toBeVisible();
 
     await page.keyboard.press("Escape");

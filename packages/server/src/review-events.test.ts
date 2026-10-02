@@ -1,5 +1,5 @@
 import path from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ReviewEventQueue } from "./review-events";
 
 function eventInput(documentPath = "/tmp/project/draft.md") {
@@ -18,6 +18,67 @@ function eventInput(documentPath = "/tmp/project/draft.md") {
 }
 
 describe("ReviewEventQueue", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("does not register a watcher when its signal is already aborted", async () => {
+    const queue = new ReviewEventQueue();
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      queue.wait({ signal: controller.signal }),
+    ).rejects.toMatchObject({
+      name: "AbortError",
+    });
+    expect(queue.waiterCount()).toBe(0);
+    expect(queue.emit(eventInput()).delivered).toBe(false);
+  });
+
+  it("cancels a pending wait and its timeout when the caller aborts", async () => {
+    vi.useFakeTimers();
+    const queue = new ReviewEventQueue();
+    const controller = new AbortController();
+    const waiting = queue.wait({
+      signal: controller.signal,
+      timeoutMs: 1_000,
+    });
+    const rejected = expect(waiting).rejects.toMatchObject({
+      name: "AbortError",
+    });
+
+    controller.abort();
+
+    await rejected;
+    expect(queue.waiterCount()).toBe(0);
+    expect(queue.emit(eventInput()).delivered).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("retains an event if its watcher aborts during the batch window", async () => {
+    vi.useFakeTimers();
+    const queue = new ReviewEventQueue();
+    const controller = new AbortController();
+    const waiting = queue.wait({
+      signal: controller.signal,
+      timeoutMs: 1_000,
+      batchWindowMs: 100,
+    });
+    const rejected = expect(waiting).rejects.toMatchObject({
+      name: "AbortError",
+    });
+    const { event } = queue.emit(eventInput());
+
+    controller.abort();
+
+    await rejected;
+    expect(queue.waiterCount()).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+    await expect(queue.wait()).resolves.toMatchObject({
+      events: [event],
+      timedOut: false,
+    });
+  });
+
   it("queues events in creation order", async () => {
     const queue = new ReviewEventQueue();
 

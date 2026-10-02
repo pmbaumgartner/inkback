@@ -103,7 +103,7 @@ suggestions:
 | Homepage | Workflow stage 2 | Scroll to second scene | `homepage-workflow-agent-work` | Agent work becomes visible. |
 | Homepage | Workflow stage 3 | Scroll to third scene | `homepage-workflow-terminal-command`, `homepage-workflow-popup` | Roughdraft command and document popup are visible. |
 | Homepage | Workflow stage 4 | Scroll to fourth scene | `homepage-workflow-review-rail`, `homepage-workflow-comment-highlight` | User feedback appears in the document/review rail. |
-| Homepage | Workflow stage 5 | Scroll to fifth scene | `homepage-workflow-handoff-button` | Done handoff button is visible. |
+| Homepage | Workflow stage 5 | Scroll to fifth scene | `homepage-workflow-handoff-button` | Finish review button is visible. |
 | Homepage | Workflow stage 6 | Scroll to final scene | `homepage-workflow-agent-resume` | Agent resume line and incorporated plan are visible; done button is hidden. |
 | Homepage | Update notice | Start app with backend status returning `updateStatus` | update notice component | Best captured with API mocking unless an update is actually available. |
 | RFM guide | Default page | `/roughdraft-flavored-markdown` | `rfm-source-editor` | Capture the source editor plus rendered output. |
@@ -123,12 +123,12 @@ suggestions:
 | Document | Disk changed | Open local file, modify file externally while browser content is clean | `file-conflict-notice`, `file-conflict-action-reload`, `file-conflict-action-overwrite` | Banner title: `File changed on disk`. |
 | Document | Save conflict | Edit in browser, then modify file externally before autosave resolves | `file-conflict-notice`, `file-conflict-action-keep-editing` | Banner title: `Save conflict`; autosave pauses. |
 | Document | Autosave paused | Keep editing after conflict | `file-conflict-notice`, `file-conflict-action-overwrite` | Banner title: `Autosave paused`; no keep-editing action. |
-| Document | Review handoff idle | Open a local file while a watcher is connected | `review-handoff-button` | Header text: `Agent watching`. |
+| Document | Review handoff idle | Open a local file while a watcher is connected | `review-handoff-button` | Header text: `Agent watching`; button says `Finish review` before and after edits. |
 | Document | Review handoff comment popover | Open a local file while a watcher is connected, then click the handoff dropdown trigger | `review-handoff-comment-trigger`, `review-handoff-comment-popover`, `review-handoff-overall-comment` | Capture the split handoff control and textarea with `Overall comment` placeholder before submission. |
-| Document | Review handoff sending | Click handoff button while watcher is connected | `review-handoff-button` | Button label: `Sending`. |
-| Document | Review handoff sent | Successful handoff | `review-handoff-status`, `review-handoff-robots-toy`, `review-handoff-close-window`, `review-handoff-copy-message` | Capture the random completion title, robot toy, primary close button, and fallback copy hint below it. |
-| Document | Review handoff undelivered | Watcher disconnects before handoff | `review-handoff-status` | Popover title: `No agent is watching now`. |
-| Document | Review handoff error | Force handoff API error | `review-handoff-status` | Popover title: `Could not notify agent`. |
+| Document | Review handoff sending | Click handoff button while watcher is connected | `review-handoff-button` | Button label: `Finishing`. |
+| Document | Review handoff sent | Saved completion with a connected watcher; button says `Finished` | `review-handoff-status`, `review-handoff-close-window`, `review-handoff-copy-message` | Confirm the notice distinguishes a connected watcher from confirmed agent receipt; capture the close action and copyable resume message. |
+| Document | Review handoff undelivered | Watcher connects, then disconnects before handoff; the Finish review control remains available | `review-handoff-status` | Feedback remains saved; copyable resume message explains how to continue without an active watcher. |
+| Document | Review handoff error | Force handoff API error | `review-handoff-status` | Popover title: `Could not finish review`; capture `Try again` and confirm retry retains the overall comment. |
 | Remote | Connected banner | Open with `?session=<id>&token=<token>` and remote capability enabled | `role=status`, `aria-label="Remote session connected"` | Requires remote backend support in `/api/status`. |
 | Remote | Disconnected banner | Drop remote session connection | `role=alert`, `aria-label="Remote session disconnected"` | Best captured with backend mocking. |
 | Editor | Selection menu | Select text in rich editor | `selection-menu` | Capture formatting buttons and comment/suggestion actions. |
@@ -194,3 +194,9 @@ The most reliable long-term solution is a dedicated screenshot harness route or 
 - Capture both rich-text and code editor for document states that affect the editor surface or review rail.
   
 - Keep screenshots in `.context/` unless the run is intentionally being committed as visual documentation.
+
+## Fork workflow regression states
+
+- Reload a review document containing a root comment and replies stored only in YAML endmatter. Capture the complete thread, then reply to its nested reply and reload again.
+- Comment on or suggest a change inside a multiline code block. Save and reload; capture preserved indentation, blank lines, and the review mark.
+- Disconnect the watcher, finish the review, and capture the saved-feedback fallback. Navigate to a different document that has never had a watcher and confirm it does not inherit the previous handoff control.

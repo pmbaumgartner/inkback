@@ -691,15 +691,28 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
     const afterSequence =
       typeof req.body?.afterSequence === "number" ? req.body.afterSequence : 0;
 
-    const result = await reviewEvents.wait({
-      documentPath: target.absolutePath,
-      afterSequence: fromNow ? reviewEvents.latestSequence() : afterSequence,
-      timeoutMs:
-        timeoutSeconds !== undefined ? timeoutSeconds * 1000 : undefined,
-      batchWindowMs: batchWindowSeconds * 1000,
-    });
+    const controller = new AbortController();
+    const onClose = () => controller.abort();
+    // The incoming request body has already ended; the response connection
+    // remains open for the long poll and closes when the caller disconnects.
+    res.once("close", onClose);
+    if (res.destroyed) controller.abort();
+    try {
+      const result = await reviewEvents.wait({
+        documentPath: target.absolutePath,
+        afterSequence: fromNow ? reviewEvents.latestSequence() : afterSequence,
+        timeoutMs:
+          timeoutSeconds !== undefined ? timeoutSeconds * 1000 : undefined,
+        batchWindowMs: batchWindowSeconds * 1000,
+        signal: controller.signal,
+      });
 
-    res.json(result);
+      if (!controller.signal.aborted) res.json(result);
+    } catch (error) {
+      if (!controller.signal.aborted) throw error;
+    } finally {
+      res.off("close", onClose);
+    }
   });
 
   app.get("/api/review-events/status", (req, res) => {

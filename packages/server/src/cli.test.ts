@@ -1077,7 +1077,8 @@ describe("cli", () => {
     expect(watchRequestBody).toMatchObject({
       batchWindowSeconds: 0,
     });
-    expect(watchRequestBody).not.toHaveProperty("timeoutSeconds");
+    expect(watchRequestBody?.timeoutSeconds).toBeGreaterThan(0);
+    expect(watchRequestBody?.timeoutSeconds).toBeLessThan(300);
     await fetch(`http://localhost:${persisted?.port}/api/review-events`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1411,7 +1412,9 @@ describe("cli", () => {
     expect(test.logs).toContain(
       "  help agent         Print the agent setup prompt",
     );
-    expect(test.logs).toContain("Agent setup: https://roughdraft.md/setup.md");
+    expect(test.logs).toContain(
+      "Agent setup: https://raw.githubusercontent.com/pmbaumgartner/roughdraft/main/packages/app/public/setup.md",
+    );
     expect(test.logs).toContain(
       "Use `roughdraft help agent` for a copyable setup prompt.",
     );
@@ -1427,10 +1430,18 @@ describe("cli", () => {
       "To set up your coding agent, paste this into it:",
     );
     expect(test.logs).toContain(
-      "Install Roughdraft for me using `npm i -g roughdraft`, then read https://roughdraft.md/setup.md and set yourself up to use it.",
+      "Install Roughdraft for me using `npm install -g https://github.com/pmbaumgartner/roughdraft/releases/download/v0.1.11-pmbaumgartner.2/roughdraft-0.1.11-pmbaumgartner.2.tgz`, then read https://raw.githubusercontent.com/pmbaumgartner/roughdraft/main/packages/app/public/setup.md and set yourself up to use it.",
     );
     expect(test.logs).toContain(
       "This command only prints setup text. It does not edit agent instruction files.",
+    );
+  });
+
+  it("installs the fork when following agent setup help", async () => {
+    const test = createTestDependencies();
+    expect(await runCli(["help", "agent"], test.deps)).toBe(0);
+    expect(test.logs.join("\n")).toMatch(
+      /npm (?:i|install) -g https:\/\/github\.com\/pmbaumgartner\/roughdraft\/releases\/download\//,
     );
   });
 
@@ -1508,7 +1519,7 @@ describe("cli", () => {
 
     expect(exitCode).toBe(0);
     expect(test.logs).toContain(
-      "Live setup instructions: https://roughdraft.md/setup.md",
+      "Live setup instructions: https://raw.githubusercontent.com/pmbaumgartner/roughdraft/main/packages/app/public/setup.md",
     );
   });
 

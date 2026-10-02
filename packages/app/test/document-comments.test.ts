@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { CriticComment } from "../src/critic-markup";
+import {
+  type CriticComment,
+  criticMarkdownToRenderedHtml,
+  getCommentDescendantIds,
+} from "../src/critic-markup";
 import {
   buildCommentThreadRailItems,
   getCommentAnchorMeasurements,
@@ -16,6 +20,58 @@ function createCommentsMap(comments: CriticComment[]) {
 }
 
 describe("document comment layout helpers", () => {
+  it.each([
+    { commentIds: ["root"] },
+    { commentIds: ["root", "child"] },
+  ])("includes endmatter replies once in the anchored thread for $commentIds", ({
+    commentIds,
+  }) => {
+    const { comments } =
+      criticMarkdownToRenderedHtml(`{==alpha==}{>>Root<<}{#root}
+
+---
+comments:
+  root:
+    by: user
+  child:
+    body: First reply
+    re: root
+  grandchild:
+    body: Nested reply
+    re: child
+  unrelated:
+    body: Another thread
+`);
+
+    const items = buildCommentThreadRailItems(
+      [{ key: "anchor", commentIds, anchorTop: 20, anchorBottom: 40 }],
+      comments,
+    );
+
+    expect(items).toHaveLength(1);
+    expect(items[0]?.rootCommentId).toBe("root");
+    expect(items[0]?.commentIds).toEqual(["root", "child", "grandchild"]);
+  });
+
+  it("handles cyclic reply metadata without revisiting the starting comment", () => {
+    const comments = createCommentsMap([
+      {
+        id: "root",
+        content: "Root",
+        createdAt: "2026-04-24T00:00:00.000Z",
+        parentCommentId: "child",
+      },
+      {
+        id: "child",
+        content: "Reply",
+        createdAt: "2026-04-24T00:00:01.000Z",
+        parentCommentId: "root",
+      },
+    ]);
+
+    expect(getCommentDescendantIds("root", comments)).toEqual(["child"]);
+  });
+
   it("maps DOM anchor boxes to positions relative to the editor", () => {
     const measurements = getCommentAnchorMeasurements(
       [

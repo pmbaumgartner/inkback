@@ -63,6 +63,54 @@ test.describe("CriticMarkup review flows", () => {
     });
   });
 
+  test("reloads endmatter replies and saves a nested reply @smoke", async ({
+    page,
+  }) => {
+    const filePath = writeProjectFile(
+      projectDir,
+      "endmatter-replies.md",
+      `{==target text==}{>>Needs detail<<}{#root}
+
+---
+comments:
+  root:
+    by: user
+    at: "2026-04-23T18:00:00.000Z"
+  child:
+    body: Added the requested detail.
+    by: AI
+    at: "2026-04-23T18:05:00.000Z"
+    re: root
+`,
+    );
+
+    await openMarkdownFile(page, filePath);
+    const rail = page.getByTestId("document-review-rail");
+    await expect(rail).toContainText("Added the requested detail.");
+    await page.reload();
+    await expect(rail).toContainText("Added the requested detail.");
+
+    await page.getByTestId("comment-thread-root").click();
+    await page.getByTestId("comment-rail-child-action-reply").click();
+    await page
+      .getByTestId("comment-rail-c1-editor")
+      .fill("Thanks, that resolves it.");
+    await page.getByTestId("comment-rail-c1-action-save").click();
+    await expect
+      .poll(() => readProjectFile(projectDir, "endmatter-replies.md"))
+      .toContain("body: Thanks, that resolves it.");
+    expect(readProjectFile(projectDir, "endmatter-replies.md")).toContain(
+      "re: child",
+    );
+
+    await page.reload();
+    await expect(rail).toContainText("Added the requested detail.");
+    await expect(rail).toContainText("Thanks, that resolves it.");
+    logE2eEvent("criticmarkup.endmatter-replies-reloaded", {
+      file: "endmatter-replies.md",
+    });
+  });
+
   test("creates a new root comment and saves it to disk @smoke", async ({
     page,
   }) => {

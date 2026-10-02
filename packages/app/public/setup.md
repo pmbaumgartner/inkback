@@ -1,6 +1,6 @@
 # Roughdraft Agent Setup
 
-You are setting yourself up to use Roughdraft, a local Markdown review tool.
+You are setting yourself up to use the pmbaumgartner Roughdraft fork, a local Markdown review tool. Keep using this fork for installation and updates; its built releases include the runtime dependency and review workflow fixes.
 
 Roughdraft lets you open one Markdown file from disk in a local browser editor so the user can read, edit, comment, and suggest changes. It is currently a single-file Markdown viewer/editor.
 
@@ -15,7 +15,7 @@ roughdraft help
 If Roughdraft is missing and the user has asked you to install it, install it with:
 
 ```bash
-npm i -g roughdraft
+npm install -g https://github.com/pmbaumgartner/roughdraft/releases/download/v0.1.11-pmbaumgartner.2/roughdraft-0.1.11-pmbaumgartner.2.tgz
 ```
 
 If the user did not explicitly ask you to install software, ask before installing a global npm package.
@@ -26,13 +26,13 @@ Create a short example document and open it for the user so they can confirm the
 
 ```bash
 example_file="$HOME/roughdraft-example.md"
-curl -fsSL https://roughdraft.md/example.md -o "$example_file"
+curl -fsSL https://raw.githubusercontent.com/pmbaumgartner/roughdraft/main/packages/app/public/example.md -o "$example_file"
 roughdraft open "$example_file"
 ```
 
 If `curl` is unavailable, create a short Markdown file yourself with a heading, one or two sentences, and an invitation for the user to leave a comment or question.
 
-After `roughdraft open` opens the document, leave the command running. Tell the user they can leave comments, suggested edits, or questions in the document, then click **Done Reviewing**. When Roughdraft exits, read the Markdown file, reply inline to any comments or questions using Roughdraft-flavored CriticMarkup, save the file, and open it in Roughdraft again so the user can continue the conversation in the document.
+After `roughdraft open` opens the document, leave the command running. Tell the user they can leave comments, suggested edits, or questions in the document, then click **Finish review**. When Roughdraft exits, read the Markdown file, reply inline to any comments or questions using Roughdraft-flavored CriticMarkup, save the file, and open it in Roughdraft again so the user can continue the conversation in the document.
 
 ## Update Your Persistent Instructions
 
@@ -89,15 +89,15 @@ mkdir -p "$HOME/.claude"
 
 Use imports or symlinks only when the target agent supports normal Markdown files at that path. For UI-only settings such as Cursor User Rules or GitHub Copilot personal instructions, tell the user what text to add rather than editing an unknown file.
 
-The canonical Roughdraft instruction block is hosted at https://roughdraft.md/prompt.md. After you identify or create the right instruction file, prefer appending or merging that exact block:
+The canonical Roughdraft instruction block is hosted at https://raw.githubusercontent.com/pmbaumgartner/roughdraft/main/packages/app/public/prompt.md. After you identify or create the right instruction file, prefer appending or merging that exact block:
 
 ```bash
 agent_instructions_file="/absolute/path/to/AGENTS.md"
 printf "\n\n" >> "$agent_instructions_file"
-curl -fsSL https://roughdraft.md/prompt.md >> "$agent_instructions_file"
+curl -fsSL https://raw.githubusercontent.com/pmbaumgartner/roughdraft/main/packages/app/public/prompt.md >> "$agent_instructions_file"
 ```
 
-If the instruction file already has Roughdraft guidance, merge in any missing guidance from https://roughdraft.md/prompt.md instead of duplicating the section.
+If the instruction file already has Roughdraft guidance, merge in any missing guidance from https://raw.githubusercontent.com/pmbaumgartner/roughdraft/main/packages/app/public/prompt.md instead of duplicating the section.
 
 If you cannot use `curl`, add guidance like this:
 
@@ -120,7 +120,7 @@ Roughdraft is currently a single-file Markdown viewer/editor. Open one `.md` fil
 
 If Roughdraft is not running, `roughdraft open` will start it automatically.
 
-After `roughdraft open` opens the document, leave the command running. Do not interrupt, kill, background, detach, or treat the waiting process as cleanup. The wait is intentional: Roughdraft will exit the command after the user clicks Done Reviewing, and that exit is your signal to resume.
+After `roughdraft open` opens the document, leave the command running. Do not interrupt, kill, background, detach, or treat the waiting process as cleanup. The wait is intentional: Roughdraft will exit the command after the user clicks Finish review, and that exit is your signal to resume.
 
 After the user finishes reviewing in Roughdraft, read the Markdown file from disk and respond to any CriticMarkup comments or suggested changes. If the user left questions or comments in the document, reply inline in the Markdown file using Roughdraft-flavored CriticMarkup, save it, and open the file in Roughdraft again so the user can continue reviewing.
 

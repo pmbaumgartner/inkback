@@ -5,10 +5,12 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const defaultPackageJsonPath = path.resolve(__dirname, "../../../package.json");
 const DEFAULT_PACKAGE_NAME = "roughdraft";
+const FORK_REPOSITORY = "pmbaumgartner/roughdraft";
 
 interface PackageManifest {
   name?: string;
   version?: string;
+  repository?: string | { url?: string };
 }
 
 interface ParsedVersion {
@@ -33,6 +35,7 @@ interface ResolveUpdateStatusOptions {
 function readInstalledPackageInfo(packageJsonPath = defaultPackageJsonPath): {
   packageName: string;
   currentVersion: string | null;
+  repository?: PackageManifest["repository"];
 } {
   try {
     const raw = fs.readFileSync(packageJsonPath, "utf8");
@@ -40,12 +43,62 @@ function readInstalledPackageInfo(packageJsonPath = defaultPackageJsonPath): {
     return {
       packageName: manifest.name?.trim() || DEFAULT_PACKAGE_NAME,
       currentVersion: manifest.version?.trim() || null,
+      repository: manifest.repository,
     };
   } catch {
     return {
       packageName: DEFAULT_PACKAGE_NAME,
       currentVersion: null,
     };
+  }
+}
+
+function usesForkReleases(repository: PackageManifest["repository"]): boolean {
+  const url = typeof repository === "string" ? repository : repository?.url;
+  return (
+    typeof url === "string" &&
+    url.replace(/^git\+/, "").replace(/\.git\/?$|\/$/, "") ===
+      `https://github.com/${FORK_REPOSITORY}`
+  );
+}
+
+async function fetchLatestForkRelease(fetchImpl: typeof fetch): Promise<{
+  version: string;
+  updateCommand: string;
+} | null> {
+  try {
+    const response = await fetchImpl(
+      `https://api.github.com/repos/${FORK_REPOSITORY}/releases/latest`,
+      {
+        headers: { accept: "application/vnd.github+json" },
+        signal: AbortSignal.timeout(1500),
+      },
+    );
+    if (!response.ok) return null;
+
+    const release = (await response.json()) as {
+      tag_name?: string;
+      draft?: boolean;
+      prerelease?: boolean;
+      assets?: { name?: string; browser_download_url?: string }[];
+    };
+    const version = release.tag_name?.match(
+      /^v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$/,
+    )?.[1];
+    if (!version || release.draft || release.prerelease) return null;
+
+    const assetName = `roughdraft-${version}.tgz`;
+    const downloadUrl = `https://github.com/${FORK_REPOSITORY}/releases/download/${release.tag_name}/${assetName}`;
+    const asset = release.assets?.find(
+      (candidate) =>
+        candidate.name === assetName &&
+        candidate.browser_download_url === downloadUrl,
+    );
+    if (!asset) return null;
+
+    return { version, updateCommand: `npm i -g ${downloadUrl}` };
+  } catch {
+    return null;
   }
 }
 
@@ -150,10 +203,14 @@ export async function resolveUpdateStatus(
   const packageName =
     options.packageName?.trim() || installedPackageInfo.packageName;
   const currentVersion = installedPackageInfo.currentVersion;
-  const latestVersion = await fetchLatestVersion(
-    packageName,
-    options.fetchImpl ?? fetch,
-  );
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const useForkReleases = usesForkReleases(installedPackageInfo.repository);
+  const release = useForkReleases
+    ? await fetchLatestForkRelease(fetchImpl)
+    : null;
+  const latestVersion = useForkReleases
+    ? (release?.version ?? null)
+    : await fetchLatestVersion(packageName, fetchImpl);
 
   return {
     packageName,
@@ -163,6 +220,8 @@ export async function resolveUpdateStatus(
       !!currentVersion &&
       !!latestVersion &&
       compareVersions(currentVersion, latestVersion) < 0,
-    updateCommand: `npm i -g ${packageName}@latest`,
+    updateCommand: useForkReleases
+      ? (release?.updateCommand ?? "")
+      : `npm i -g ${packageName}@latest`,
   };
 }

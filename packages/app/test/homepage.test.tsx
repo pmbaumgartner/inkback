@@ -10,7 +10,7 @@ import {
 } from "../src/App";
 
 const AGENT_SETUP_PROMPT =
-  "Install Roughdraft for me using `npm i -g roughdraft`, then read https://roughdraft.md/setup.md and set yourself up to use it.";
+  "Install Roughdraft for me using `npm install -g https://github.com/pmbaumgartner/roughdraft/releases/download/v0.1.11-pmbaumgartner.2/roughdraft-0.1.11-pmbaumgartner.2.tgz`, then read https://raw.githubusercontent.com/pmbaumgartner/roughdraft/main/packages/app/public/setup.md and set yourself up to use it.";
 
 function createDomRect({
   left = 0,
@@ -419,7 +419,7 @@ describe("Homepage", () => {
       "The agent works normally",
       "Roughdraft opens the plan",
       "Leave comments and suggestions",
-      "Click I'm done",
+      "Click Finish review",
       "The agent resumes",
     ];
 
@@ -559,7 +559,7 @@ describe("Homepage", () => {
     );
     expect(storyboard.textContent).not.toContain("Review complete");
     expect(storyboard.textContent).toContain("I read your comments.");
-    expect(storyboard.textContent).toContain("Waiting for I'm done...");
+    expect(storyboard.textContent).toContain("Waiting for Finish review...");
   });
 
   it("shows user-authored review feedback before the agent responds after handoff", async () => {
@@ -824,7 +824,7 @@ describe("Homepage", () => {
     expect(container.textContent).toContain("Live Preview");
     expect(container.textContent).toContain("This draft only lives in memory.");
     expect(container.textContent).toContain("Select this sentence");
-    expect(container.textContent).not.toContain("I'm done");
+    expect(container.textContent).not.toContain("Finish review");
     expect(container.textContent).not.toContain("Review ready");
     expect(container.textContent).not.toContain("Copy prompt");
     expect(setItem).not.toHaveBeenCalled();

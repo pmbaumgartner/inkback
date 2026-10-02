@@ -537,6 +537,43 @@ const turndown = createTurndownService();
  * gratuitous whitespace changes.
  */
 export function normalizeBlockSpacing(md: string): string {
+  // Fenced code is literal text, including blank lines and heading-like lines.
+  // Normalize the prose between fences without touching the fence bodies.
+  let output = "";
+  let prose = "";
+  let fence: string | null = null;
+  let fencePrefix = "";
+  for (const line of md.match(/[^\n]*\n|[^\n]+$/g) ?? []) {
+    const marker = line.match(/^([ \t]*(?:>[ \t]*)*)(`{3,}|~{3,})([^\n]*)\n?$/);
+    if (fence) {
+      if (
+        marker &&
+        // Turndown emits matching container prefixes for the two fence lines.
+        // A quoted or further-indented fence inside the code is literal text.
+        marker[1] === fencePrefix &&
+        marker[2]?.[0] === fence[0] &&
+        marker[2].length >= fence.length &&
+        !marker[3]?.trim()
+      ) {
+        output += line.replace(/\n$/, "");
+        prose = line.endsWith("\n") ? "\n" : "";
+        fence = null;
+      } else {
+        output += line;
+      }
+    } else if (marker) {
+      output += normalizeProseBlockSpacing(prose) + line;
+      prose = "";
+      fencePrefix = marker[1] ?? "";
+      fence = marker[2] ?? null;
+    } else {
+      prose += line;
+    }
+  }
+  return output + normalizeProseBlockSpacing(prose);
+}
+
+function normalizeProseBlockSpacing(md: string): string {
   let normalized = md.replace(/\n{3,}/g, "\n\n");
   // Remove blank line immediately before a heading.
   normalized = normalized.replace(/\n\n(#{1,6} )/g, "\n$1");

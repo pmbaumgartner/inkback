@@ -20,7 +20,11 @@ import {
   type CriticChangeRailItem,
   DocumentReviewRail,
 } from "./DocumentReviewRail";
-import { getPreferredCommentId, parseCommentIds } from "./document-comments";
+import {
+  collectAnchoredThreadComments,
+  getPreferredCommentId,
+  parseCommentIds,
+} from "./document-comments";
 import { EditorContextMenu } from "./EditorContextMenu";
 import {
   commentHighlightPluginKey,
@@ -279,6 +283,24 @@ function getAnchorCommentIds(
   const anchorElement = findCommentAnchorElement(editor, commentId);
   if (!anchorElement) return [];
   return parseCommentIds(anchorElement.dataset.commentIds);
+}
+
+// Endmatter-only replies share the nearest inline ancestor's anchor.
+function resolveAnchoredCommentId(
+  editor: Editor | null,
+  commentId: string,
+  comments: ReadonlyMap<string, CriticComment>,
+): string | null {
+  const visited = new Set<string>();
+  let current: string | null | undefined = commentId;
+
+  while (current && !visited.has(current)) {
+    visited.add(current);
+    if (getAnchorCommentIds(editor, current).length > 0) return current;
+    current = comments.get(current)?.parentCommentId;
+  }
+
+  return null;
 }
 
 function addCommentIdsToAnchor(
@@ -1641,6 +1663,13 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
       const currentEditor = editorRef.current;
       if (!currentEditor) return;
 
+      const anchorCommentId = resolveAnchoredCommentId(
+        currentEditor,
+        commentId,
+        commentsRef.current,
+      );
+      if (!anchorCommentId) return;
+
       const comment = createCriticComment(
         {
           parentCommentId: commentId,
@@ -1652,7 +1681,7 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
       suppressNextMarkdownUpdateRef.current = true;
       const nextAnchorCommentIds = addCommentIdsToAnchor(
         currentEditor,
-        commentId,
+        anchorCommentId,
         [comment.id],
       );
       if (suppressNextMarkdownUpdateRef.current) {
@@ -1873,9 +1902,10 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
   const hasReviewRail = comments.size > 0 || criticChanges.length > 0;
   const documentShellRef =
     useReviewLayoutShiftAnimation<HTMLDivElement>(hasReviewRail);
-  const activeComments = activeCommentIds
-    .map((commentId) => comments.get(commentId))
-    .filter((comment): comment is CriticComment => Boolean(comment));
+  const activeComments = collectAnchoredThreadComments(
+    activeCommentIds,
+    comments,
+  );
   const contentCardClass =
     "rounded-[0.75rem] border border-[#E9E9E8] dark:border-slate-800 bg-white dark:bg-card shadow-[0_18px_44px_rgba(57,47,38,0.08)] dark:shadow-[0_18px_44px_rgba(0,0,0,0.35)]";
   const documentShellClass = cn(

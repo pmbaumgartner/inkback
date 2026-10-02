@@ -1,8 +1,9 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { callTool } from "./mcp";
+import { PassThrough } from "node:stream";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { callTool, startMcpServer } from "./mcp";
 
 describe("mcp", () => {
   let tempDir: string;
@@ -28,7 +29,7 @@ describe("mcp", () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it("omits timeoutSeconds from review watch calls unless the tool caller provides one", async () => {
+  it("bounds review watch requests below the transport timeout", async () => {
     const requestBodies: Array<Record<string, unknown>> = [];
     const fetchImpl: typeof fetch = async (_input, init) => {
       requestBodies.push(JSON.parse(String(init?.body ?? "{}")));
@@ -57,10 +58,37 @@ describe("mcp", () => {
       batchWindowSeconds: 0.25,
       fromNow: true,
     });
-    expect(requestBodies[0]).not.toHaveProperty("timeoutSeconds");
+    expect(requestBodies[0]?.timeoutSeconds).toBeGreaterThan(0);
+    expect(requestBodies[0]?.timeoutSeconds).toBeLessThan(300);
     expect(requestBodies[1]).toMatchObject({
       timeoutSeconds: 5,
     });
+  });
+
+  it("keeps waiting after a poll expires and receives feedback from the gap", async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    const event = { documentPath, type: "review.completed", sequence: 5 };
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      const body = JSON.parse(String(init?.body));
+      requests.push(body);
+      const events =
+        body.fromNow === false && body.afterSequence === 4 ? [event] : [];
+      return Response.json({
+        events,
+        timedOut: events.length === 0,
+        nextSequence: 5,
+      });
+    };
+
+    const result = await callTool(
+      "roughdraft_watch_review_events",
+      { documentPath },
+      { ROUGHDRAFT_STATE_FILE: stateFile },
+      fetchImpl,
+    );
+
+    expect(result).toMatchObject({ events: [event], timedOut: false });
+    expect(requests).toHaveLength(2);
   });
 
   it("returns overall comments from review watch events unchanged", async () => {
@@ -97,6 +125,44 @@ describe("mcp", () => {
         },
       ],
     });
+  });
+
+  it("cancels an active review watch when the MCP connection closes", async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    let signal: AbortSignal | null | undefined;
+    let response = "";
+    output.on("data", (chunk) => {
+      response += chunk;
+    });
+    startMcpServer({
+      input: input as unknown as NodeJS.ReadStream,
+      output: output as unknown as NodeJS.WriteStream,
+      env: { ROUGHDRAFT_STATE_FILE: stateFile },
+      fetchImpl: async (_input, init) => {
+        signal = init?.signal;
+        return new Promise((_resolve, reject) => {
+          signal?.addEventListener("abort", () => reject(signal?.reason));
+        });
+      },
+    });
+    const message = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: {
+        name: "roughdraft_watch_review_events",
+        arguments: { documentPath },
+      },
+    });
+    input.write(
+      `Content-Length: ${Buffer.byteLength(message)}\r\n\r\n${message}`,
+    );
+    await vi.waitFor(() => expect(signal).toBeDefined());
+    input.end();
+    await vi.waitFor(() => expect(signal?.aborted).toBe(true));
+    expect(response).toBe("");
+    output.destroy();
   });
 
   it("does not write a reply when the message contains a CriticMarkup close delimiter", async () => {

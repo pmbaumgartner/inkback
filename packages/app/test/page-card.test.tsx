@@ -1675,6 +1675,39 @@ describe("PageCard editor integration", () => {
     expect(rendered.onSave).not.toHaveBeenCalled();
   });
 
+  it("shows endmatter replies in the banner and allows replying to them", async () => {
+    const rendered = await renderPageCard({
+      page: {
+        id: "endmatter-reply",
+        title: "Endmatter reply",
+        content: `{==alpha==}{>>Root comment<<}{#root}
+
+---
+comments:
+  root:
+    by: user
+  child:
+    body: Endmatter reply
+    re: root
+`,
+      },
+    });
+
+    await selectText(rendered.getEditor(), "alpha");
+    const replyButton = getByTestId<HTMLButtonElement>(
+      rendered.container,
+      "comment-banner-child-action-reply",
+    );
+    await act(async () => {
+      replyButton.click();
+    });
+    await flushReact();
+
+    expect(
+      queryByTestId(rendered.container, "comment-banner-c1-editor"),
+    ).not.toBeNull();
+  });
+
   it("deletes a whole root comment thread from the thread action", async () => {
     const rendered = await renderPageCard({
       page: {

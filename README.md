@@ -1,6 +1,6 @@
 # Roughdraft
 
-This temporary fork of [Lex-Inc/roughdraft](https://github.com/Lex-Inc/roughdraft) fixes the missing `yaml` runtime dependency in the npm package. Its first release is `0.1.11-pmbaumgartner.1`, based on upstream commit `686919ec0a3a0648fd2f1fdb2665816fb4b10608`. The application and review protocol are unchanged.
+This fork of [Lex-Inc/roughdraft](https://github.com/Lex-Inc/roughdraft) includes the missing `yaml` runtime dependency and fixes for review replies, code formatting, cancellation, and long-running reviews. The current release is `0.1.11-pmbaumgartner.2`, based on upstream commit `686919ec0a3a0648fd2f1fdb2665816fb4b10608`.
 
 Install the built release using the commands below; no separate `yaml` installation or source build is needed. A GitHub source archive does not contain the built app. To switch back after upstream publishes a fix, run `npm install -g roughdraft@<fixed-version>`.
 A local-first markdown editor and viewer for working with AI.
@@ -10,13 +10,13 @@ A local-first markdown editor and viewer for working with AI.
 Paste this into your coding agent:
 
 ```text
-Install Roughdraft for me using `npm install -g https://github.com/pmbaumgartner/roughdraft/releases/download/v0.1.11-pmbaumgartner.1/roughdraft-0.1.11-pmbaumgartner.1.tgz`, then read https://roughdraft.md/setup.md and set yourself up to use it.
+Install Roughdraft for me using `npm install -g https://github.com/pmbaumgartner/roughdraft/releases/download/v0.1.11-pmbaumgartner.2/roughdraft-0.1.11-pmbaumgartner.2.tgz`, then read https://raw.githubusercontent.com/pmbaumgartner/roughdraft/main/packages/app/public/setup.md and set yourself up to use it.
 ```
 
 Or install and open a file yourself:
 
 ```bash
-npm install -g https://github.com/pmbaumgartner/roughdraft/releases/download/v0.1.11-pmbaumgartner.1/roughdraft-0.1.11-pmbaumgartner.1.tgz
+npm install -g https://github.com/pmbaumgartner/roughdraft/releases/download/v0.1.11-pmbaumgartner.2/roughdraft-0.1.11-pmbaumgartner.2.tgz
 roughdraft open /absolute/path/to/file.md
 ```
 ## What is this?
@@ -40,7 +40,7 @@ Roughdraft opens a single markdown file directly for CriticMarkup comments and s
 Install Roughdraft and start the local server:
 
 ```bash
-npm install -g https://github.com/pmbaumgartner/roughdraft/releases/download/v0.1.11-pmbaumgartner.1/roughdraft-0.1.11-pmbaumgartner.1.tgz
+npm install -g https://github.com/pmbaumgartner/roughdraft/releases/download/v0.1.11-pmbaumgartner.2/roughdraft-0.1.11-pmbaumgartner.2.tgz
 roughdraft start
 ```
 
@@ -86,7 +86,7 @@ That makes an agent-friendly workflow possible:
   
 4. You read, edit, leave comments, and suggest changes.
   
-5. You click **Done Reviewing** in Roughdraft, and the AI can respond to your comments or revise the document.
+5. You click **Finish review** in Roughdraft, and the AI can respond to your comments or revise the document.
   
 
 Agents can watch that handoff directly:
@@ -95,7 +95,7 @@ Agents can watch that handoff directly:
 roughdraft open ./path/to/my-essay/draft.md --json
 ```
 
-`roughdraft open` starts or reuses the local server, opens the document, registers a fresh watcher, blocks until the next `review.completed` event, then prints event JSON with the document path, file version, feedback counts, and any optional `overallComment` you submit at handoff. By default there is no watch timeout; pass `--timeout <seconds>` when you want one. Use `--no-watch` when you only want to open the document and return immediately. If no watcher is active when you click **Done Reviewing**, Roughdraft shows a fallback prompt you can copy into the agent. Overall comments are written to Markdown as document-level YAML endmatter comments before the handoff event is emitted, so Markdown remains the durable source of truth.
+`roughdraft open` starts or reuses the local server, opens the document, registers a fresh watcher, blocks until the next `review.completed` event, then prints event JSON with the document path, file version, feedback counts, and any optional `overallComment` you submit at handoff. By default there is no watch timeout; pass `--timeout <seconds>` when you want one. Use `--no-watch` when you only want to open the document and return immediately. If no watcher is active when you click **Finish review**, Roughdraft shows a fallback prompt you can copy into the agent. Overall comments are written to Markdown as document-level YAML endmatter comments before the handoff event is emitted, so Markdown remains the durable source of truth.
 
 Experimental MCP clients can start the stdio server with:
 
@@ -182,7 +182,7 @@ Roughdraft reads and writes the markdown file directly.
 If you want your local agent to remember the Roughdraft workflow, ask it to read the live setup prompt:
 
 ```text
-Install Roughdraft for me using `npm install -g https://github.com/pmbaumgartner/roughdraft/releases/download/v0.1.11-pmbaumgartner.1/roughdraft-0.1.11-pmbaumgartner.1.tgz`, then read https://roughdraft.md/setup.md and set yourself up to use it.
+Install Roughdraft for me using `npm install -g https://github.com/pmbaumgartner/roughdraft/releases/download/v0.1.11-pmbaumgartner.2/roughdraft-0.1.11-pmbaumgartner.2.tgz`, then read https://raw.githubusercontent.com/pmbaumgartner/roughdraft/main/packages/app/public/setup.md and set yourself up to use it.
 ```
 
 Use `roughdraft help`, `roughdraft help agent`, or `roughdraft help criticmarkup` if you need a local refresher.
@@ -195,11 +195,11 @@ roughdraft <path>
 Commands:
 
 ```text
-open <path>        Open one Markdown file and wait for Done Reviewing
+open <path>        Open one Markdown file and wait for Finish review
 start              Start or reuse the background server
 status             Show server status
 stop               Stop the managed background server
-watch <path>       Wait for a Done Reviewing event
+watch <path>       Wait for a Finish review event
 mcp                Start the experimental stdio MCP server
 doctor [path]      Diagnose setup or validate Markdown
 help agent         Print the agent setup prompt

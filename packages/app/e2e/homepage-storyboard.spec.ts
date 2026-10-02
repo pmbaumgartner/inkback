@@ -21,7 +21,7 @@ test.describe("homepage workflow storyboard", () => {
     expect(sceneTexts[1]).toContain("The agent works normally");
     expect(sceneTexts[2]).toContain("Roughdraft opens the plan");
     expect(sceneTexts[3]).toContain("Leave comments and suggestions");
-    expect(sceneTexts[4]).toContain("Click I'm done");
+    expect(sceneTexts[4]).toContain("Click Finish review");
     expect(sceneTexts[5]).toContain("The agent resumes");
     await expect(storyboard).toContainText(
       "Let's make the homepage more persuasive. Write a plan first.",
@@ -385,7 +385,7 @@ test.describe("homepage workflow storyboard", () => {
     expect(mobileSceneTexts[1]).toContain("The agent works normally");
     expect(mobileSceneTexts[2]).toContain("Roughdraft opens the plan");
     expect(mobileSceneTexts[3]).toContain("Leave comments and suggestions");
-    expect(mobileSceneTexts[4]).toContain("Click I'm done");
+    expect(mobileSceneTexts[4]).toContain("Click Finish review");
     expect(mobileSceneTexts[5]).toContain("The agent resumes");
 
     const stickyVisual = storyboard.getByTestId(

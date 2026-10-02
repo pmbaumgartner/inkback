@@ -26,6 +26,7 @@ export interface WaitForReviewEventsOptions {
   afterSequence?: number;
   timeoutMs?: number;
   batchWindowMs?: number;
+  signal?: AbortSignal;
 }
 
 export interface WaitForReviewEventsResult {
@@ -37,6 +38,8 @@ export interface WaitForReviewEventsResult {
 interface Waiter {
   options: NormalizedWaitOptions;
   resolve: (result: WaitForReviewEventsResult) => void;
+  reject: (reason: unknown) => void;
+  removeAbortListener: () => void;
   timeout: NodeJS.Timeout | null;
   batchTimeout: NodeJS.Timeout | null;
 }
@@ -45,7 +48,7 @@ const DEFAULT_BATCH_WINDOW_MS = 250;
 const MAX_RETAINED_EVENTS = 100;
 
 type NormalizedWaitOptions = Required<
-  Omit<WaitForReviewEventsOptions, "documentPath" | "timeoutMs">
+  Omit<WaitForReviewEventsOptions, "documentPath" | "timeoutMs" | "signal">
 > & {
   documentPath?: string;
   timeoutMs?: number;
@@ -57,6 +60,7 @@ export class ReviewEventQueue {
   private nextSequence = 1;
 
   emit(input: ReviewCompletedEventInput): {
+    // A matching watcher was active when queued; this is not a receipt acknowledgement.
     delivered: boolean;
     event: ReviewCompletedEvent;
   } {
@@ -92,6 +96,9 @@ export class ReviewEventQueue {
   wait(
     options: WaitForReviewEventsOptions = {},
   ): Promise<WaitForReviewEventsResult> {
+    const { signal } = options;
+    if (signal?.aborted) return Promise.reject(signal.reason);
+
     const normalized = normalizeWaitOptions(options);
     const existing = this.matchingEvents(normalized);
 
@@ -101,10 +108,12 @@ export class ReviewEventQueue {
       );
     }
 
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const waiter: Waiter = {
         options: normalized,
         resolve,
+        reject,
+        removeAbortListener: () => {},
         batchTimeout: null,
         timeout:
           normalized.timeoutMs !== undefined
@@ -115,6 +124,19 @@ export class ReviewEventQueue {
       };
 
       this.waiters.add(waiter);
+      if (signal) {
+        const onAbort = () => {
+          if (!this.removeWaiter(waiter)) return;
+          appendSlog("review-events.cancel", {
+            documentPath: normalized.documentPath ?? null,
+            waiters: this.waiters.size,
+          });
+          waiter.reject(signal.reason);
+        };
+        signal.addEventListener("abort", onAbort, { once: true });
+        waiter.removeAbortListener = () =>
+          signal.removeEventListener("abort", onAbort);
+      }
       appendSlog("review-events.wait", {
         documentPath: normalized.documentPath ?? null,
         afterSequence: normalized.afterSequence,
@@ -158,9 +180,15 @@ export class ReviewEventQueue {
   }
 
   private resolveWaiter(waiter: Waiter, timedOut: boolean): void {
-    if (!this.waiters.has(waiter)) return;
+    if (!this.removeWaiter(waiter)) return;
 
-    this.waiters.delete(waiter);
+    const events = timedOut ? [] : this.matchingEvents(waiter.options);
+    waiter.resolve(resultForEvents(events, timedOut, this.nextSequence));
+  }
+
+  private removeWaiter(waiter: Waiter): boolean {
+    if (!this.waiters.delete(waiter)) return false;
+    waiter.removeAbortListener();
     if (waiter.timeout) {
       clearTimeout(waiter.timeout);
     }
@@ -168,8 +196,7 @@ export class ReviewEventQueue {
       clearTimeout(waiter.batchTimeout);
     }
 
-    const events = timedOut ? [] : this.matchingEvents(waiter.options);
-    waiter.resolve(resultForEvents(events, timedOut, this.nextSequence));
+    return true;
   }
 }
 

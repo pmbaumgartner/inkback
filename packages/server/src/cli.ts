@@ -17,11 +17,11 @@ import {
 } from "./network.js";
 import { findAvailablePort } from "./ports.js";
 import { resolveUpdateStatus, type UpdateStatus } from "./update-status.js";
+import { AGENT_SETUP_PROMPT, AGENT_SETUP_URL } from "../setup.mjs";
+import { watchReviewEvents } from "./watch-review-events.js";
 
-const AGENT_SETUP_URL = "https://roughdraft.md/setup.md";
 const ROUGHDRAFT_FLAVORED_MARKDOWN_SPEC_URL =
   "https://roughdraft.md/spec/roughdraft-flavored-markdown.md";
-const AGENT_SETUP_PROMPT = `Install Roughdraft for me using \`npm i -g roughdraft\`, then read ${AGENT_SETUP_URL} and set yourself up to use it.`;
 const STATUS_PATH = "/api/status";
 const STATUS_TIMEOUT_MS = 750;
 const SERVER_WAIT_ATTEMPTS = 40;
@@ -846,11 +846,11 @@ function printHelp(log: (message: string) => void) {
   log("  roughdraft <path>");
   log("");
   log("Commands:");
-  log("  open <path>        Open a Markdown file and wait for Done Reviewing");
+  log("  open <path>        Open a Markdown file and wait for Finish review");
   log("  start              Start or reuse the background server");
   log("  status             Show server status");
   log("  stop               Stop the managed background server");
-  log("  watch <path>       Wait for a Done Reviewing event");
+  log("  watch <path>       Wait for a Finish review event");
   log("  mcp                Start the experimental stdio MCP server");
   log("  doctor [path]      Diagnose setup or validate Markdown");
   log("  help agent         Print the agent setup prompt");
@@ -887,7 +887,7 @@ function printCommandHelp(
     );
     log("");
     log(
-      "Opens one Markdown file and waits for Done Reviewing. Starts Roughdraft if needed.",
+      "Opens one Markdown file and waits for Finish review. Starts Roughdraft if needed.",
     );
     log("");
     log("Flags:");
@@ -974,9 +974,7 @@ function printCommandHelp(
     log("Usage:");
     log("  roughdraft watch <path> [--json] [--timeout <seconds>]");
     log("");
-    log(
-      "Waits until Roughdraft receives Done Reviewing for one Markdown file.",
-    );
+    log("Waits until Roughdraft receives Finish review for one Markdown file.");
     log("");
     log("Flags:");
     log("  --json                    Print machine-readable output");
@@ -2117,43 +2115,15 @@ async function runWatch(
     serverUrl = result.server.url;
   }
   const relativePath = path.relative(target.projectDir, target.openPath);
-  const body: {
-    projectPath: string;
-    path: string;
-    timeoutSeconds?: number;
-    batchWindowSeconds: number;
-    fromNow: boolean;
-  } = {
+  const payload = await watchReviewEvents({
+    serverUrl,
     projectPath: target.projectDir,
     path: relativePath,
     batchWindowSeconds: options.batchWindowSeconds,
-    fromNow: !options.replay,
-  };
-  if (options.timeoutSeconds !== undefined) {
-    body.timeoutSeconds = options.timeoutSeconds;
-  }
-
-  const response = await deps.fetchImpl(
-    new URL("/api/review-events/watch", serverUrl),
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      ...(options.timeoutSeconds !== undefined
-        ? { signal: AbortSignal.timeout((options.timeoutSeconds + 5) * 1000) }
-        : {}),
-    },
-  );
-
-  if (!response.ok) {
-    throw new Error(`Failed to watch review events: ${response.status}`);
-  }
-
-  const payload = (await response.json()) as {
-    events?: unknown[];
-    timedOut?: boolean;
-    nextSequence?: number;
-  };
+    timeoutSeconds: options.timeoutSeconds,
+    replay: options.replay,
+    fetchImpl: deps.fetchImpl,
+  });
 
   if (json) {
     emitJson(deps.log, payload);
@@ -2773,7 +2743,7 @@ export async function runCli(
           } else {
             deps.log(`Roughdraft is running at ${targetUrl}`);
           }
-          deps.log("Waiting for Done Reviewing...");
+          deps.log("Waiting for Finish review...");
         }
 
         const watchOptions: ParsedWatchOptions = {

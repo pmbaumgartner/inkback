@@ -2,10 +2,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  normalizeBlockSpacing,
+  rawMarkdownBlockAttribute,
   splitYamlFrontmatter,
   toHtml,
   toMarkdown,
-  rawMarkdownBlockAttribute,
 } from "./markdown";
 
 function readMarkdownFixture(name: string): string {
@@ -112,6 +113,25 @@ describe("toHtml", () => {
 });
 
 describe("normalizeBlockSpacing", () => {
+  it.each([
+    "> ",
+    "    ",
+    "\t",
+  ])("keeps %j fence examples inside an unquoted code block literal", (prefix) => {
+    const markdown = `\`\`\`text\n${prefix}\`\`\`\n\n\n# Literal heading\n\n\nbody\n\`\`\`\n`;
+    expect(toMarkdown(toHtml(markdown))).toBe(markdown);
+  });
+
+  it.each([
+    "```",
+    "~~~~",
+  ])("preserves literal lines inside %s fences while compacting prose", (fence) => {
+    const code = `${fence}text\n\n# Literal heading\n\n\n    indented\n\n\n${fence}`;
+    expect(
+      normalizeBlockSpacing(`# Heading\n\nBefore\n\n\n${code}\n\n\nAfter\n`),
+    ).toBe(`# Heading\nBefore\n\n${code}\n\nAfter\n`);
+  });
+
   it("does not add blank lines between headings and adjacent blocks on round-trip", () => {
     const compact = [
       "# OpenAI Chat API Compatibility Plan",

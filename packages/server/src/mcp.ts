@@ -6,6 +6,7 @@ import {
   extractRoughdraftReviewIndex,
   markRoughdraftResolved,
 } from "@roughdraft/rfm";
+import { watchReviewEvents } from "./watch-review-events.js";
 
 interface JsonRpcRequest {
   jsonrpc?: "2.0";
@@ -69,7 +70,7 @@ const tools: ToolDefinition[] = [
   {
     name: "roughdraft_watch_review_events",
     description:
-      "Block until Roughdraft receives Done Reviewing for a Markdown file. Overall handoff comments are persisted as document-level YAML endmatter comments before the event is emitted. Omit timeoutSeconds to wait indefinitely.",
+      "Block until Roughdraft receives Finish review for a Markdown file. Overall handoff comments are persisted as document-level YAML endmatter comments before the event is emitted. Omit timeoutSeconds to wait indefinitely.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -120,6 +121,9 @@ export function startMcpServer(options: McpOptions = {}): void {
   const output = options.output ?? process.stdout;
   const fetchImpl = options.fetchImpl ?? fetch;
   const env = options.env ?? process.env;
+  const connection = new AbortController();
+  input.once("end", () => connection.abort());
+  input.once("close", () => connection.abort());
   let buffer: Buffer<ArrayBufferLike> = Buffer.alloc(0);
 
   input.on("data", (chunk: Buffer) => {
@@ -128,7 +132,13 @@ export function startMcpServer(options: McpOptions = {}): void {
       const parsed = takeMessage(buffer);
       if (!parsed) break;
       buffer = parsed.rest;
-      void handleMessage(parsed.message, output, env, fetchImpl);
+      void handleMessage(
+        parsed.message,
+        output,
+        env,
+        fetchImpl,
+        connection.signal,
+      );
     }
   });
 
@@ -163,6 +173,7 @@ async function handleMessage(
   output: NodeJS.WriteStream,
   env: NodeJS.ProcessEnv,
   fetchImpl: typeof fetch,
+  signal: AbortSignal,
 ): Promise<void> {
   if (!request.id && request.id !== 0) return;
 
@@ -196,7 +207,9 @@ async function handleMessage(
         objectArgs(params?.arguments),
         env,
         fetchImpl,
+        signal,
       );
+      if (signal.aborted) return;
       writeMessage(output, {
         jsonrpc: "2.0",
         id: request.id,
@@ -218,6 +231,7 @@ async function handleMessage(
       error: { code: -32601, message: `Unknown method: ${request.method}` },
     });
   } catch (error) {
+    if (signal.aborted) return;
     writeMessage(output, {
       jsonrpc: "2.0",
       id: request.id,
@@ -234,6 +248,7 @@ export async function callTool(
   args: Record<string, unknown>,
   env: NodeJS.ProcessEnv,
   fetchImpl: typeof fetch,
+  signal?: AbortSignal,
 ): Promise<unknown> {
   if (name === "roughdraft_get_open_documents") {
     return { documents: [] };
@@ -271,37 +286,21 @@ export async function callTool(
       throw new Error("Roughdraft is not running. Start it before watching.");
     }
 
-    const body: {
-      projectPath: string;
-      path: string;
-      timeoutSeconds?: number;
-      batchWindowSeconds: number;
-      fromNow: boolean;
-    } = {
+    return watchReviewEvents({
+      serverUrl: server.url,
       projectPath,
       path: path.relative(projectPath, documentPath),
       batchWindowSeconds:
         typeof args.batchWindowSeconds === "number"
           ? args.batchWindowSeconds
           : 0.25,
-      fromNow: true,
-    };
-    if (typeof args.timeoutSeconds === "number") {
-      body.timeoutSeconds = args.timeoutSeconds;
-    }
-
-    const response = await fetchImpl(
-      new URL("/api/review-events/watch", server.url),
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      },
-    );
-    if (!response.ok) {
-      throw new Error(`Review watch failed: ${response.status}`);
-    }
-    return response.json();
+      timeoutSeconds:
+        typeof args.timeoutSeconds === "number"
+          ? args.timeoutSeconds
+          : undefined,
+      fetchImpl,
+      signal,
+    });
   }
 
   if (name === "roughdraft_reply_to_comment") {

@@ -63,6 +63,7 @@ import {
 } from "./storage";
 import { UpdateNotice } from "./UpdateNotice";
 import { fetchUpdateStatus, type UpdateStatus } from "./update-status";
+import { AGENT_SETUP_PROMPT } from "../../server/setup.mjs";
 
 export type DocumentDiskChangeState =
   | "clean"
@@ -91,8 +92,6 @@ export function shouldWarnBeforeUnload({
   );
 }
 
-const AGENT_SETUP_PROMPT =
-  "Install Roughdraft for me using `npm i -g roughdraft`, then read https://roughdraft.md/setup.md and set yourself up to use it.";
 const PREVIEW_DOCUMENT_PATH = "preview.md";
 const PREVIEW_INITIAL_MARKDOWN = [
   "# Live Preview",
@@ -138,7 +137,7 @@ const HOMEPAGE_WORKFLOW_SCENES = [
   },
   {
     step: "5",
-    title: "Click I'm done",
+    title: "Click Finish review",
     description:
       "Roughdraft hands control back to the agent once you are finished with the blocking review step.",
   },
@@ -714,7 +713,9 @@ function AgentChatMock({
           data-testid="homepage-workflow-terminal-command"
         >
           roughdraft open "/workspace/.context/homepage-conversion-plan.md"
-          <div className="mt-2 text-slate-400">Waiting for I'm done...</div>
+          <div className="mt-2 text-slate-400">
+            Waiting for Finish review...
+          </div>
         </div>
 
         <div
@@ -973,7 +974,7 @@ function RoughdraftPopupMock({ workflowStage }: { workflowStage: number }) {
               size="sm"
             >
               <Check className="size-6" aria-hidden="true" />
-              I'm done
+              Finish review
             </Button>
           ) : null}
           <div
@@ -1511,6 +1512,8 @@ export function App() {
   documentSaveStateRef.current = documentSaveState;
 
   const applyDocumentPage = useCallback((nextDocument: Page) => {
+    // Handoff may read the saved version before React commits the next render.
+    documentPageRef.current = nextDocument;
     setDocumentPage(nextDocument);
     documentDraftContentRef.current = nextDocument.content;
   }, []);

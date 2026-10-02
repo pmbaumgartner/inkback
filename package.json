@@ -1,12 +1,12 @@
 {
   "name": "roughdraft",
-  "version": "0.1.11-pmbaumgartner.1",
+  "version": "0.1.11-pmbaumgartner.2",
   "description": "A local markdown review app",
   "license": "MIT",
   "author": "Nathan Baschez",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Lex-Inc/roughdraft.git"
+    "url": "git+https://github.com/pmbaumgartner/roughdraft.git"
   },
   "bin": {
     "roughdraft": "./packages/server/bin/roughdraft.mjs"
@@ -38,7 +38,9 @@
     "packages/server/dist",
     "packages/server/bin",
     "packages/server/defaults.mjs",
-    "packages/server/defaults.d.mts"
+    "packages/server/defaults.d.mts",
+    "packages/server/setup.mjs",
+    "packages/server/setup.d.mts"
   ],
   "dependencies": {
     "@roughdraft/rfm": "file:packages/rfm",
