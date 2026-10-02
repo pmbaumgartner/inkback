@@ -1167,20 +1167,11 @@ describe("review handoff watcher affordance", () => {
 
     expect(onCompleteReview).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain("Finished");
-    expect(document.body.textContent).toContain("Nice one!");
+    expect(document.body.textContent).toContain("Review complete");
     expect(document.body.textContent).toContain(
       "Your review is saved. An agent was connected when you finished, but receipt has not been confirmed.",
     );
     expect(queryByTestId(document.body, "review-handoff-status")).toBeDefined();
-    expect(
-      getByTestId(document.body, "review-handoff-status").querySelector(
-        ".h-\\[170px\\]",
-      ),
-    ).not.toBeNull();
-    expect(
-      queryByTestId(document.body, "review-handoff-robots-toy"),
-    ).toBeDefined();
-
     await act(async () => {
       document.dispatchEvent(
         new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
@@ -1200,11 +1191,6 @@ describe("review handoff watcher affordance", () => {
 
     expect(onCompleteReview).toHaveBeenCalledTimes(1);
     expect(queryByTestId(document.body, "review-handoff-status")).toBeDefined();
-
-    const toy = getByTestId(document.body, "review-handoff-robots-toy");
-    await click(toy);
-
-    expect(document.body.textContent).toContain("Great work!");
 
     const copyLink = queryByTestId<HTMLButtonElement>(
       document.body,

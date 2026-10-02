@@ -6,7 +6,6 @@ import {
   createMarkdownProject,
   documentSaveStatus,
   fileConflictNotice,
-  logE2eEvent,
   openMarkdownFile,
   readProjectFile,
   removeMarkdownProject,
@@ -64,10 +63,6 @@ test.describe("stale writes", () => {
     await expect
       .poll(() => readProjectFile(projectDir, "conflict.md"))
       .toBe("# Conflict\n\nExternal body.\n");
-
-    logE2eEvent("stale-write.conflict-surfaced", {
-      file: "conflict.md",
-    });
   });
 
   test("overwrite after conflict marks the current draft saved", async ({
@@ -108,11 +103,6 @@ test.describe("stale writes", () => {
       "aria-label",
       "Unsaved changes",
     );
-
-    logE2eEvent("stale-write.overwrite-saved", {
-      file: "overwrite-conflict.md",
-      size: fs.statSync(filePath).size,
-    });
   });
 
   test("manual save preserves expected-version conflict behavior", async ({
@@ -145,10 +135,6 @@ test.describe("stale writes", () => {
     expect(readProjectFile(projectDir, "manual-conflict.md")).toBe(
       "# Manual Conflict\n\nExternal body.\n",
     );
-
-    logE2eEvent("stale-write.manual-conflict", {
-      file: "manual-conflict.md",
-    });
   });
 
   test("rejects autosave after external content changes with stable metadata", async ({
@@ -176,10 +162,6 @@ test.describe("stale writes", () => {
     expect(readProjectFile(projectDir, "metadata-conflict.md")).toBe(
       "# External\n",
     );
-
-    logE2eEvent("stale-write.metadata-conflict-surfaced", {
-      file: "metadata-conflict.md",
-    });
   });
 
   test("keeps explanatory conflict choices visible while scrolled in a long document", async ({
@@ -228,7 +210,7 @@ test.describe("stale writes", () => {
     ).toBeVisible();
   });
 
-  test("keeps conflict banner and save status stack from overlapping", async ({
+  test("keeps conflict banner and save status from overlapping", async ({
     page,
   }) => {
     await page.route("**/api/markdown-file/events**", (route) => route.abort());
@@ -252,24 +234,24 @@ test.describe("stale writes", () => {
       await appendInCodeEditor(page, `\nLocal body ${viewport.width}.\n`);
 
       const conflictNotice = fileConflictNotice(page);
-      const statusStack = page.getByTestId("document-status-stack");
+      const saveStatus = page.getByTestId("document-save-status-corner");
       await expect(conflictNotice).toBeVisible();
-      await expect(statusStack).toBeVisible();
+      await expect(saveStatus).toBeVisible();
 
       const conflictBox = await conflictNotice.boundingBox();
-      const stackBox = await statusStack.boundingBox();
+      const statusBox = await saveStatus.boundingBox();
       expect(conflictBox).not.toBeNull();
-      expect(stackBox).not.toBeNull();
+      expect(statusBox).not.toBeNull();
 
-      if (!conflictBox || !stackBox) {
-        throw new Error("Expected conflict and status stack bounds");
+      if (!conflictBox || !statusBox) {
+        throw new Error("Expected conflict and save status bounds");
       }
 
       const intersects =
-        conflictBox.x < stackBox.x + stackBox.width &&
-        conflictBox.x + conflictBox.width > stackBox.x &&
-        conflictBox.y < stackBox.y + stackBox.height &&
-        conflictBox.y + conflictBox.height > stackBox.y;
+        conflictBox.x < statusBox.x + statusBox.width &&
+        conflictBox.x + conflictBox.width > statusBox.x &&
+        conflictBox.y < statusBox.y + statusBox.height &&
+        conflictBox.y + conflictBox.height > statusBox.y;
 
       expect(intersects).toBe(false);
       await page.getByTestId("file-conflict-action-reload").click();

@@ -1,37 +1,26 @@
 {
-  "name": "roughdraft",
-  "version": "0.1.11-pmbaumgartner.3",
+  "name": "name-placeholder",
+  "version": "0.1.0",
   "description": "A local markdown review app",
   "license": "MIT",
   "author": "Nathan Baschez",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/pmbaumgartner/roughdraft.git"
-  },
   "bin": {
-    "roughdraft": "./packages/server/bin/roughdraft.mjs"
+    "name-placeholder": "./packages/server/bin/name-placeholder.mjs"
   },
   "scripts": {
-    "setup": "./scripts/setup.sh",
-    "start": "./scripts/run.sh",
     "dev": "node scripts/dev.mjs",
-    "dev:install-cli": "node scripts/install-dev-cli.mjs",
     "dev:web": "node scripts/dev-web.mjs",
     "lint": "biome check . --assist-enabled=false",
     "lint:fix": "biome check --write . --assist-enabled=false",
-    "test:selectors": "node scripts/check-test-selectors.mjs",
     "unused": "knip --no-progress",
     "format": "biome format --write .",
-    "test": "pnpm --filter @roughdraft/rfm test && pnpm --filter @roughdraft/app test && pnpm --filter @roughdraft/server test",
+    "test": "pnpm --filter @name-placeholder/rfm test && pnpm --filter @name-placeholder/app test && pnpm --filter @name-placeholder/server test",
     "test:e2e": "playwright test --config packages/app/playwright.config.ts",
     "test:smoke": "playwright test --config packages/app/playwright.config.ts --grep @smoke",
     "test:package": "node scripts/test-package.mjs",
-    "test:coverage": "pnpm --filter @roughdraft/app exec vitest run --coverage && pnpm --filter @roughdraft/server exec vitest run --coverage",
-    "check:release": "node scripts/check-release.mjs",
-    "release:prepare": "node scripts/prepare-fork-release.mjs",
-    "check": "pnpm check:release && pnpm lint && pnpm test:selectors && pnpm test && pnpm build",
-    "build": "node scripts/sync-agent-skill.mjs && pnpm --filter @roughdraft/rfm build && pnpm --filter @roughdraft/app build && pnpm --filter @roughdraft/server build",
-    "preview": "node packages/server/bin/roughdraft.mjs open README.md"
+    "test:coverage": "pnpm --filter @name-placeholder/app exec vitest run --coverage && pnpm --filter @name-placeholder/server exec vitest run --coverage",
+    "check": "pnpm lint && pnpm test && pnpm build",
+    "build": "pnpm --filter @name-placeholder/rfm build && pnpm --filter @name-placeholder/app build && pnpm --filter @name-placeholder/server build"
   },
   "files": [
     "packages/app/dist",
@@ -41,12 +30,10 @@
     "packages/server/bin",
     "packages/server/defaults.mjs",
     "packages/server/defaults.d.mts",
-    "packages/server/setup.mjs",
-    "packages/server/setup.d.mts",
-    "packages/skill/roughdraft"
+    "packages/skill/name-placeholder"
   ],
   "dependencies": {
-    "@roughdraft/rfm": "file:packages/rfm",
+    "@name-placeholder/rfm": "file:packages/rfm",
     "express": "^5.1.0",
     "yaml": "^2.9.0"
   },

@@ -1,21 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
-  appendRoughdraftReply,
-  appendRoughdraftDocumentComment,
-  extractRoughdraftReviewIndex,
-  markRoughdraftResolved,
-  validateRoughdraftMarkdown,
+  appendNamePlaceholderReply,
+  appendNamePlaceholderDocumentComment,
+  extractNamePlaceholderReviewIndex,
+  markNamePlaceholderResolved,
+  validateNamePlaceholderMarkdown,
 } from "./index";
 
 function codes(markdown: string): string[] {
-  return validateRoughdraftMarkdown(markdown).diagnostics.map(
+  return validateNamePlaceholderMarkdown(markdown).diagnostics.map(
     (diagnostic) => diagnostic.code,
   );
 }
 
-describe("validateRoughdraftMarkdown", () => {
+describe("validateNamePlaceholderMarkdown", () => {
   it("accepts valid comments, anchored comments, and suggestions", () => {
-    const result = validateRoughdraftMarkdown(
+    const result = validateNamePlaceholderMarkdown(
       [
         'Please revisit {==this sentence==}{>>Needs a source.<<}{id="c1" by="user" at="2026-04-28T12:00:00.000Z"}.',
         'Add {++one concrete example++}{id="s1" by="AI" at="2026-04-28T12:05:00.000Z"}.',
@@ -33,7 +33,7 @@ describe("validateRoughdraftMarkdown", () => {
   });
 
   it("accepts root comments and suggestions backed by YAML endmatter", () => {
-    const result = validateRoughdraftMarkdown(
+    const result = validateNamePlaceholderMarkdown(
       [
         "Please revisit {==this sentence==}{>>Needs a source.<<}{#c1}.",
         "Add {++one concrete example++}{#s1}.",
@@ -60,7 +60,7 @@ describe("validateRoughdraftMarkdown", () => {
   });
 
   it("does not validate CriticMarkup-looking text inside YAML endmatter bodies", () => {
-    const result = validateRoughdraftMarkdown(
+    const result = validateNamePlaceholderMarkdown(
       [
         "Please revisit {==this sentence==}{>>Needs a source.<<}{#c1}.",
         "",
@@ -87,7 +87,7 @@ describe("validateRoughdraftMarkdown", () => {
   });
 
   it("reports the RFM 0.2 format version", () => {
-    expect(validateRoughdraftMarkdown("").version).toBe("0.2");
+    expect(validateNamePlaceholderMarkdown("").version).toBe("0.2");
   });
 
   it("reports a missing YAML endmatter entry for compact references", () => {
@@ -97,7 +97,7 @@ describe("validateRoughdraftMarkdown", () => {
   });
 
   it("accepts body-only endmatter comments as document-level feedback", () => {
-    const result = validateRoughdraftMarkdown(
+    const result = validateNamePlaceholderMarkdown(
       [
         "{>>Root<<}{#c1}",
         "",
@@ -120,7 +120,7 @@ describe("validateRoughdraftMarkdown", () => {
   });
 
   it("ignores review markers inside fenced code blocks and inline code spans", () => {
-    const result = validateRoughdraftMarkdown(
+    const result = validateNamePlaceholderMarkdown(
       [
         "```md",
         "This is {>>not a comment<<}.",
@@ -139,7 +139,7 @@ describe("validateRoughdraftMarkdown", () => {
   });
 
   it("does not treat fenced YAML examples as invalid review endmatter", () => {
-    const result = validateRoughdraftMarkdown(
+    const result = validateNamePlaceholderMarkdown(
       [
         "Doc",
         "",
@@ -163,7 +163,7 @@ describe("validateRoughdraftMarkdown", () => {
   });
 
   it("does not treat ordinary final comments sections as review endmatter without compact references", () => {
-    const result = validateRoughdraftMarkdown(
+    const result = validateNamePlaceholderMarkdown(
       [
         "Release notes",
         "",
@@ -185,7 +185,7 @@ describe("validateRoughdraftMarkdown", () => {
   });
 
   it("accepts document-level comments backed only by YAML endmatter", () => {
-    const result = validateRoughdraftMarkdown(
+    const result = validateNamePlaceholderMarkdown(
       [
         "# Draft",
         "",
@@ -239,7 +239,7 @@ describe("validateRoughdraftMarkdown", () => {
   });
 
   it("reports self replies as errors and missing reply targets as warnings", () => {
-    const result = validateRoughdraftMarkdown(
+    const result = validateNamePlaceholderMarkdown(
       [
         '{>>Self<<}{id="c1" by="user" at="2026-04-28T12:00:00.000Z" re="c1"}',
         '{>>Missing parent<<}{id="c2" by="user" at="2026-04-28T12:01:00.000Z" re="missing"}',
@@ -256,7 +256,7 @@ describe("validateRoughdraftMarkdown", () => {
   });
 
   it("accepts legacy metadata with a warning", () => {
-    const result = validateRoughdraftMarkdown(
+    const result = validateNamePlaceholderMarkdown(
       "{>>Legacy<<}{@id:c1; by:AI; at:2026-04-28T12:00:00.000Z@}\n",
     );
 
@@ -268,7 +268,7 @@ describe("validateRoughdraftMarkdown", () => {
   });
 
   it("reports CRLF source locations with one-based line and column", () => {
-    const result = validateRoughdraftMarkdown(
+    const result = validateNamePlaceholderMarkdown(
       "First line\r\n{>>Needs metadata<<}\r\n",
     );
 
@@ -279,9 +279,9 @@ describe("validateRoughdraftMarkdown", () => {
   });
 });
 
-describe("extractRoughdraftReviewIndex", () => {
+describe("extractNamePlaceholderReviewIndex", () => {
   it("extracts comments, anchored comments, replies, and suggestions", () => {
-    const index = extractRoughdraftReviewIndex(
+    const index = extractNamePlaceholderReviewIndex(
       [
         'Please revisit {==this sentence==}{>>Needs a source.<<}{id="c1" by="user" at="2026-04-28T12:00:00.000Z"}.',
         '{>>I added one.<<}{id="c2" by="AI" at="2026-04-28T12:02:00.000Z" re="c1"}',
@@ -317,7 +317,7 @@ describe("extractRoughdraftReviewIndex", () => {
   });
 
   it("extracts equivalent review items from YAML endmatter metadata", () => {
-    const index = extractRoughdraftReviewIndex(
+    const index = extractNamePlaceholderReviewIndex(
       [
         "Please revisit {==this sentence==}{>>Needs a source.<<}{#c1}.",
         "Add {++one concrete example++}{#s1}.",
@@ -365,7 +365,7 @@ describe("extractRoughdraftReviewIndex", () => {
   });
 
   it("extracts document-level comments backed only by YAML endmatter", () => {
-    const index = extractRoughdraftReviewIndex(
+    const index = extractNamePlaceholderReviewIndex(
       [
         "# Draft",
         "",
@@ -396,7 +396,7 @@ describe("extractRoughdraftReviewIndex", () => {
   });
 
   it("does not extract CriticMarkup-looking text inside YAML endmatter bodies", () => {
-    const index = extractRoughdraftReviewIndex(
+    const index = extractNamePlaceholderReviewIndex(
       [
         "Please revisit {==this sentence==}{>>Needs a source.<<}{#c1}.",
         "",
@@ -430,7 +430,7 @@ describe("extractRoughdraftReviewIndex", () => {
   });
 
   it("preserves literal CriticMarkup inside inline code and fenced code blocks", () => {
-    const index = extractRoughdraftReviewIndex(
+    const index = extractNamePlaceholderReviewIndex(
       [
         "```md",
         '{>>not a comment<<}{id="c1" by="user" at="2026-04-28T12:00:00.000Z"}',
@@ -448,8 +448,8 @@ describe("extractRoughdraftReviewIndex", () => {
     });
   });
 
-  it("uses only the final YAML block as Roughdraft endmatter", () => {
-    const index = extractRoughdraftReviewIndex(
+  it("uses only the final YAML block as NAME_PLACEHOLDER endmatter", () => {
+    const index = extractNamePlaceholderReviewIndex(
       [
         "Intro",
         "",
@@ -479,7 +479,7 @@ describe("RFM mutation helpers", () => {
     const markdown =
       '# Plan\n\nKeep {==this claim==}{>>Needs proof<<}{id="c1" by="user" at="2026-04-28T12:00:00.000Z"} as written.\n';
 
-    const updated = appendRoughdraftReply(markdown, {
+    const updated = appendNamePlaceholderReply(markdown, {
       parentId: "c1",
       id: "c2",
       author: "AI",
@@ -508,7 +508,7 @@ describe("RFM mutation helpers", () => {
       "",
     ].join("\n");
 
-    const updated = appendRoughdraftReply(markdown, {
+    const updated = appendNamePlaceholderReply(markdown, {
       parentId: "c1",
       id: "c2",
       author: "AI",
@@ -519,7 +519,7 @@ describe("RFM mutation helpers", () => {
     expect(updated).not.toContain("{>>Added a citation");
     expect(updated).toContain("workflow:\n  owner: editorial");
     expect(updated).toContain("body: Added a citation in the next paragraph.");
-    expect(extractRoughdraftReviewIndex(updated).items).toEqual(
+    expect(extractNamePlaceholderReviewIndex(updated).items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           id: "c2",
@@ -531,7 +531,7 @@ describe("RFM mutation helpers", () => {
   });
 
   it("appends a document-level comment to YAML endmatter with the next comment id", () => {
-    const output = appendRoughdraftDocumentComment(
+    const output = appendNamePlaceholderDocumentComment(
       [
         "# Draft",
         "",
@@ -565,7 +565,7 @@ describe("RFM mutation helpers", () => {
       '{>>Needs proof<<}{id="c1" by="user" at="2026-04-28T12:00:00.000Z"}\n';
 
     expect(() =>
-      appendRoughdraftReply(markdown, {
+      appendNamePlaceholderReply(markdown, {
         parentId: "c1",
         id: "c2",
         author: "AI",
@@ -579,7 +579,7 @@ describe("RFM mutation helpers", () => {
     const markdown =
       'Add {++one example++}{id="s1" by="AI" at="2026-04-28T12:05:00.000Z"} and keep {>>open question<<}{id="c1" by="user" at="2026-04-28T12:06:00.000Z"}.\n';
 
-    const updated = markRoughdraftResolved(markdown, {
+    const updated = markNamePlaceholderResolved(markdown, {
       targetId: "s1",
       summary: "Accepted in draft.",
     });
@@ -603,7 +603,7 @@ describe("RFM mutation helpers", () => {
       "",
     ].join("\n");
 
-    const updated = markRoughdraftResolved(markdown, {
+    const updated = markNamePlaceholderResolved(markdown, {
       targetId: "s1",
       summary: "Accepted in draft.",
     });
@@ -611,7 +611,7 @@ describe("RFM mutation helpers", () => {
     expect(updated).toContain("status: resolved");
     expect(updated).toContain("resolved: Accepted in draft.");
     expect(updated).toContain("workflow:\n  owner: editorial");
-    expect(extractRoughdraftReviewIndex(updated).items[0]).toMatchObject({
+    expect(extractNamePlaceholderReviewIndex(updated).items[0]).toMatchObject({
       id: "s1",
       status: "resolved",
     });

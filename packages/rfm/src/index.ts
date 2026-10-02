@@ -16,7 +16,7 @@ export interface RfmValidationSummary {
 }
 
 export interface RfmValidationResult {
-  format: "roughdraft-flavored-markdown";
+  format: "name-placeholder-flavored-markdown";
   version: "0.2";
   ok: boolean;
   diagnostics: RfmDiagnostic[];
@@ -54,14 +54,14 @@ export interface RfmReviewIndexSummary {
 }
 
 export interface RfmReviewIndex {
-  format: "roughdraft-flavored-markdown";
+  format: "name-placeholder-flavored-markdown";
   version: "0.2";
   items: RfmReviewItem[];
   diagnostics: RfmDiagnostic[];
   summary: RfmReviewIndexSummary;
 }
 
-export interface AppendRoughdraftReplyOptions {
+export interface AppendNamePlaceholderReplyOptions {
   parentId: string;
   message: string;
   author?: string;
@@ -69,14 +69,14 @@ export interface AppendRoughdraftReplyOptions {
   id?: string;
 }
 
-export interface AppendRoughdraftDocumentCommentOptions {
+export interface AppendNamePlaceholderDocumentCommentOptions {
   message: string;
   author?: string;
   at?: string;
   id?: string;
 }
 
-export interface MarkRoughdraftResolvedOptions {
+export interface MarkNamePlaceholderResolvedOptions {
   targetId: string;
   summary?: string;
 }
@@ -136,7 +136,7 @@ interface YamlMetadataEntry {
   [key: string]: unknown;
 }
 
-interface RoughdraftEndmatter {
+interface NamePlaceholderEndmatter {
   comments: Map<string, YamlMetadataEntry>;
   suggestions: Map<string, YamlMetadataEntry>;
   data: Record<string, unknown> | null;
@@ -151,11 +151,11 @@ const dateTimePattern =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 const attributeNamePattern = /^[A-Za-z][A-Za-z0-9_-]*$/;
 
-export function validateRoughdraftMarkdown(
+export function validateNamePlaceholderMarkdown(
   markdown: string,
 ): RfmValidationResult {
   const lineStarts = createLineStarts(markdown);
-  const endmatter = parseRoughdraftEndmatter(markdown);
+  const endmatter = parseNamePlaceholderEndmatter(markdown);
   const diagnostics: RfmDiagnostic[] = [];
   const ids = new Map<string, IdReference>();
   const replies: ReplyReference[] = [];
@@ -438,7 +438,7 @@ export function validateRoughdraftMarkdown(
   );
 
   return {
-    format: "roughdraft-flavored-markdown",
+    format: "name-placeholder-flavored-markdown",
     version: RFM_VERSION,
     ok: errors.length === 0,
     diagnostics,
@@ -448,10 +448,12 @@ export function validateRoughdraftMarkdown(
   };
 }
 
-export function extractRoughdraftReviewIndex(markdown: string): RfmReviewIndex {
+export function extractNamePlaceholderReviewIndex(
+  markdown: string,
+): RfmReviewIndex {
   const lineStarts = createLineStarts(markdown);
-  const validation = validateRoughdraftMarkdown(markdown);
-  const endmatter = parseRoughdraftEndmatter(markdown);
+  const validation = validateNamePlaceholderMarkdown(markdown);
+  const endmatter = parseNamePlaceholderEndmatter(markdown);
   const items: RfmReviewItem[] = [];
   const noopDiagnostic = () => {};
 
@@ -584,7 +586,7 @@ export function extractRoughdraftReviewIndex(markdown: string): RfmReviewIndex {
   }
 
   return {
-    format: "roughdraft-flavored-markdown",
+    format: "name-placeholder-flavored-markdown",
     version: RFM_VERSION,
     items,
     diagnostics: validation.diagnostics,
@@ -597,14 +599,14 @@ export function extractRoughdraftReviewIndex(markdown: string): RfmReviewIndex {
   };
 }
 
-export function appendRoughdraftDocumentComment(
+export function appendNamePlaceholderDocumentComment(
   markdown: string,
-  options: AppendRoughdraftDocumentCommentOptions,
+  options: AppendNamePlaceholderDocumentCommentOptions,
 ): string {
   assertSafeCommentBodyText(options.message);
 
-  const index = extractRoughdraftReviewIndex(markdown);
-  const endmatter = parseRoughdraftEndmatter(markdown);
+  const index = extractNamePlaceholderReviewIndex(markdown);
+  const endmatter = parseNamePlaceholderEndmatter(markdown);
   const commentId = options.id ?? nextCommentId(index.items);
   const comments = new Map(endmatter.comments);
   comments.set(commentId, {
@@ -613,25 +615,25 @@ export function appendRoughdraftDocumentComment(
     at: options.at ?? new Date().toISOString(),
   });
 
-  return writeRoughdraftEndmatter(markdown, {
+  return writeNamePlaceholderEndmatter(markdown, {
     comments,
     suggestions: endmatter.suggestions,
   });
 }
 
-export function appendRoughdraftReply(
+export function appendNamePlaceholderReply(
   markdown: string,
-  options: AppendRoughdraftReplyOptions,
+  options: AppendNamePlaceholderReplyOptions,
 ): string {
   assertSafeCommentBodyText(options.message);
 
-  const index = extractRoughdraftReviewIndex(markdown);
+  const index = extractNamePlaceholderReviewIndex(markdown);
   const parent = index.items.find((item) => item.id === options.parentId);
   if (!parent) {
     throw new Error(`Review item not found: ${options.parentId}`);
   }
 
-  const endmatter = parseRoughdraftEndmatter(markdown);
+  const endmatter = parseNamePlaceholderEndmatter(markdown);
   if (isEndmatterBackedItem(markdown, parent)) {
     const replyId = options.id ?? nextCommentId(index.items);
     const comments = new Map(endmatter.comments);
@@ -641,7 +643,7 @@ export function appendRoughdraftReply(
       at: options.at ?? new Date().toISOString(),
       re: options.parentId,
     });
-    return writeRoughdraftEndmatter(markdown, {
+    return writeNamePlaceholderEndmatter(markdown, {
       comments,
       suggestions: endmatter.suggestions,
     });
@@ -666,17 +668,17 @@ function assertSafeCommentBodyText(message: string): void {
   );
 }
 
-export function markRoughdraftResolved(
+export function markNamePlaceholderResolved(
   markdown: string,
-  options: MarkRoughdraftResolvedOptions,
+  options: MarkNamePlaceholderResolvedOptions,
 ): string {
-  const index = extractRoughdraftReviewIndex(markdown);
+  const index = extractNamePlaceholderReviewIndex(markdown);
   const target = index.items.find((item) => item.id === options.targetId);
   if (!target) {
     throw new Error(`Review item not found: ${options.targetId}`);
   }
 
-  const endmatter = parseRoughdraftEndmatter(markdown);
+  const endmatter = parseNamePlaceholderEndmatter(markdown);
   const endmatterKind = endmatter.comments.has(options.targetId)
     ? "comment"
     : endmatter.suggestions.has(options.targetId)
@@ -693,7 +695,7 @@ export function markRoughdraftResolved(
       status: "resolved",
       ...(options.summary ? { resolved: options.summary } : {}),
     });
-    return writeRoughdraftEndmatter(markdown, { comments, suggestions });
+    return writeNamePlaceholderEndmatter(markdown, { comments, suggestions });
   }
 
   const metadataStart = findCanonicalMetadataStart(markdown, target.endOffset);
@@ -1098,8 +1100,10 @@ function parseLegacyAttributes(metadata: string): Map<string, string> {
   return attrs;
 }
 
-function parseRoughdraftEndmatter(markdown: string): RoughdraftEndmatter {
-  const empty: RoughdraftEndmatter = {
+function parseNamePlaceholderEndmatter(
+  markdown: string,
+): NamePlaceholderEndmatter {
+  const empty: NamePlaceholderEndmatter = {
     comments: new Map(),
     suggestions: new Map(),
     data: null,
@@ -1131,8 +1135,9 @@ function parseRoughdraftEndmatter(markdown: string): RoughdraftEndmatter {
   }
 
   if (!isPlainObject(parsed)) return empty;
-  const hasRoughdraftKeys = "comments" in parsed || "suggestions" in parsed;
-  if (!hasRoughdraftKeys) return empty;
+  const hasNamePlaceholderKeys =
+    "comments" in parsed || "suggestions" in parsed;
+  if (!hasNamePlaceholderKeys) return empty;
   if (
     !markdown.slice(0, match.offset).includes("{#") &&
     !hasDocumentLevelComment(parsed)
@@ -1199,7 +1204,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function hydrateMetadataAttrs(
   metadata: Metadata | null,
-  endmatter: RoughdraftEndmatter,
+  endmatter: NamePlaceholderEndmatter,
   kind: "comment" | "suggestion",
 ): Map<string, string> {
   const attrs = new Map(metadata?.attrs ?? []);
@@ -1263,14 +1268,14 @@ function validateEndmatterEntry(
   }
 }
 
-function writeRoughdraftEndmatter(
+function writeNamePlaceholderEndmatter(
   markdown: string,
   endmatter: {
     comments: Map<string, YamlMetadataEntry>;
     suggestions: Map<string, YamlMetadataEntry>;
   },
 ): string {
-  const existing = parseRoughdraftEndmatter(markdown);
+  const existing = parseNamePlaceholderEndmatter(markdown);
   const body =
     existing.offset === null
       ? markdown.replace(/\s*$/, "\n")

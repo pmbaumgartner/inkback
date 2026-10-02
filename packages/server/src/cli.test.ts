@@ -3,8 +3,7 @@ import { createServer as createHttpServer, type Server } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { validateRoughdraftMarkdown } from "@roughdraft/rfm";
-import { AGENT_SETUP_PROMPT } from "../setup.mjs";
+import { validateNamePlaceholderMarkdown } from "@name-placeholder/rfm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createCliDependencies,
@@ -14,7 +13,7 @@ import {
   runCli,
 } from "./cli";
 import { createApp } from "./index";
-import { ROUGHDRAFT_DEFAULT_PORT } from "./network";
+import { NAME_PLACEHOLDER_DEFAULT_PORT } from "./network";
 
 interface StartedServer {
   close: () => Promise<void>;
@@ -85,7 +84,7 @@ describe("cli", () => {
   );
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "roughdraft-cli-"));
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "name-placeholder-cli-"));
     stateDir = path.join(tempDir, "state");
     projectDir = path.join(tempDir, "project");
     devFrontendStateFile = path.join(tempDir, "dev-frontend.json");
@@ -125,16 +124,6 @@ describe("cli", () => {
       .join("\n")}\n`;
   }
 
-  async function noUpdateStatus() {
-    return {
-      packageName: "roughdraft",
-      currentVersion: "0.1.0",
-      latestVersion: "0.1.0",
-      updateAvailable: false,
-      updateCommand: "npm i -g roughdraft@latest",
-    };
-  }
-
   afterEach(async () => {
     await Promise.all(
       Array.from(serverByPid.values(), (server) => server.close()),
@@ -151,8 +140,8 @@ describe("cli", () => {
     const deps = createCliDependencies({
       env: {
         ...process.env,
-        ROUGHDRAFT_STATE_DIR: stateDir,
-        ROUGHDRAFT_DEV_FRONTEND_STATE_FILE: devFrontendStateFile,
+        NAME_PLACEHOLDER_STATE_DIR: stateDir,
+        NAME_PLACEHOLDER_DEV_FRONTEND_STATE_FILE: devFrontendStateFile,
       },
       cwd: projectDir,
       fetchImpl: async (input, init) => {
@@ -180,7 +169,6 @@ describe("cli", () => {
         lastOpenedUrl = url;
         return "disabled";
       },
-      resolveUpdateStatus: noUpdateStatus,
       spawnServerProcess: async ({ port, projectDir: nextProjectDir }) => {
         spawnCount += 1;
         const pid = nextPid;
@@ -266,68 +254,6 @@ describe("cli", () => {
     expect(fs.existsSync(getServerStateFilePath(test.deps.env))).toBeTruthy();
   });
 
-  it("prints an update notice after a successful human-readable command", async () => {
-    const test = createTestDependencies();
-    const documentPath = path.join(projectDir, "draft.md");
-    fs.writeFileSync(documentPath, "# Draft\n");
-
-    const exitCode = await runCli(["open", documentPath, "--no-watch"], {
-      ...test.deps,
-      resolveUpdateStatus: async () => ({
-        packageName: "roughdraft",
-        currentVersion: "0.1.1",
-        latestVersion: "0.1.3",
-        updateAvailable: true,
-        updateCommand: "npm i -g roughdraft@latest",
-      }),
-    });
-
-    expect(exitCode).toBe(0);
-    expect(test.logs.at(-1)).toBe(
-      "Roughdraft update available: 0.1.1 -> 0.1.3. Run `npm i -g roughdraft@latest` to update.",
-    );
-  });
-
-  it("does not add an update notice to JSON command output", async () => {
-    const test = createTestDependencies();
-    const documentPath = path.join(projectDir, "draft.md");
-    fs.writeFileSync(documentPath, "# Draft\n");
-
-    const exitCode = await runCli(
-      ["open", documentPath, "--no-watch", "--json"],
-      {
-        ...test.deps,
-        resolveUpdateStatus: async () => ({
-          packageName: "roughdraft",
-          currentVersion: "0.1.1",
-          latestVersion: "0.1.3",
-          updateAvailable: true,
-          updateCommand: "npm i -g roughdraft@latest",
-        }),
-      },
-    );
-    const payload = parseOnlyJsonLog<{ opened: boolean }>(test.logs);
-
-    expect(exitCode).toBe(0);
-    expect(payload.opened).toBe(true);
-  });
-
-  it("keeps the original command result when the update check fails", async () => {
-    const test = createTestDependencies();
-    const documentPath = path.join(projectDir, "draft.md");
-    fs.writeFileSync(documentPath, "# Draft\n");
-
-    const exitCode = await runCli(["open", documentPath, "--no-watch"], {
-      ...test.deps,
-      resolveUpdateStatus: async () => {
-        throw new Error("registry unavailable");
-      },
-    });
-
-    expect(exitCode).toBe(0);
-    expect(test.logs).not.toContain("registry unavailable");
-  });
-
   it("reuses a connected document window before opening another browser window", async () => {
     const documentPath = path.join(projectDir, "draft.md");
     fs.writeFileSync(documentPath, "# Draft\n");
@@ -337,7 +263,7 @@ describe("cli", () => {
     const deps = createCliDependencies({
       env: {
         ...process.env,
-        ROUGHDRAFT_STATE_DIR: stateDir,
+        NAME_PLACEHOLDER_STATE_DIR: stateDir,
       },
       cwd: projectDir,
       fetchImpl: async (input, init) => {
@@ -351,12 +277,12 @@ describe("cli", () => {
 
         if (
           url.pathname === "/api/status" &&
-          url.port === String(ROUGHDRAFT_DEFAULT_PORT)
+          url.port === String(NAME_PLACEHOLDER_DEFAULT_PORT)
         ) {
           return new Response(
             JSON.stringify({
               backend: "local-files",
-              port: ROUGHDRAFT_DEFAULT_PORT,
+              port: NAME_PLACEHOLDER_DEFAULT_PORT,
               projectDir,
               serverRoot,
             }),
@@ -396,7 +322,7 @@ describe("cli", () => {
     expect(postedOpenRequest).toEqual({
       path: documentPath,
       url: expectedOpenUrl(
-        `http://localhost:${ROUGHDRAFT_DEFAULT_PORT}`,
+        `http://localhost:${NAME_PLACEHOLDER_DEFAULT_PORT}`,
         documentPath,
       ),
     });
@@ -617,8 +543,8 @@ describe("cli", () => {
     const deps = createCliDependencies({
       env: {
         ...process.env,
-        ROUGHDRAFT_STATE_DIR: stateDir,
-        ROUGHDRAFT_DEV_FRONTEND_STATE_FILE: devFrontendStateFile,
+        NAME_PLACEHOLDER_STATE_DIR: stateDir,
+        NAME_PLACEHOLDER_DEV_FRONTEND_STATE_FILE: devFrontendStateFile,
       },
       cwd: projectDir,
       fetchImpl: async (input, init) => {
@@ -703,8 +629,8 @@ describe("cli", () => {
     const deps = createCliDependencies({
       env: {
         ...process.env,
-        ROUGHDRAFT_STATE_DIR: stateDir,
-        ROUGHDRAFT_DEV_FRONTEND_STATE_FILE: devFrontendStateFile,
+        NAME_PLACEHOLDER_STATE_DIR: stateDir,
+        NAME_PLACEHOLDER_DEV_FRONTEND_STATE_FILE: devFrontendStateFile,
       },
       cwd: projectDir,
       fetchImpl: async (input, _init) => {
@@ -760,7 +686,6 @@ describe("cli", () => {
       },
       log: () => {},
       error: () => {},
-      resolveUpdateStatus: noUpdateStatus,
     });
 
     const exitCode = await runCli(
@@ -836,8 +761,8 @@ describe("cli", () => {
     const deps = createCliDependencies({
       env: {
         ...process.env,
-        ROUGHDRAFT_STATE_DIR: stateDir,
-        ROUGHDRAFT_DEV_FRONTEND_STATE_FILE: devFrontendStateFile,
+        NAME_PLACEHOLDER_STATE_DIR: stateDir,
+        NAME_PLACEHOLDER_DEV_FRONTEND_STATE_FILE: devFrontendStateFile,
       },
       cwd: projectDir,
       fetchImpl: async (input) => {
@@ -904,11 +829,11 @@ describe("cli", () => {
     expect(statusExitCode).toBe(1);
     expect(fs.existsSync(getServerStateFilePath(test.deps.env))).toBeFalsy();
     expect(test.logs).toContain(
-      "Roughdraft is not running. Start it with `roughdraft start`.",
+      "NAME_PLACEHOLDER is not running. Start it with `name-placeholder start`.",
     );
   });
 
-  it("returns successful JSON status when Roughdraft is not running", async () => {
+  it("returns successful JSON status when NAME_PLACEHOLDER is not running", async () => {
     const test = createTestDependencies();
 
     const exitCode = await runCli(["status", "--json"], test.deps);
@@ -924,7 +849,7 @@ describe("cli", () => {
     });
   });
 
-  it("emits JSON from status when Roughdraft is running", async () => {
+  it("emits JSON from status when NAME_PLACEHOLDER is running", async () => {
     const test = createTestDependencies();
     const result = await ensureServerRunning(test.deps, { projectDir });
 
@@ -1134,17 +1059,17 @@ describe("cli", () => {
     fs.writeFileSync(
       stateFilePath,
       JSON.stringify({
-        port: ROUGHDRAFT_DEFAULT_PORT,
+        port: NAME_PLACEHOLDER_DEFAULT_PORT,
         pid: 424242,
         startedAt: new Date().toISOString(),
-        url: `http://localhost:${ROUGHDRAFT_DEFAULT_PORT}`,
+        url: `http://localhost:${NAME_PLACEHOLDER_DEFAULT_PORT}`,
       }),
     );
 
     const deps = createCliDependencies({
       env: {
         ...process.env,
-        ROUGHDRAFT_STATE_DIR: stateDir,
+        NAME_PLACEHOLDER_STATE_DIR: stateDir,
       },
       cwd: projectDir,
       fetchImpl: async (input) => {
@@ -1158,12 +1083,12 @@ describe("cli", () => {
 
         if (
           url.pathname === "/api/status" &&
-          url.port === String(ROUGHDRAFT_DEFAULT_PORT)
+          url.port === String(NAME_PLACEHOLDER_DEFAULT_PORT)
         ) {
           return new Response(
             JSON.stringify({
               backend: "local-files",
-              port: ROUGHDRAFT_DEFAULT_PORT,
+              port: NAME_PLACEHOLDER_DEFAULT_PORT,
               projectDir,
               serverRoot,
             }),
@@ -1198,7 +1123,7 @@ describe("cli", () => {
     expect(statusExitCode).toBe(0);
     expect(openExitCode).toBe(0);
     expect(logs).toContain(
-      `Roughdraft is running at http://localhost:${ROUGHDRAFT_DEFAULT_PORT}`,
+      `NAME_PLACEHOLDER is running at http://localhost:${NAME_PLACEHOLDER_DEFAULT_PORT}`,
     );
     expect(logs).toContain(
       `This server is not managed by ${getServerStateFilePath(deps.env)}.`,
@@ -1214,12 +1139,12 @@ describe("cli", () => {
     expect(exitCode).toBe(1);
     expect(test.getSpawnCount()).toBe(0);
     expect(test.errors).toContain(
-      `Roughdraft can only open .md files: ${projectDir}`,
+      `NAME_PLACEHOLDER can only open .md files: ${projectDir}`,
     );
     expect(test.getLastOpenedUrl()).toBeNull();
   });
 
-  it("cleans stale state and warns when another Roughdraft instance owns the port during stop", async () => {
+  it("cleans stale state and warns when another NAME_PLACEHOLDER instance owns the port during stop", async () => {
     const errors: string[] = [];
     const stateFilePath = path.join(stateDir, "server.json");
 
@@ -1227,17 +1152,17 @@ describe("cli", () => {
     fs.writeFileSync(
       stateFilePath,
       JSON.stringify({
-        port: ROUGHDRAFT_DEFAULT_PORT,
+        port: NAME_PLACEHOLDER_DEFAULT_PORT,
         pid: 424242,
         startedAt: new Date().toISOString(),
-        url: `http://localhost:${ROUGHDRAFT_DEFAULT_PORT}`,
+        url: `http://localhost:${NAME_PLACEHOLDER_DEFAULT_PORT}`,
       }),
     );
 
     const deps = createCliDependencies({
       env: {
         ...process.env,
-        ROUGHDRAFT_STATE_DIR: stateDir,
+        NAME_PLACEHOLDER_STATE_DIR: stateDir,
       },
       cwd: projectDir,
       fetchImpl: async (input) => {
@@ -1251,12 +1176,12 @@ describe("cli", () => {
 
         if (
           url.pathname === "/api/status" &&
-          url.port === String(ROUGHDRAFT_DEFAULT_PORT)
+          url.port === String(NAME_PLACEHOLDER_DEFAULT_PORT)
         ) {
           return new Response(
             JSON.stringify({
               backend: "local-files",
-              port: ROUGHDRAFT_DEFAULT_PORT,
+              port: NAME_PLACEHOLDER_DEFAULT_PORT,
               projectDir,
               serverRoot,
             }),
@@ -1283,7 +1208,7 @@ describe("cli", () => {
 
     expect(stopExitCode).toBe(1);
     expect(errors).toContain(
-      `Stopped tracked Roughdraft process 424242, but another Roughdraft instance is still running at http://localhost:${ROUGHDRAFT_DEFAULT_PORT}.`,
+      `Stopped tracked NAME_PLACEHOLDER process 424242, but another NAME_PLACEHOLDER instance is still running at http://localhost:${NAME_PLACEHOLDER_DEFAULT_PORT}.`,
     );
     expect(fs.existsSync(stateFilePath)).toBeFalsy();
   });
@@ -1296,7 +1221,7 @@ describe("cli", () => {
     const deps = createCliDependencies({
       env: {
         ...process.env,
-        ROUGHDRAFT_STATE_DIR: stateDir,
+        NAME_PLACEHOLDER_STATE_DIR: stateDir,
       },
       cwd: projectDir,
       fetchImpl: async (input) => {
@@ -1311,13 +1236,13 @@ describe("cli", () => {
         if (
           unmanagedRunning &&
           url.pathname === "/api/status" &&
-          url.port === String(ROUGHDRAFT_DEFAULT_PORT)
+          url.port === String(NAME_PLACEHOLDER_DEFAULT_PORT)
         ) {
           return new Response(
             JSON.stringify({
               backend: "local-files",
               pid: 4242,
-              port: ROUGHDRAFT_DEFAULT_PORT,
+              port: NAME_PLACEHOLDER_DEFAULT_PORT,
               projectDir,
               serverRoot,
             }),
@@ -1348,7 +1273,7 @@ describe("cli", () => {
     expect(exitCode).toBe(0);
     expect(stoppedPid).toBe(4242);
     expect(logs).toContain(
-      `Stopped unmanaged Roughdraft at http://localhost:${ROUGHDRAFT_DEFAULT_PORT}.`,
+      `Stopped unmanaged NAME_PLACEHOLDER at http://localhost:${NAME_PLACEHOLDER_DEFAULT_PORT}.`,
     );
   });
 
@@ -1380,9 +1305,6 @@ describe("cli", () => {
     expect(test.logs).toContain(
       "  Treat CriticMarkup inside fenced code blocks as literal example text.",
     );
-    expect(test.logs).toContain(
-      "  https://roughdraft.md/spec/roughdraft-flavored-markdown.md",
-    );
   });
 
   it("prints copyable criticmarkup suggestion examples with required YAML metadata", async () => {
@@ -1394,7 +1316,7 @@ describe("cli", () => {
       "Suggested changes with ids:",
       "Reply to an existing comment:",
     );
-    const validation = validateRoughdraftMarkdown(example);
+    const validation = validateNamePlaceholderMarkdown(example);
 
     expect(exitCode).toBe(0);
     expect(example).toContain("suggestions:");
@@ -1402,46 +1324,6 @@ describe("cli", () => {
     expect(example).toContain("  s2:");
     expect(validation.diagnostics).toEqual([]);
     expect(validation.summary.suggestions).toBe(2);
-  });
-
-  it("points general help to agent setup", async () => {
-    const test = createTestDependencies();
-
-    const exitCode = await runCli(["help"], test.deps);
-
-    expect(exitCode).toBe(0);
-    expect(test.logs).toContain(
-      "  help agent         Print the agent setup prompt",
-    );
-    expect(test.logs).toContain(
-      "Agent setup: https://raw.githubusercontent.com/pmbaumgartner/roughdraft/main/packages/app/public/setup.md",
-    );
-    expect(test.logs).toContain(
-      "Use `roughdraft help agent` for a copyable setup prompt.",
-    );
-  });
-
-  it("prints a copyable agent setup prompt", async () => {
-    const test = createTestDependencies();
-
-    const exitCode = await runCli(["help", "agent"], test.deps);
-
-    expect(exitCode).toBe(0);
-    expect(test.logs).toContain(
-      "To set up your coding agent, paste this into it:",
-    );
-    expect(test.logs).toContain(AGENT_SETUP_PROMPT);
-    expect(test.logs).toContain(
-      "This command only prints setup text. It does not edit agent instruction files.",
-    );
-  });
-
-  it("installs the fork when following agent setup help", async () => {
-    const test = createTestDependencies();
-    expect(await runCli(["help", "agent"], test.deps)).toBe(0);
-    expect(test.logs.join("\n")).toMatch(
-      /npm (?:i|install) -g https:\/\/github\.com\/pmbaumgartner\/roughdraft\/releases\/download\//,
-    );
   });
 
   it("keeps CLAUDE.md as a short compatibility shim to AGENTS.md", () => {
@@ -1481,7 +1363,7 @@ describe("cli", () => {
 
     expect(exitCode).toBe(0);
     expect(test.logs).toContain(
-      "  roughdraft open <path> [--no-open] [--no-watch] [--print-url] [--port <port>]",
+      "  name-placeholder open <path> [--no-open] [--no-watch] [--print-url] [--port <port>]",
     );
     expect(test.logs).toContain(
       "  --no-watch           Open the file without waiting",
@@ -1497,7 +1379,7 @@ describe("cli", () => {
     const exitCode = await runCli(["doctor", "--help"], test.deps);
 
     expect(exitCode).toBe(0);
-    expect(test.logs).toContain("  roughdraft doctor [path] [--json]");
+    expect(test.logs).toContain("  name-placeholder doctor [path] [--json]");
   });
 
   it("rejects unknown command typos with suggestions", async () => {
@@ -1511,63 +1393,6 @@ describe("cli", () => {
     );
   });
 
-  it("supports agent-setup as a direct setup helper", async () => {
-    const test = createTestDependencies();
-
-    const exitCode = await runCli(["agent-setup"], test.deps);
-
-    expect(exitCode).toBe(0);
-    expect(test.logs).toContain(
-      "Live setup instructions: https://raw.githubusercontent.com/pmbaumgartner/roughdraft/main/packages/app/public/setup.md",
-    );
-  });
-
-  it("reports dev wrapper metadata from doctor --json", async () => {
-    const logs: string[] = [];
-    const wrapperPath = path.join(tempDir, "bin", "roughdraft-dev-lyon-v2");
-    const devStateDir = path.join(
-      tempDir,
-      ".roughdraft",
-      "dev",
-      "roughdraft-dev-lyon-v2",
-    );
-    const deps = createCliDependencies({
-      env: {
-        ...process.env,
-        ROUGHDRAFT_DEV_WRAPPER_NAME: "roughdraft-dev-lyon-v2",
-        ROUGHDRAFT_DEV_WRAPPER_PATH: wrapperPath,
-        ROUGHDRAFT_DEV_WRAPPER_REPO_ROOT: serverRoot,
-        ROUGHDRAFT_STATE_DIR: devStateDir,
-      },
-      cwd: projectDir,
-      fetchImpl: async () => {
-        throw new Error("connect ECONNREFUSED");
-      },
-      log: (message) => logs.push(message),
-      error: () => {},
-    });
-
-    const exitCode = await runCli(["doctor", "--json"], deps);
-    const payload = parseOnlyJsonLog<{
-      devWrapper: {
-        commandName: string;
-        path: string;
-        repoRoot: string;
-        repoRootMatches: boolean;
-        stateDir: string;
-      };
-    }>(logs);
-
-    expect(exitCode).toBe(0);
-    expect(payload.devWrapper).toEqual({
-      commandName: "roughdraft-dev-lyon-v2",
-      path: wrapperPath,
-      repoRoot: serverRoot,
-      repoRootMatches: true,
-      stateDir: devStateDir,
-    });
-  });
-
   it("validates a conforming markdown file from doctor path", async () => {
     const test = createTestDependencies();
     const documentPath = path.join(projectDir, "draft.md");
@@ -1579,7 +1404,7 @@ describe("cli", () => {
     const exitCode = await runCli(["doctor", documentPath], test.deps);
 
     expect(exitCode).toBe(0);
-    expect(test.logs).toContain("Roughdraft Markdown doctor: draft.md");
+    expect(test.logs).toContain("NAME_PLACEHOLDER Markdown doctor: draft.md");
     expect(test.logs).toContain("Status: passed");
     expect(test.logs).toContain("Found 1 comment(s) and 0 suggestion(s).");
   });
@@ -1654,7 +1479,7 @@ describe("cli", () => {
 
     expect(exitCode).toBe(2);
     expect(test.errors).toContain(
-      `Roughdraft doctor can only validate .md files: ${documentPath}`,
+      `NAME_PLACEHOLDER doctor can only validate .md files: ${documentPath}`,
     );
   });
 
@@ -1669,17 +1494,17 @@ describe("cli", () => {
     fs.writeFileSync(
       stateFilePath,
       JSON.stringify({
-        port: ROUGHDRAFT_DEFAULT_PORT,
+        port: NAME_PLACEHOLDER_DEFAULT_PORT,
         pid: 424242,
         startedAt: new Date().toISOString(),
-        url: `http://localhost:${ROUGHDRAFT_DEFAULT_PORT}`,
+        url: `http://localhost:${NAME_PLACEHOLDER_DEFAULT_PORT}`,
       }),
     );
 
     const deps = createCliDependencies({
       env: {
         ...process.env,
-        ROUGHDRAFT_STATE_DIR: stateDir,
+        NAME_PLACEHOLDER_STATE_DIR: stateDir,
       },
       cwd: projectDir,
       fetchImpl: async (input) => {
@@ -1695,11 +1520,11 @@ describe("cli", () => {
           throw new Error("Unexpected request");
         }
 
-        if (url.port === String(ROUGHDRAFT_DEFAULT_PORT)) {
+        if (url.port === String(NAME_PLACEHOLDER_DEFAULT_PORT)) {
           return new Response(
             JSON.stringify({
               backend: "local-files",
-              port: ROUGHDRAFT_DEFAULT_PORT,
+              port: NAME_PLACEHOLDER_DEFAULT_PORT,
               projectDir: path.join(tempDir, "other-project"),
               serverRoot: otherServerRoot,
             }),
@@ -1710,11 +1535,11 @@ describe("cli", () => {
           );
         }
 
-        if (url.port === String(ROUGHDRAFT_DEFAULT_PORT + 1) && spawned) {
+        if (url.port === String(NAME_PLACEHOLDER_DEFAULT_PORT + 1) && spawned) {
           return new Response(
             JSON.stringify({
               backend: "local-files",
-              port: ROUGHDRAFT_DEFAULT_PORT + 1,
+              port: NAME_PLACEHOLDER_DEFAULT_PORT + 1,
               projectDir,
               serverRoot,
             }),
@@ -1727,7 +1552,7 @@ describe("cli", () => {
 
         throw new Error("connect ECONNREFUSED");
       },
-      findAvailablePortImpl: async () => ROUGHDRAFT_DEFAULT_PORT + 1,
+      findAvailablePortImpl: async () => NAME_PLACEHOLDER_DEFAULT_PORT + 1,
       spawnServerProcess: async ({ port, projectDir: nextProjectDir }) => {
         spawned = true;
         spawnedPort = port;
@@ -1744,9 +1569,9 @@ describe("cli", () => {
     const result = await ensureServerRunning(deps, { projectDir });
 
     expect(result.reused).toBe(false);
-    expect(spawnedPort).toBe(ROUGHDRAFT_DEFAULT_PORT + 1);
+    expect(spawnedPort).toBe(NAME_PLACEHOLDER_DEFAULT_PORT + 1);
     expect(spawnedProjectDir).toBe(projectDir);
-    expect(result.server.port).toBe(ROUGHDRAFT_DEFAULT_PORT + 1);
+    expect(result.server.port).toBe(NAME_PLACEHOLDER_DEFAULT_PORT + 1);
   });
 });
 
@@ -1755,7 +1580,9 @@ describe("runCli open in remote mode", () => {
   let projectDir: string;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "roughdraft-cli-remote-"));
+    tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "name-placeholder-cli-remote-"),
+    );
     projectDir = path.join(tempDir, "project");
     fs.mkdirSync(projectDir, { recursive: true });
   });
@@ -1799,18 +1626,11 @@ describe("runCli open in remote mode", () => {
     const errors: string[] = [];
 
     const exitCode = await runCli(["open", filePath], {
-      env: { ROUGHDRAFT_HOST: "http://127.0.0.1:1" },
+      env: { NAME_PLACEHOLDER_HOST: "http://127.0.0.1:1" },
       cwd: projectDir,
       log: (m) => logs.push(m),
       error: (m) => errors.push(m),
       openUrl: () => "disabled",
-      resolveUpdateStatus: async () => ({
-        packageName: "roughdraft",
-        currentVersion: "0.1.0",
-        latestVersion: "0.1.0",
-        updateAvailable: false,
-        updateCommand: "",
-      }),
     });
 
     expect(exitCode).toBe(1);
@@ -1825,7 +1645,7 @@ describe("runCli open in remote mode", () => {
     let fetchCalls = 0;
 
     const exitCode = await runCli(["open", filePath], {
-      env: { ROUGHDRAFT_HOST: "http://127.0.0.1:1" },
+      env: { NAME_PLACEHOLDER_HOST: "http://127.0.0.1:1" },
       cwd: projectDir,
       log: () => {},
       error: (m) => errors.push(m),
@@ -1834,13 +1654,6 @@ describe("runCli open in remote mode", () => {
         fetchCalls += 1;
         return new Response("", { status: 200 });
       },
-      resolveUpdateStatus: async () => ({
-        packageName: "roughdraft",
-        currentVersion: "0.1.0",
-        latestVersion: "0.1.0",
-        updateAvailable: false,
-        updateCommand: "",
-      }),
     });
 
     expect(exitCode).toBe(1);
@@ -1861,7 +1674,7 @@ describe("runCli open in remote mode", () => {
       let openedUrl: string | null = null;
 
       const cliPromise = runCli(["open", filePath], {
-        env: { ROUGHDRAFT_HOST: remote.url },
+        env: { NAME_PLACEHOLDER_HOST: remote.url },
         cwd: projectDir,
         log: (m) => logs.push(m),
         error: (m) => errors.push(m),
@@ -1869,13 +1682,6 @@ describe("runCli open in remote mode", () => {
           openedUrl = url;
           return "disabled";
         },
-        resolveUpdateStatus: async () => ({
-          packageName: "roughdraft",
-          currentVersion: "0.1.0",
-          latestVersion: "0.1.0",
-          updateAvailable: false,
-          updateCommand: "",
-        }),
       });
 
       // Wait for the CLI to register and open the SSE channel.
@@ -1918,14 +1724,14 @@ describe("runCli open in remote mode", () => {
       const exitCode = await cliPromise;
       expect(exitCode).toBe(0);
       expect(
-        logs.some((m) => m.includes("Opened remote Roughdraft session")),
+        logs.some((m) => m.includes("Opened remote NAME_PLACEHOLDER session")),
       ).toBe(true);
     } finally {
       await remote.close();
     }
   });
 
-  it("authenticates remote registration and the CLI save-back stream with ROUGHDRAFT_TOKEN", {
+  it("authenticates remote registration and the CLI save-back stream with NAME_PLACEHOLDER_TOKEN", {
     timeout: 15_000,
   }, async () => {
     const remote = await startRemoteHost("secret-token");
@@ -1939,8 +1745,8 @@ describe("runCli open in remote mode", () => {
 
       const cliPromise = runCli(["open", filePath], {
         env: {
-          ROUGHDRAFT_HOST: remote.url,
-          ROUGHDRAFT_TOKEN: "secret-token",
+          NAME_PLACEHOLDER_HOST: remote.url,
+          NAME_PLACEHOLDER_TOKEN: "secret-token",
         },
         cwd: projectDir,
         log: (m) => logs.push(m),
@@ -1949,13 +1755,6 @@ describe("runCli open in remote mode", () => {
           openedUrl = url;
           return "disabled";
         },
-        resolveUpdateStatus: async () => ({
-          packageName: "roughdraft",
-          currentVersion: "0.1.0",
-          latestVersion: "0.1.0",
-          updateAvailable: false,
-          updateCommand: "",
-        }),
       });
 
       const openDeadline = Date.now() + 4000;
@@ -1997,7 +1796,7 @@ describe("runCli open in remote mode", () => {
       expect(await cliPromise).toBe(0);
       expect(errors).toEqual([]);
       expect(
-        logs.some((m) => m.includes("Opened remote Roughdraft session")),
+        logs.some((m) => m.includes("Opened remote NAME_PLACEHOLDER session")),
       ).toBe(true);
     } finally {
       await remote.close();
@@ -2049,7 +1848,7 @@ describe("runCli open in remote mode", () => {
       let openedUrl: string | null = null;
 
       const cliPromise = runCli(["open", filePath], {
-        env: { ROUGHDRAFT_HOST: remote.url },
+        env: { NAME_PLACEHOLDER_HOST: remote.url },
         cwd: projectDir,
         log: (m) => logs.push(m),
         error: (m) => errors.push(m),
@@ -2057,13 +1856,6 @@ describe("runCli open in remote mode", () => {
           openedUrl = url;
           return "disabled";
         },
-        resolveUpdateStatus: async () => ({
-          packageName: "roughdraft",
-          currentVersion: "0.1.0",
-          latestVersion: "0.1.0",
-          updateAvailable: false,
-          updateCommand: "",
-        }),
       });
 
       const openDeadline = Date.now() + 4000;
@@ -2135,7 +1927,7 @@ describe("runCli open in remote mode", () => {
       let cliSettled = false;
 
       const cliPromise = runCli(["open", filePath], {
-        env: { ROUGHDRAFT_HOST: remote.url },
+        env: { NAME_PLACEHOLDER_HOST: remote.url },
         cwd: projectDir,
         log: (m) => logs.push(m),
         error: (m) => errors.push(m),
@@ -2143,13 +1935,6 @@ describe("runCli open in remote mode", () => {
           openedUrl = url;
           return "disabled";
         },
-        resolveUpdateStatus: async () => ({
-          packageName: "roughdraft",
-          currentVersion: "0.1.0",
-          latestVersion: "0.1.0",
-          updateAvailable: false,
-          updateCommand: "",
-        }),
       }).finally(() => {
         cliSettled = true;
       });
@@ -2214,7 +1999,7 @@ describe("runCli open in remote mode", () => {
       expect(await cliPromise).toBe(0);
       expect(errors).toEqual([]);
       expect(
-        logs.some((m) => m.includes("Opened remote Roughdraft session")),
+        logs.some((m) => m.includes("Opened remote NAME_PLACEHOLDER session")),
       ).toBe(true);
     } finally {
       await browserEventsReader?.cancel().catch(() => undefined);

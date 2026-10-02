@@ -2,7 +2,6 @@ import { expect, test } from "@playwright/test";
 import {
   appendInCodeEditor,
   createMarkdownProject,
-  logE2eEvent,
   openMarkdownFile,
   readProjectFile,
   removeMarkdownProject,
@@ -67,7 +66,7 @@ test.describe("review handoff", () => {
         const acknowledged = await request.post(
           `/api/review-sessions/${reviewId}/ack`,
           {
-            headers: { "x-roughdraft-receipt-token": receiptToken },
+            headers: { "x-name-placeholder-receipt-token": receiptToken },
             data: { sequence: events[0].sequence },
           },
         );
@@ -76,7 +75,7 @@ test.describe("review handoff", () => {
       } else {
         const cancelled = await request.delete(
           `/api/review-sessions/${reviewId}`,
-          { headers: { "x-roughdraft-receipt-token": receiptToken } },
+          { headers: { "x-name-placeholder-receipt-token": receiptToken } },
         );
         expect(cancelled.status()).toBe(200);
         await expect(status).toContainText("Review cancelled");
@@ -161,11 +160,7 @@ test.describe("review handoff", () => {
     );
     await pendingWatch;
     await disconnectedStatus;
-    logE2eEvent("review-handoff.disconnected", {
-      buttonVisible: await page
-        .getByTestId("review-handoff-button")
-        .isVisible(),
-    });
+
     await expect(page.getByTestId("review-handoff-button")).toBeVisible();
     await appendInCodeEditor(page, "\nPending feedback.");
     await expect(page.getByTestId("review-handoff-button")).toHaveText(
@@ -182,9 +177,6 @@ test.describe("review handoff", () => {
     await expect(
       status.getByTestId("review-handoff-copy-message"),
     ).toBeVisible();
-    logE2eEvent("review-handoff.disconnected-completed", {
-      status: await status.innerText(),
-    });
   });
 
   test("reopens the sent handoff status from the muted primary button", async ({
@@ -220,9 +212,6 @@ test.describe("review handoff", () => {
     await page.getByTestId("review-handoff-button").click();
 
     await expect(page.getByTestId("review-handoff-status")).toBeVisible();
-    logE2eEvent("review-handoff.sent-button-reopened-status", {
-      buttonLabel: await page.getByTestId("review-handoff-button").innerText(),
-    });
 
     await pendingWatch;
   });

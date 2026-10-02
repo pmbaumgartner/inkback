@@ -4,7 +4,7 @@ import {
   writeDevFrontendState,
 } from "./dev-frontend-state.mjs";
 import { findAvailableLoopbackPort } from "./find-available-loopback-port.mjs";
-import { ROUGHDRAFT_DEFAULT_PORT } from "../packages/server/defaults.mjs";
+import { NAME_PLACEHOLDER_DEFAULT_PORT } from "../packages/server/defaults.mjs";
 
 function spawnPnpm(args, extraEnv = {}) {
   return spawn("pnpm", args, {
@@ -14,11 +14,11 @@ function spawnPnpm(args, extraEnv = {}) {
 }
 
 const appPort = await findAvailableLoopbackPort(
-  parseInt(process.env.APP_PORT || String(ROUGHDRAFT_DEFAULT_PORT), 10),
+  parseInt(process.env.APP_PORT || String(NAME_PLACEHOLDER_DEFAULT_PORT), 10),
 );
 
 console.log(`Using app port ${appPort}.`);
-console.log(`Open Roughdraft web preview at http://localhost:${appPort}`);
+console.log(`Open NAME_PLACEHOLDER web preview at http://localhost:${appPort}`);
 console.log(
   `Open files directly with http://localhost:${appPort}/?path=/absolute/path/to/file.md`,
 );
@@ -29,7 +29,7 @@ writeDevFrontendState({ appPort, mode: "preview-web" });
 const app = spawnPnpm(
   [
     "--filter",
-    "@roughdraft/app",
+    "@name-placeholder/app",
     "exec",
     "vite",
     "--host",

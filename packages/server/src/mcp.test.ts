@@ -12,7 +12,7 @@ describe("mcp", () => {
   let documentPath: string;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "roughdraft-mcp-"));
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "name-placeholder-mcp-"));
     projectDir = path.join(tempDir, "project");
     stateFile = path.join(tempDir, "state", "server.json");
     documentPath = path.join(projectDir, "draft.md");
@@ -40,15 +40,15 @@ describe("mcp", () => {
     };
 
     await callTool(
-      "roughdraft_watch_review_events",
+      "name_placeholder_watch_review_events",
       { documentPath, projectPath: projectDir },
-      { ROUGHDRAFT_STATE_FILE: stateFile },
+      { NAME_PLACEHOLDER_STATE_FILE: stateFile },
       fetchImpl,
     );
     await callTool(
-      "roughdraft_watch_review_events",
+      "name_placeholder_watch_review_events",
       { documentPath, projectPath: projectDir, timeoutSeconds: 5 },
-      { ROUGHDRAFT_STATE_FILE: stateFile },
+      { NAME_PLACEHOLDER_STATE_FILE: stateFile },
       fetchImpl,
     );
 
@@ -81,9 +81,9 @@ describe("mcp", () => {
     };
 
     const result = await callTool(
-      "roughdraft_watch_review_events",
+      "name_placeholder_watch_review_events",
       { documentPath },
-      { ROUGHDRAFT_STATE_FILE: stateFile },
+      { NAME_PLACEHOLDER_STATE_FILE: stateFile },
       fetchImpl,
     );
 
@@ -112,9 +112,9 @@ describe("mcp", () => {
       );
 
     const result = await callTool(
-      "roughdraft_watch_review_events",
+      "name_placeholder_watch_review_events",
       { documentPath, projectPath: projectDir },
-      { ROUGHDRAFT_STATE_FILE: stateFile },
+      { NAME_PLACEHOLDER_STATE_FILE: stateFile },
       fetchImpl,
     );
 
@@ -138,7 +138,7 @@ describe("mcp", () => {
     startMcpServer({
       input: input as unknown as NodeJS.ReadStream,
       output: output as unknown as NodeJS.WriteStream,
-      env: { ROUGHDRAFT_STATE_FILE: stateFile },
+      env: { NAME_PLACEHOLDER_STATE_FILE: stateFile },
       fetchImpl: async (_input, init) => {
         signal = init?.signal;
         return new Promise((_resolve, reject) => {
@@ -151,7 +151,7 @@ describe("mcp", () => {
       id: 1,
       method: "tools/call",
       params: {
-        name: "roughdraft_watch_review_events",
+        name: "name_placeholder_watch_review_events",
         arguments: { documentPath },
       },
     });
@@ -172,13 +172,13 @@ describe("mcp", () => {
 
     await expect(
       callTool(
-        "roughdraft_reply_to_comment",
+        "name_placeholder_reply_to_comment",
         {
           documentPath,
           parentId: "c1",
           message: "This closes early <<} and breaks parsing.",
         },
-        { ROUGHDRAFT_STATE_FILE: stateFile },
+        { NAME_PLACEHOLDER_STATE_FILE: stateFile },
       ),
     ).rejects.toThrow(/CriticMarkup close delimiter/);
 

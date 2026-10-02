@@ -1,6 +1,6 @@
 import path from "node:path";
 import { createServer } from "./index.js";
-import { ROUGHDRAFT_DEFAULT_PORT } from "./network.js";
+import { NAME_PLACEHOLDER_DEFAULT_PORT } from "./network.js";
 
 interface ParsedArgs {
   port: number;
@@ -8,7 +8,7 @@ interface ParsedArgs {
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
-  let port = ROUGHDRAFT_DEFAULT_PORT;
+  let port = NAME_PLACEHOLDER_DEFAULT_PORT;
   let projectDir: string | undefined;
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -45,7 +45,9 @@ try {
   await createServer(port, projectDir);
 } catch (error) {
   console.error(
-    error instanceof Error ? error.message : "Failed to start Roughdraft.",
+    error instanceof Error
+      ? error.message
+      : "Failed to start NAME_PLACEHOLDER.",
   );
   process.exit(1);
 }

@@ -1,15 +1,15 @@
 {
-  "name": "@roughdraft/server",
+  "name": "@name-placeholder/server",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "pnpm --filter @roughdraft/rfm build && tsc",
+    "build": "tsc",
     "dev": "tsx watch src/dev.ts",
     "test": "vitest run"
   },
   "dependencies": {
-    "@roughdraft/rfm": "workspace:*",
+    "@name-placeholder/rfm": "workspace:*",
     "express": "^5.1.0"
   },
   "devDependencies": {

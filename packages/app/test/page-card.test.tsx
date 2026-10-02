@@ -601,7 +601,7 @@ describe("PageCard editor integration", () => {
       "  | --- | --- |",
       "  | path | docs/table.md |",
       "tags:",
-      "  - roughdraft",
+      "  - name-placeholder",
       "---",
       "",
     ].join("\n");
@@ -776,7 +776,7 @@ describe("PageCard editor integration", () => {
     ).toBe("false");
   });
 
-  it("renders local markdown document links as Roughdraft routes", async () => {
+  it("renders local markdown document links as NAME_PLACEHOLDER routes", async () => {
     window.history.replaceState(
       null,
       "",
@@ -810,7 +810,7 @@ describe("PageCard editor integration", () => {
     ).toBe("file://diagram.png");
   });
 
-  it("opens local markdown document links through Roughdraft from the link popover", async () => {
+  it("opens local markdown document links through NAME_PLACEHOLDER from the link popover", async () => {
     window.history.replaceState(
       null,
       "",

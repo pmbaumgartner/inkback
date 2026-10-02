@@ -5,8 +5,8 @@ import {
 } from "./dev-frontend-state.mjs";
 import { findAvailableLoopbackPort } from "./find-available-loopback-port.mjs";
 import {
-  ROUGHDRAFT_DEFAULT_API_PORT,
-  ROUGHDRAFT_DEFAULT_PORT,
+  NAME_PLACEHOLDER_DEFAULT_API_PORT,
+  NAME_PLACEHOLDER_DEFAULT_PORT,
 } from "../packages/server/defaults.mjs";
 
 function spawnPnpm(args, extraEnv = {}) {
@@ -17,10 +17,13 @@ function spawnPnpm(args, extraEnv = {}) {
 }
 
 const appPort = await findAvailableLoopbackPort(
-  parseInt(process.env.APP_PORT || String(ROUGHDRAFT_DEFAULT_PORT), 10),
+  parseInt(process.env.APP_PORT || String(NAME_PLACEHOLDER_DEFAULT_PORT), 10),
 );
 let apiPort = await findAvailableLoopbackPort(
-  parseInt(process.env.API_PORT || String(ROUGHDRAFT_DEFAULT_API_PORT), 10),
+  parseInt(
+    process.env.API_PORT || String(NAME_PLACEHOLDER_DEFAULT_API_PORT),
+    10,
+  ),
 );
 
 if (apiPort === appPort) {
@@ -29,7 +32,7 @@ if (apiPort === appPort) {
 
 console.log(`Using app port ${appPort}.`);
 console.log(`Using API port ${apiPort}.`);
-console.log(`Open Roughdraft in dev at http://localhost:${appPort}`);
+console.log(`Open NAME_PLACEHOLDER in dev at http://localhost:${appPort}`);
 console.log(
   `Open files directly with http://localhost:${appPort}/?path=/absolute/path/to/file.md`,
 );
@@ -39,13 +42,13 @@ console.log(
 
 writeDevFrontendState({ appPort, apiPort, mode: "full-dev" });
 
-const server = spawnPnpm(["--filter", "@roughdraft/server", "dev"], {
+const server = spawnPnpm(["--filter", "@name-placeholder/server", "dev"], {
   API_PORT: String(apiPort),
 });
 const app = spawnPnpm(
   [
     "--filter",
-    "@roughdraft/app",
+    "@name-placeholder/app",
     "exec",
     "vite",
     "--host",

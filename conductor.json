@@ -1,8 +1,0 @@
-{
-  "scripts": {
-    "setup": "./scripts/setup.sh",
-    "run": "pnpm dev",
-    "archive": ""
-  },
-  "runScriptMode": "concurrent"
-}

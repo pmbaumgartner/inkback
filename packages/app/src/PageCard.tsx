@@ -58,7 +58,6 @@ interface PageCardProps {
   page: Page;
   activeDocumentPath?: string | null;
   selected?: boolean;
-  layout?: "default" | "embedded-demo";
   focusRequestKey?: string | null;
   onSave: (id: string, content: string) => Promise<void>;
   onSaveStateChange?: (state: DocumentSaveState) => void;
@@ -78,7 +77,6 @@ interface PageCardEditorSurfaceProps {
   page: Page;
   activeDocumentPath: string | null;
   selected: boolean;
-  layout: "default" | "embedded-demo";
   focusRequestKey: string | null;
   onSave: (id: string, content: string) => Promise<void>;
   onSaveStateChange: (state: DocumentSaveState) => void;
@@ -98,7 +96,6 @@ interface RichTextEditorSurfaceProps {
   page: Page;
   activeDocumentPath: string | null;
   selected: boolean;
-  layout: "default" | "embedded-demo";
   focusRequestKey: string | null;
   sourceMarkdown: string;
   onMarkdownChange: (markdown: string) => void;
@@ -112,7 +109,6 @@ interface CodeEditorSurfaceProps {
   markdown: string;
   hasCommentRailSpace: boolean;
   interactionMode: DocumentInteractionMode;
-  layout: "default" | "embedded-demo";
   onMarkdownChange: (markdown: string) => void;
 }
 
@@ -615,7 +611,6 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
   page,
   activeDocumentPath,
   selected,
-  layout,
   focusRequestKey,
   sourceMarkdown,
   onMarkdownChange,
@@ -1909,32 +1904,16 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
   const contentCardClass =
     "rounded-[0.75rem] border border-[#E9E9E8] dark:border-slate-800 bg-white dark:bg-card shadow-[0_18px_44px_rgba(57,47,38,0.08)] dark:shadow-[0_18px_44px_rgba(0,0,0,0.35)]";
   const documentShellClass = cn(
-    "document-page-shell",
-    layout === "embedded-demo"
-      ? "grid grid-cols-1 gap-3 p-4 min-[900px]:grid-cols-[minmax(0,min(100%,42rem))_minmax(13rem,16rem)] min-[900px]:items-start min-[900px]:justify-start"
-      : "review-layout-grid",
-    !hasReviewRail && "document-page-shell-no-comments",
-    layout !== "embedded-demo" &&
-      !hasReviewRail &&
-      "review-layout-grid--centered",
+    "document-page-shell review-layout-grid",
+    !hasReviewRail &&
+      "document-page-shell-no-comments review-layout-grid--centered",
   );
-  const documentMainClass = cn(
-    "document-page-main w-full min-w-0",
-    layout === "embedded-demo"
-      ? "max-w-none"
-      : "review-layout-main max-w-[46.5rem]",
-  );
-  const contentInsetClass = layout === "embedded-demo" ? "pb-0" : "pb-24";
-  const fallbackClass = cn(
-    "document-comment-fallback mb-4",
-    layout === "embedded-demo" ? "hidden" : "min-[1100px]:hidden",
-  );
-  const reviewRailClass = cn(
-    "document-comment-rail",
-    layout === "embedded-demo"
-      ? "block px-4 pb-4 min-[900px]:p-0"
-      : "review-layout-rail hidden min-[1100px]:block",
-  );
+  const documentMainClass =
+    "document-page-main w-full min-w-0 review-layout-main max-w-[46.5rem]";
+  const contentInsetClass = "pb-24";
+  const fallbackClass = "document-comment-fallback mb-4 min-[1100px]:hidden";
+  const reviewRailClass =
+    "document-comment-rail review-layout-rail hidden min-[1100px]:block";
 
   return (
     <div
@@ -2010,7 +1989,7 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
         </div>
         <DocumentReviewRail
           className={reviewRailClass}
-          layout={layout === "embedded-demo" ? "flow" : "anchored"}
+          layout="anchored"
           testId="document-review-rail"
           commentGroups={commentGroups}
           comments={comments}
@@ -2063,32 +2042,18 @@ const CodeEditorSurface = memo(function CodeEditorSurface({
   markdown,
   hasCommentRailSpace,
   interactionMode,
-  layout,
   onMarkdownChange,
 }: CodeEditorSurfaceProps) {
   const documentShellClass = cn(
-    "document-page-shell",
-    layout === "embedded-demo"
-      ? "grid grid-cols-1 gap-3 p-4 min-[900px]:grid-cols-[minmax(0,min(100%,42rem))_minmax(13rem,16rem)] min-[900px]:items-start min-[900px]:justify-start"
-      : "review-layout-grid",
-    !hasCommentRailSpace && "document-page-shell-no-comments",
-    layout !== "embedded-demo" &&
-      !hasCommentRailSpace &&
-      "review-layout-grid--centered",
+    "document-page-shell review-layout-grid",
+    !hasCommentRailSpace &&
+      "document-page-shell-no-comments review-layout-grid--centered",
   );
-  const documentMainClass = cn(
-    "document-page-main w-full min-w-0",
-    layout === "embedded-demo"
-      ? "max-w-none"
-      : "review-layout-main max-w-[46.5rem]",
-  );
-  const contentInsetClass = layout === "embedded-demo" ? "pb-0" : "pb-24";
-  const reviewRailClass = cn(
-    "document-comment-rail pointer-events-none invisible",
-    layout === "embedded-demo"
-      ? "block px-4 pb-4 min-[900px]:p-0"
-      : "review-layout-rail hidden min-[1100px]:block",
-  );
+  const documentMainClass =
+    "document-page-main w-full min-w-0 review-layout-main max-w-[46.5rem]";
+  const contentInsetClass = "pb-24";
+  const reviewRailClass =
+    "document-comment-rail pointer-events-none invisible review-layout-rail hidden min-[1100px]:block";
   const documentShellRef =
     useReviewLayoutShiftAnimation<HTMLDivElement>(hasCommentRailSpace);
 
@@ -2131,7 +2096,6 @@ const PageCardEditorSurface = memo(function PageCardEditorSurface({
   page,
   activeDocumentPath,
   selected,
-  layout,
   focusRequestKey,
   onSave,
   onSaveStateChange,
@@ -2379,7 +2343,6 @@ const PageCardEditorSurface = memo(function PageCardEditorSurface({
         markdown={markdown}
         hasCommentRailSpace={hasCommentRailSpace}
         interactionMode={interactionMode}
-        layout={layout}
         onMarkdownChange={handleMarkdownChange}
       />
     );
@@ -2398,7 +2361,6 @@ const PageCardEditorSurface = memo(function PageCardEditorSurface({
       page={page}
       activeDocumentPath={activeDocumentPath}
       selected={selected}
-      layout={layout}
       focusRequestKey={focusRequestKey}
       sourceMarkdown={effectiveRichTextSourceMarkdown}
       onMarkdownChange={handleMarkdownChange}
@@ -2414,7 +2376,6 @@ export function PageCard({
   page,
   activeDocumentPath = null,
   selected = false,
-  layout = "default",
   focusRequestKey = null,
   onSave,
   onSaveStateChange,
@@ -2441,7 +2402,6 @@ export function PageCard({
         page={page}
         activeDocumentPath={activeDocumentPath}
         selected={selected}
-        layout={layout}
         focusRequestKey={focusRequestKey}
         onSave={onSave}
         onSaveStateChange={setSaveState}

@@ -1,11 +1,9 @@
-import fs from "node:fs";
 import { expect, test } from "@playwright/test";
 import {
   appendInCodeEditor,
   codeEditor,
   createMarkdownProject,
   documentSaveStatus,
-  logE2eEvent,
   openMarkdownFile,
   readProjectFile,
   removeMarkdownProject,
@@ -57,10 +55,6 @@ test.describe("markdown round-trips", () => {
       "Round Trip",
     );
     expect(readProjectFile(projectDir, "roundtrip.md")).toBe(original);
-
-    logE2eEvent("markdown-roundtrip.toggle-preserved", {
-      file: "roundtrip.md",
-    });
   });
 
   test("saves code-mode edits to disk while preserving fenced CriticMarkup examples @smoke", async ({
@@ -85,10 +79,6 @@ test.describe("markdown round-trips", () => {
     expect(readProjectFile(projectDir, "code-save.md")).toContain(
       "{==literal==}{>>example<<}",
     );
-
-    logE2eEvent("markdown-roundtrip.code-save", {
-      size: fs.statSync(filePath).size,
-    });
   });
 
   test("initial open shows persistent saved status", async ({ page }) => {
@@ -104,10 +94,6 @@ test.describe("markdown round-trips", () => {
       "aria-label",
       "Saved",
     );
-
-    logE2eEvent("markdown-roundtrip.initial-saved", {
-      file: "initial-saved.md",
-    });
   });
 
   test("manual save shortcut flushes code-mode edits to disk @smoke", async ({
@@ -130,11 +116,6 @@ test.describe("markdown round-trips", () => {
       "aria-label",
       "Saved",
     );
-
-    logE2eEvent("markdown-roundtrip.manual-save-shortcut", {
-      file: "manual-save.md",
-      size: fs.statSync(filePath).size,
-    });
   });
 
   test("manual save shortcut flushes rich-text edits to disk", async ({
@@ -162,11 +143,6 @@ test.describe("markdown round-trips", () => {
       "aria-label",
       "Saved",
     );
-
-    logE2eEvent("markdown-roundtrip.rich-manual-save", {
-      file: "rich-save.md",
-      size: fs.statSync(filePath).size,
-    });
   });
 
   test("save shortcut prevents browser default in rich-text and code modes", async ({
@@ -216,9 +192,5 @@ test.describe("markdown round-trips", () => {
         "Saved",
       );
     }
-
-    logE2eEvent("markdown-roundtrip.save-default-prevented", {
-      file: "prevent-default.md",
-    });
   });
 });

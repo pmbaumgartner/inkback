@@ -1,6 +1,6 @@
 {
-  "name": "@roughdraft/skill",
+  "name": "@name-placeholder/skill",
   "version": "0.1.0",
   "private": true,
-  "description": "Portable Agent Skill for Roughdraft and Pi"
+  "description": "Portable agent skill for NAME_PLACEHOLDER"
 }

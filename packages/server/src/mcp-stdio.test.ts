@@ -9,7 +9,7 @@ type Encoding = "newline-delimited JSON" | "Content-Length";
 
 async function initializeOverStdio(encoding: Encoding): Promise<unknown> {
   const tempDir = fs.mkdtempSync(
-    path.join(os.tmpdir(), "roughdraft-mcp-stdio-"),
+    path.join(os.tmpdir(), "name-placeholder-mcp-stdio-"),
   );
   const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
   const tsconfig = path.join(tempDir, "tsconfig.json");
@@ -19,7 +19,7 @@ async function initializeOverStdio(encoding: Encoding): Promise<unknown> {
     JSON.stringify({
       compilerOptions: {
         baseUrl: repoRoot,
-        paths: { "@roughdraft/rfm": ["packages/rfm/src/index.ts"] },
+        paths: { "@name-placeholder/rfm": ["packages/rfm/src/index.ts"] },
       },
     }),
   );
@@ -52,7 +52,7 @@ async function initializeOverStdio(encoding: Encoding): Promise<unknown> {
       const timer = setTimeout(() => {
         reject(
           new Error(
-            `Roughdraft did not answer initialize over ${encoding}; received ${buffer.length} stdout bytes. stderr: ${stderr || "(empty)"}`,
+            `NAME_PLACEHOLDER did not answer initialize over ${encoding}; received ${buffer.length} stdout bytes. stderr: ${stderr || "(empty)"}`,
           ),
         );
       }, 3_000);
@@ -119,14 +119,14 @@ describe("MCP stdio client compatibility", () => {
   it.each<Encoding>([
     "newline-delimited JSON",
     "Content-Length",
-  ])("initializes the Roughdraft MCP process over %s", async (encoding) => {
+  ])("initializes the NAME_PLACEHOLDER MCP process over %s", async (encoding) => {
     await expect(initializeOverStdio(encoding)).resolves.toMatchObject({
       jsonrpc: "2.0",
       id: 1,
       result: {
         protocolVersion: "2025-06-18",
         capabilities: { tools: {} },
-        serverInfo: { name: "roughdraft" },
+        serverInfo: { name: "name-placeholder" },
       },
     });
   });

@@ -1,7 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import {
   createMarkdownProject,
-  logE2eEvent,
   openMarkdownFile,
   readProjectFile,
   removeMarkdownProject,
@@ -57,10 +56,6 @@ test.describe("CriticMarkup review flows", () => {
       .poll(() => readProjectFile(projectDir, "comment.md"))
       .toContain("Added context looks good.");
     expect(readProjectFile(projectDir, "comment.md")).toContain('re="c1"');
-
-    logE2eEvent("criticmarkup.reply-saved", {
-      file: "comment.md",
-    });
   });
 
   test("reloads endmatter replies and saves a nested reply @smoke", async ({
@@ -106,9 +101,6 @@ comments:
     await page.reload();
     await expect(rail).toContainText("Added the requested detail.");
     await expect(rail).toContainText("Thanks, that resolves it.");
-    logE2eEvent("criticmarkup.endmatter-replies-reloaded", {
-      file: "endmatter-replies.md",
-    });
   });
 
   test("creates a new root comment and saves it to disk @smoke", async ({
@@ -138,10 +130,6 @@ comments:
       .toMatch(
         /\{==target text==\}\{>>Clarify this phrase\.<<\}\{id="c1" by="user" at="[^"]+"\}/,
       );
-
-    logE2eEvent("criticmarkup.root-comment-saved", {
-      file: "new-comment.md",
-    });
   });
 
   test("animates the document layout when the review rail appears and disappears @smoke", async ({
@@ -178,10 +166,6 @@ comments:
     const removeSamples = await removeSamplesPromise;
 
     expect(hasAnimatedReviewLayout(removeSamples)).toBe(true);
-
-    logE2eEvent("criticmarkup.layout-animation", {
-      file: "layout-animation.md",
-    });
   });
 
   test("shows tooltips for selection menu formatting actions", async ({
@@ -252,10 +236,6 @@ comments:
       .toContain("Remove drafty there.");
     expect(readProjectFile(projectDir, "suggestions.md")).not.toContain("{++");
     expect(readProjectFile(projectDir, "suggestions.md")).not.toContain("{--");
-
-    logE2eEvent("criticmarkup.suggestions-applied", {
-      file: "suggestions.md",
-    });
   });
 });
 

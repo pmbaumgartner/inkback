@@ -5,19 +5,8 @@ interface RequestedPathState {
 }
 
 export type DocumentEditorViewMode = "rich-text" | "code";
-export const ROUGHDRAFT_FLAVORED_MARKDOWN_PATH =
-  "/roughdraft-flavored-markdown";
-export const PREVIEW_PATH = "/preview";
-
 function normalizePathSeparators(value: string) {
   return value.replace(/\\/g, "/");
-}
-
-export function isReservedAppPath(pathname: string) {
-  const normalizedPathname = normalizePathSeparators(pathname);
-  return [ROUGHDRAFT_FLAVORED_MARKDOWN_PATH, PREVIEW_PATH].includes(
-    normalizedPathname,
-  );
 }
 
 function getRawPathFromLocation(): string | null {
@@ -26,7 +15,6 @@ function getRawPathFromLocation(): string | null {
   if (queryPath) return queryPath;
 
   const normalizedPathname = normalizePathSeparators(window.location.pathname);
-  if (isReservedAppPath(normalizedPathname)) return null;
 
   if (normalizedPathname !== "/" && !normalizedPathname.startsWith("/api")) {
     const decodedPathname = decodeURIComponent(normalizedPathname);

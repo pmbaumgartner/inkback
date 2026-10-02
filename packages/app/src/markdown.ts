@@ -195,7 +195,7 @@ function hasDocumentLevelComment(value: unknown): boolean {
   );
 }
 
-function isRoughdraftReviewEndmatter(endmatter: string): boolean {
+function isNamePlaceholderReviewEndmatter(endmatter: string): boolean {
   const yamlText = endmatter.replace(/^---[ \t]*(?:\r\n|\n)/, "");
   let parsed: unknown;
 
@@ -280,7 +280,7 @@ export function splitYamlDocumentMetadata(
   const candidate = endmatter.replace(/^\n/, "");
 
   const precedingBody = body.slice(0, match.index);
-  if (!isRoughdraftReviewEndmatter(candidate)) {
+  if (!isNamePlaceholderReviewEndmatter(candidate)) {
     return { frontmatter, body, endmatter: null };
   }
   if (!precedingBody.includes("{#")) {

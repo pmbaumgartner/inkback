@@ -2,7 +2,6 @@ import { expect, test } from "@playwright/test";
 import {
   codeEditor,
   createMarkdownProject,
-  logE2eEvent,
   openMarkdownFile,
   removeMarkdownProject,
   writeProjectFile,
@@ -38,7 +37,7 @@ test.describe("opening local markdown files", () => {
         "",
         "| Name | Status |",
         "| --- | --- |",
-        "| Roughdraft | ready |",
+        "| NAME_PLACEHOLDER | ready |",
         "",
         '![Sketch](./images/sketch.png "Sketch title")',
         "",
@@ -62,7 +61,7 @@ test.describe("opening local markdown files", () => {
     const editor = page.getByTestId("rich-text-editor");
     await expect(editor).toContainText("Smoke Fixture");
     await expect(editor).toContainText("first");
-    await expect(editor).toContainText("Roughdraft");
+    await expect(editor).toContainText("NAME_PLACEHOLDER");
     await expect(
       editor.locator('a[data-markdown-src="./notes.md"]', {
         hasText: "local link",
@@ -74,11 +73,6 @@ test.describe("opening local markdown files", () => {
       ),
     ).toBeVisible();
     await expect(editor).toContainText("const value = 1;");
-
-    logE2eEvent("open-file.rendered", {
-      projectDir,
-      file: "review.md",
-    });
   });
 
   test("focuses an existing window for a repeated open request", async ({
@@ -104,10 +98,5 @@ test.describe("opening local markdown files", () => {
     expect(response.ok()).toBe(true);
     await expect(response.json()).resolves.toEqual({ delivered: true });
     await expect(codeEditor(page)).toContainText("Existing window body.");
-
-    logE2eEvent("open-file.reused-existing-window", {
-      projectDir,
-      file: "repeat.md",
-    });
   });
 });

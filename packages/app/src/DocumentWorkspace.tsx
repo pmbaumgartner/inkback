@@ -45,7 +45,6 @@ import {
   type DocumentSaveState,
   PageCard,
 } from "./PageCard";
-import { RobotsHighFiveToy } from "./RobotsHighFiveToy";
 import type {
   CompleteReviewOptions,
   CompleteReviewResult,
@@ -66,57 +65,8 @@ type ReviewHandoffState =
   | "error";
 type FileCopyAction = "path" | "filename" | "markdown" | "rich-text";
 const FILE_COPY_PREVIEW_MAX_LENGTH = 34;
-const reviewCompleteTitles = [
-  "Great work!",
-  "Nice one!",
-  "Well done!",
-  "All set!",
-  "Review complete!",
-  "That’ll do!",
-  "Lovely stuff!",
-  "Job done!",
-  "Done and dusted!",
-  "Nailed it!",
-  "Good stuff!",
-  "Sorted!",
-  "Cracking work!",
-  "Top work!",
-  "Brilliant!",
-  "Ace!",
-  "Spot on!",
-  "Beauty!",
-  "Too easy!",
-  "Good on ya!",
-  "You’re golden!",
-  "That’s the ticket!",
-  "And that’s that!",
-  "Wrapped!",
-  "In the bag!",
-  "Shipshape!",
-  "Right as rain!",
-] as const;
-type ReviewCompleteTitle = (typeof reviewCompleteTitles)[number];
-
 function buildReviewHandoffCopyMessage(documentPath: string) {
   return `I am done reviewing this file: ${documentPath}`;
-}
-
-function getRandomReviewCompleteTitle(random: () => number = Math.random) {
-  const index = Math.floor(random() * reviewCompleteTitles.length);
-  return reviewCompleteTitles[Math.min(index, reviewCompleteTitles.length - 1)];
-}
-
-function getRandomReviewCompleteTitleExcept(
-  currentTitle: ReviewCompleteTitle,
-  random: () => number = Math.random,
-): ReviewCompleteTitle {
-  const otherTitles = reviewCompleteTitles.filter(
-    (title) => title !== currentTitle,
-  );
-  if (otherTitles.length === 0) return currentTitle;
-
-  const index = Math.floor(random() * otherTitles.length);
-  return otherTitles[Math.min(index, otherTitles.length - 1)];
 }
 
 const documentInteractionModeOptions = [
@@ -138,7 +88,7 @@ const conflictNoticeCopy: Record<
 > = {
   changed: {
     title: "File changed on disk",
-    body: "Roughdraft found a newer version of this file on disk. Reload to use that version, or overwrite it with your current draft.",
+    body: "NAME_PLACEHOLDER found a newer version of this file on disk. Reload to use that version, or overwrite it with your current draft.",
   },
   conflict: {
     title: "Save conflict",
@@ -423,9 +373,6 @@ export function DocumentWorkspace({
   const [reviewWatcherSeen, setReviewWatcherSeen] = useState(false);
   const [reviewHandoffPopoverOpen, setReviewHandoffPopoverOpen] =
     useState(false);
-  const [reviewCompleteTitle, setReviewCompleteTitle] = useState(() =>
-    getRandomReviewCompleteTitle(),
-  );
   const [fileCopyMenuOpen, setFileCopyMenuOpen] = useState(false);
   const [copiedFileAction, setCopiedFileAction] =
     useState<FileCopyAction | null>(null);
@@ -534,14 +481,6 @@ export function DocumentWorkspace({
       setReviewHandoffState("idle");
     }
   }, [reviewHandoffState, reviewWatcherCount]);
-
-  useEffect(() => {
-    if (reviewHandoffState === "notified") {
-      setReviewCompleteTitle((currentTitle) =>
-        getRandomReviewCompleteTitleExcept(currentTitle),
-      );
-    }
-  }, [reviewHandoffState]);
 
   useEffect(() => {
     return () => {
@@ -699,7 +638,7 @@ export function DocumentWorkspace({
               ? "Review saved"
               : reviewHandoffState === "error"
                 ? "Could not finish review"
-                : reviewCompleteTitle;
+                : "Review complete";
   const reviewHandoffStatusBody =
     reviewHandoffState === "queued"
       ? "Your review is saved and queued for the Pi session that opened it. Receipt will be confirmed when that session accepts the feedback."
@@ -712,7 +651,7 @@ export function DocumentWorkspace({
             : reviewHandoffState === "undelivered"
               ? "Your review is saved. No agent was connected when you finished. If your agent does not resume, send it the message below."
               : reviewHandoffState === "error"
-                ? "Roughdraft could not finish the handoff. Check the save status and that the local server is still running, then try again."
+                ? "NAME_PLACEHOLDER could not finish the handoff. Check the save status and that the local server is still running, then try again."
                 : "Your review is saved. An agent was connected when you finished, but receipt has not been confirmed.";
   const reviewHandoffCopyMessage = buildReviewHandoffCopyMessage(
     activeDocumentPath ?? documentFilenameLabel,
@@ -737,7 +676,10 @@ export function DocumentWorkspace({
       <RemoteSessionBanner backend={backend} />
       {documentPage ? (
         <div
-          className="fixed top-3 left-3 z-[60]"
+          className={cn(
+            "fixed left-3 z-[60]",
+            conflictNotice ? "top-[19rem] sm:top-[7rem]" : "top-3",
+          )}
           data-testid="document-save-status-corner"
         >
           <DocumentSaveStatusIndicator
@@ -863,18 +805,6 @@ export function DocumentWorkspace({
                   </form>
                 ) : (
                   <div>
-                    {reviewHandoffState === "notified" ||
-                    reviewHandoffState === "undelivered" ? (
-                      <div className="mb-3 flex h-[170px] items-center justify-center overflow-hidden">
-                        <RobotsHighFiveToy
-                          onHighFive={() =>
-                            setReviewCompleteTitle((currentTitle) =>
-                              getRandomReviewCompleteTitleExcept(currentTitle),
-                            )
-                          }
-                        />
-                      </div>
-                    ) : null}
                     <div className="flex items-start gap-3">
                       {reviewHandoffState === "notifying" ||
                       reviewHandoffState === "error" ||

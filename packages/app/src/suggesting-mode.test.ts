@@ -6,7 +6,7 @@ import { createCriticChange } from "./critic-markup";
 import { createEditorExtensions } from "./editor-extensions";
 
 /**
- * Helper: build a tiptap Editor in JSDOM with the standard Roughdraft
+ * Helper: build a tiptap Editor in JSDOM with the standard NAME_PLACEHOLDER
  * extensions. Returns the editor after `onCreate` has fired.
  */
 function createTestEditor(html?: string): Editor {

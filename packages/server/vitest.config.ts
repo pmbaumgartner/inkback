@@ -7,7 +7,7 @@ const dirname = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   resolve: {
     alias: {
-      "@roughdraft/rfm": path.resolve(dirname, "../rfm/src/index.ts"),
+      "@name-placeholder/rfm": path.resolve(dirname, "../rfm/src/index.ts"),
     },
   },
   test: {

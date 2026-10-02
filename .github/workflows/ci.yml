@@ -41,6 +41,3 @@ jobs:
         with:
           name: browser-failure
           path: packages/app/test-results
-
-      - name: Run coverage thresholds
-        run: pnpm test:coverage

@@ -5,7 +5,7 @@ import type { Page } from "@playwright/test";
 import { expect } from "@playwright/test";
 
 export function createMarkdownProject(label: string) {
-  return fs.mkdtempSync(path.join(os.tmpdir(), `roughdraft-${label}-`));
+  return fs.mkdtempSync(path.join(os.tmpdir(), `name-placeholder-${label}-`));
 }
 
 export function removeMarkdownProject(projectDir: string) {
@@ -96,21 +96,4 @@ export async function selectRichText(page: Page, text: string) {
 
     throw new Error(`Could not find text "${targetText}"`);
   }, text);
-}
-
-export function logE2eEvent(event: string, data: Record<string, unknown> = {}) {
-  const file = process.env.THOUGHTFUL_SLOG_FILE;
-  if (!file) return;
-
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.appendFileSync(
-    file,
-    `${JSON.stringify({
-      ts: new Date().toISOString(),
-      runId: process.env.THOUGHTFUL_SLOG_RUN_ID ?? "manual",
-      source: "packages/app/e2e",
-      event,
-      data,
-    })}\n`,
-  );
 }

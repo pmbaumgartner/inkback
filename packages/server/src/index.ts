@@ -5,19 +5,18 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  appendRoughdraftDocumentComment,
-  extractRoughdraftReviewIndex,
-} from "@roughdraft/rfm";
+  appendNamePlaceholderDocumentComment,
+  extractNamePlaceholderReviewIndex,
+} from "@name-placeholder/rfm";
 import express, { type Express, type Request, type Response } from "express";
 import {
   hasNonLoopbackHost,
-  ROUGHDRAFT_DEFAULT_PORT,
-  ROUGHDRAFT_PUBLIC_HOST,
+  NAME_PLACEHOLDER_DEFAULT_PORT,
+  NAME_PLACEHOLDER_PUBLIC_HOST,
   resolveBindHosts,
 } from "./network.js";
 import { ReviewEventQueue } from "./review-events.js";
 import { type ReviewSession, ReviewSessions } from "./review-sessions.js";
-import { resolveUpdateStatus } from "./update-status.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const staticDir = path.resolve(__dirname, "../../app/dist");
@@ -64,9 +63,6 @@ interface CreateAppOptions {
   serverRoot?: string;
   homeDir?: string;
   staticDirPath?: string;
-  packageJsonPath?: string;
-  fetchImpl?: typeof fetch;
-  packageName?: string;
   remoteDocumentToken?: string;
 }
 
@@ -234,7 +230,7 @@ function pageFilePathFromId(projectDir: string, id: string): string | null {
 }
 
 function nextAssetPath(projectDir: string, filename: string): string {
-  const assetsDir = path.join(projectDir, ".roughdraft-assets");
+  const assetsDir = path.join(projectDir, ".name-placeholder-assets");
   fs.mkdirSync(assetsDir, { recursive: true });
 
   const safeName = sanitizeFilename(filename);
@@ -246,7 +242,7 @@ function nextAssetPath(projectDir: string, filename: string): string {
   let counter = 0;
   while (true) {
     const suffix = counter === 0 ? "" : `-${counter}`;
-    const relativePath = `.roughdraft-assets/${basename}${suffix}${extension}`;
+    const relativePath = `.name-placeholder-assets/${basename}${suffix}${extension}`;
     const absolutePath = path.join(projectDir, relativePath);
     if (!fs.existsSync(absolutePath)) {
       return relativePath;
@@ -394,11 +390,10 @@ function listProjectTree(projectDir: string): ProjectTreeListing {
 }
 
 export function createApp(options: CreateAppOptions = {}): CreateAppResult {
-  const port = options.port ?? ROUGHDRAFT_DEFAULT_PORT;
+  const port = options.port ?? NAME_PLACEHOLDER_DEFAULT_PORT;
   const homeDir = options.homeDir ?? os.homedir();
   const serverRoot = path.resolve(options.serverRoot ?? defaultServerRoot);
   const staticDirPath = options.staticDirPath ?? staticDir;
-  const fetchImpl = options.fetchImpl ?? fetch;
   const remoteDocumentToken =
     typeof options.remoteDocumentToken === "string" &&
     options.remoteDocumentToken.length > 0
@@ -436,7 +431,7 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
   function rejectUnauthorizedRemoteDocumentRequest(res: Response): void {
     res.status(401).json({
       error:
-        "Remote document endpoints require a valid token. Set ROUGHDRAFT_TOKEN on the client; browser event streams may include ?token=... in the URL.",
+        "Remote document endpoints require a valid token. Set NAME_PLACEHOLDER_TOKEN on the client; browser event streams may include ?token=... in the URL.",
     });
   }
 
@@ -634,7 +629,7 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
       projectPath: target.projectDir,
       relativePath: target.relativePath,
       fileVersion: fileVersionFromFile(target.absolutePath),
-      ...extractRoughdraftReviewIndex(markdown),
+      ...extractNamePlaceholderReviewIndex(markdown),
     });
   });
 
@@ -681,7 +676,7 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
       res.status(404).json({ error: "Review session not found" });
       return;
     }
-    if (req.get("x-roughdraft-receipt-token") !== session.receiptToken) {
+    if (req.get("x-name-placeholder-receipt-token") !== session.receiptToken) {
       res.status(403).json({ error: "Review receipt token required" });
       return;
     }
@@ -746,7 +741,7 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
 
     const markdown = fs.readFileSync(target.absolutePath, "utf-8");
     const persistedMarkdown = overallComment
-      ? appendRoughdraftDocumentComment(markdown, {
+      ? appendNamePlaceholderDocumentComment(markdown, {
           message: overallComment,
           author: "user",
         })
@@ -755,7 +750,7 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
       fs.writeFileSync(target.absolutePath, persistedMarkdown);
     }
 
-    const index = extractRoughdraftReviewIndex(persistedMarkdown);
+    const index = extractNamePlaceholderReviewIndex(persistedMarkdown);
     const result = reviewEvents.emit({
       ...(session ? { reviewId: session.reviewId } : {}),
       documentPath: target.absolutePath,
@@ -1225,15 +1220,6 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
     });
   });
 
-  app.get("/api/update-status", async (_req, res) => {
-    const updateStatus = await resolveUpdateStatus({
-      fetchImpl,
-      packageJsonPath: options.packageJsonPath,
-      packageName: options.packageName,
-    });
-    res.json(updateStatus);
-  });
-
   app.get("/api/directories", (req, res) => {
     const requestedPath =
       typeof req.query.path === "string" && req.query.path.trim().length > 0
@@ -1376,23 +1362,23 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
   return { app, port };
 }
 
-export const ROUGHDRAFT_TOKEN_ENV = "ROUGHDRAFT_TOKEN";
+export const NAME_PLACEHOLDER_TOKEN_ENV = "NAME_PLACEHOLDER_TOKEN";
 
 export async function createServer(
-  port = ROUGHDRAFT_DEFAULT_PORT,
+  port = NAME_PLACEHOLDER_DEFAULT_PORT,
   projectDir?: string,
 ): Promise<void> {
   const bindHosts = resolveBindHosts();
-  const remoteDocumentToken = process.env[ROUGHDRAFT_TOKEN_ENV] ?? "";
+  const remoteDocumentToken = process.env[NAME_PLACEHOLDER_TOKEN_ENV] ?? "";
 
   if (hasNonLoopbackHost(bindHosts) && remoteDocumentToken.length === 0) {
     throw new Error(
       [
-        `Roughdraft refuses to bind ${bindHosts.join(", ")} without a token.`,
+        `NAME_PLACEHOLDER refuses to bind ${bindHosts.join(", ")} without a token.`,
         "Non-loopback bindings expose the remote-document endpoints, which can",
-        "rewrite files on every connected CLI machine. Set ROUGHDRAFT_TOKEN to",
+        "rewrite files on every connected CLI machine. Set NAME_PLACEHOLDER_TOKEN to",
         "a strong secret and pass the same value to your CLI before retrying,",
-        "or remove ROUGHDRAFT_BIND_HOST to keep loopback-only.",
+        "or remove NAME_PLACEHOLDER_BIND_HOST to keep loopback-only.",
       ].join(" "),
     );
   }
@@ -1433,12 +1419,12 @@ export async function createServer(
 
   if (listeningHosts.length === 0) {
     throw new Error(
-      `Roughdraft could not bind to any host (tried: ${bindHosts.join(", ")}).`,
+      `NAME_PLACEHOLDER could not bind to any host (tried: ${bindHosts.join(", ")}).`,
     );
   }
 
   console.log(
-    `\n  Roughdraft running at http://${ROUGHDRAFT_PUBLIC_HOST}:${port}`,
+    `\n  NAME_PLACEHOLDER running at http://${NAME_PLACEHOLDER_PUBLIC_HOST}:${port}`,
   );
   console.log("  No active project is stored on the server.\n");
 }

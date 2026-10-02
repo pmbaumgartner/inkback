@@ -1,22 +1,22 @@
-export { ROUGHDRAFT_DEFAULT_PORT } from "../defaults.mjs";
-export const ROUGHDRAFT_BIND_HOST = "127.0.0.1";
-export const ROUGHDRAFT_LOOPBACK_HOSTS = ["127.0.0.1", "::1"] as const;
-export const ROUGHDRAFT_PUBLIC_HOST = "localhost";
+export { NAME_PLACEHOLDER_DEFAULT_PORT } from "../defaults.mjs";
+export const NAME_PLACEHOLDER_BIND_HOST = "127.0.0.1";
+export const NAME_PLACEHOLDER_LOOPBACK_HOSTS = ["127.0.0.1", "::1"] as const;
+export const NAME_PLACEHOLDER_PUBLIC_HOST = "localhost";
 
-export const ROUGHDRAFT_BIND_HOST_ENV = "ROUGHDRAFT_BIND_HOST";
+export const NAME_PLACEHOLDER_BIND_HOST_ENV = "NAME_PLACEHOLDER_BIND_HOST";
 
 const LOOPBACK_HOST_NAMES = new Set<string>([
-  ...ROUGHDRAFT_LOOPBACK_HOSTS,
+  ...NAME_PLACEHOLDER_LOOPBACK_HOSTS,
   "localhost",
 ]);
 
 export function resolveBindHosts(
   env: NodeJS.ProcessEnv = process.env,
 ): readonly string[] {
-  const raw = env[ROUGHDRAFT_BIND_HOST_ENV];
+  const raw = env[NAME_PLACEHOLDER_BIND_HOST_ENV];
 
   if (raw === undefined) {
-    return ROUGHDRAFT_LOOPBACK_HOSTS;
+    return NAME_PLACEHOLDER_LOOPBACK_HOSTS;
   }
 
   const hosts = raw
@@ -25,7 +25,7 @@ export function resolveBindHosts(
     .filter((host) => host.length > 0);
 
   if (hosts.length === 0) {
-    return ROUGHDRAFT_LOOPBACK_HOSTS;
+    return NAME_PLACEHOLDER_LOOPBACK_HOSTS;
   }
 
   return hosts;

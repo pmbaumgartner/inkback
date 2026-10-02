@@ -3,38 +3,6 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
 
-@font-face {
-  font-family: "Die Grotesk A";
-  src: url("./assets/fonts/die-grotesk-a-bold.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Die Grotesk B";
-  src: url("./assets/fonts/die-grotesk-b-bold.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Die Grotesk C";
-  src: url("./assets/fonts/die-grotesk-c-bold.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Die Grotesk D";
-  src: url("./assets/fonts/die-grotesk-d-bold.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-}
-
 @custom-variant dark (&:is(.dark *));
 
 @layer base {
@@ -73,20 +41,6 @@
 }
 
 @layer components {
-  .review-handoff-robots .flash {
-    transform-origin: 340px 165px;
-    opacity: 0;
-  }
-
-  .review-handoff-robots .flash.pop {
-    animation: review-handoff-robots-pop 450ms ease-out;
-  }
-
-  .review-handoff-robots .bob-l.hop,
-  .review-handoff-robots .bob-r.hop {
-    animation: review-handoff-robots-hop 400ms ease-out;
-  }
-
   .tiptap {
     @apply min-h-[120px] text-slate-800 dark:text-slate-200 outline-none;
     --editor-font-size: 16px;
@@ -554,94 +508,11 @@
   .dark .markdown-code-editor .cm-dropCursor {
     border-left-color: rgb(226 232 240);
   }
-
-  .rfm-source-editor .cm-editor {
-    min-height: calc(70vh + 4.5rem);
-  }
-
-  .rfm-source-editor .cm-scroller {
-    min-height: calc(70vh + 4.5rem);
-  }
-
-  .rfm-source-editor .cm-content {
-    min-height: 19rem;
-    padding: 1rem;
-  }
-
-  .rfm-source-editor .cm-line {
-    padding: 0;
-  }
-
-  .rfm-source-editor .cm-content,
-  .rfm-source-editor .cm-line {
-    caret-color: rgb(226 232 240);
-  }
-
-  .rfm-source-editor .cm-cursor,
-  .rfm-source-editor .cm-dropCursor {
-    border-left-color: rgb(226 232 240);
-  }
-
-  .rfm-source-editor .cm-gutters {
-    color: rgb(148 163 184);
-  }
-
-  .rfm-source-editor .cm-activeLineGutter {
-    color: rgb(226 232 240);
-  }
-
-  .rfm-result-editor .tiptap {
-    min-height: 17rem;
-    --editor-font-size: 14px;
-  }
-
-  .rfm-result-editor .tiptap h1 {
-    font-size: 1.65em;
-  }
-
-  .rfm-result-editor .tiptap h2 {
-    margin-top: 1.2em;
-    font-size: 1.3em;
-  }
-
-  .rfm-result-editor .tiptap h3 {
-    margin-top: 1em;
-    font-size: 1.12em;
-  }
-}
-
-@keyframes review-handoff-robots-pop {
-  0% {
-    opacity: 0;
-    transform: scale(0.3);
-  }
-  35% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: scale(1.6);
-  }
-}
-
-@keyframes review-handoff-robots-hop {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  45% {
-    transform: translateY(-7px);
-  }
 }
 
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans: "Inter Variable", sans-serif;
-  --font-die-grotesk-a: "Die Grotesk A", sans-serif;
-  --font-die-grotesk-b: "Die Grotesk B", sans-serif;
-  --font-die-grotesk-c: "Die Grotesk C", sans-serif;
-  --font-die-grotesk-d: "Die Grotesk D", sans-serif;
   --color-emerald-850: rgb(6 83 61);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);

@@ -15,8 +15,10 @@ describe("createApp", () => {
   );
 
   beforeEach(() => {
-    projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "roughdraft-server-"));
-    homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "roughdraft-home-"));
+    projectDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "name-placeholder-server-"),
+    );
+    homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "name-placeholder-home-"));
   });
 
   afterEach(() => {
@@ -175,7 +177,7 @@ describe("createApp", () => {
         path: "notes/draft.md",
       })
       .send({
-        content: "# Roughdraft change\n",
+        content: "# NAME_PLACEHOLDER change\n",
         expectedVersion: readResponse.body.version,
       });
 
@@ -220,7 +222,7 @@ describe("createApp", () => {
         path: "draft.md",
       })
       .send({
-        content: "# Roughdraft\n",
+        content: "# NAME_PLACEHOLDER\n",
         expectedVersion: readResponse.body.version,
       });
 
@@ -597,36 +599,6 @@ describe("createApp", () => {
     expect(response.body).not.toHaveProperty("projectDir");
   });
 
-  it("reports update status from npm metadata", async () => {
-    const packageJsonPath = path.join(projectDir, "package.json");
-    fs.writeFileSync(
-      packageJsonPath,
-      JSON.stringify({ name: "roughdraft", version: "0.1.0" }),
-    );
-
-    const { app } = createApp({
-      homeDir,
-      staticDirPath: projectDir,
-      packageJsonPath,
-      fetchImpl: async () =>
-        new Response(JSON.stringify({ version: "0.2.0" }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-    });
-
-    const response = await request(app).get("/api/update-status");
-
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual({
-      packageName: "roughdraft",
-      currentVersion: "0.1.0",
-      latestVersion: "0.2.0",
-      updateAvailable: true,
-      updateCommand: "npm i -g roughdraft@latest",
-    });
-  });
-
   it("lists directories from the home directory when no path is provided", async () => {
     fs.mkdirSync(path.join(homeDir, "docs"));
 
@@ -780,13 +752,13 @@ describe("createApp", () => {
 
     expect(assetResponse.status).toBe(201);
     expect(assetResponse.body).toMatchObject({
-      markdownPath: "./.roughdraft-assets/My-Sketch.png",
+      markdownPath: "./.name-placeholder-assets/My-Sketch.png",
       mimeType: "image/png",
     });
     expect(assetResponse.body.previewUrl).toContain("/api/files?");
     expect(
       fs.readFileSync(
-        path.join(projectDir, ".roughdraft-assets", "My-Sketch.png"),
+        path.join(projectDir, ".name-placeholder-assets", "My-Sketch.png"),
         "utf-8",
       ),
     ).toBe("png bytes");

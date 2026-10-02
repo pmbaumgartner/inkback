@@ -1,7 +1,7 @@
 import type { BackendInfo, Page, StorageBackend, StoredAsset } from "./storage";
 
-const PAGES_KEY = "roughdraft:pages";
-const ASSETS_KEY = "roughdraft:assets";
+const PAGES_KEY = "name-placeholder:pages";
+const ASSETS_KEY = "name-placeholder:assets";
 
 interface LocalAssetRecord {
   path: string;
@@ -54,7 +54,7 @@ function nextAssetPath(
 
   while (true) {
     const suffix = counter === 0 ? "" : `-${counter}`;
-    const path = `./.roughdraft-assets/${basename}${suffix}${extension}`;
+    const path = `./.name-placeholder-assets/${basename}${suffix}${extension}`;
     if (!assets[path]) return path;
     counter += 1;
   }

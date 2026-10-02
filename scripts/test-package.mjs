@@ -1,21 +1,15 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import {
-  existsSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 // Test the distributed package outside the workspace so development dependencies
-// cannot hide missing runtime dependencies. Build first when no package is given.
+// cannot hide missing runtime dependencies. Run after building the workspace.
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
-const temporary = mkdtempSync(path.join(tmpdir(), "roughdraft-package-"));
+const temporary = mkdtempSync(path.join(tmpdir(), "name-placeholder-package-"));
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 
 function run(command, args, cwd = temporary) {
@@ -58,8 +52,8 @@ try {
   const cli = path.join(
     prefix,
     ...(process.platform === "win32"
-      ? ["roughdraft.cmd"]
-      : ["bin", "roughdraft"]),
+      ? ["name-placeholder.cmd"]
+      : ["bin", "name-placeholder"]),
   );
   const version = run(cli, ["--version"]);
   assert.match(
@@ -71,15 +65,11 @@ try {
   const workspace = path.join(temporary, "agent-workspace");
   const instructions = path.join(temporary, "AGENTS.md");
   writeFileSync(instructions, "Existing agent instructions\n");
-  const skill = path.join(workspace, ".agents", "skills", "roughdraft");
+  const skill = path.join(workspace, ".agents", "skills", "name-placeholder");
   run(cli, ["skill", "install", skill]);
   assert.match(
     readFileSync(path.join(skill, "SKILL.md"), "utf8"),
-    /name: roughdraft/,
-  );
-  assert.ok(
-    existsSync(path.join(skill, "references", "environment-setup.md")),
-    "Installed skill includes its setup reference",
+    /name: name-placeholder/,
   );
   assert.equal(
     readFileSync(instructions, "utf8"),
@@ -87,7 +77,7 @@ try {
     "Skill installation preserves agent instructions",
   );
   run(cli, ["skill", "install", skill, "--force"]);
-  console.log(`Installed package CLI passed: roughdraft ${version}`);
+  console.log(`Installed package CLI passed: name-placeholder ${version}`);
 } finally {
   rmSync(temporary, { recursive: true, force: true });
 }

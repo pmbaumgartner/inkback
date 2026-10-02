@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import path from "node:path";
 
 export interface ReviewCompletedEventInput {
@@ -80,14 +79,6 @@ export class ReviewEventQueue {
     this.events.push(event);
     this.events = this.events.slice(-MAX_RETAINED_EVENTS);
 
-    appendSlog("review-events.emit", {
-      documentPath: event.documentPath,
-      sequence: event.sequence,
-      waiters: this.waiters.size,
-      hasOverallComment: typeof event.overallComment === "string",
-      overallCommentLength: event.overallComment?.length ?? 0,
-    });
-
     let delivered = false;
     for (const waiter of [...this.waiters]) {
       if (matchesWaiter(event, waiter.options)) {
@@ -133,21 +124,12 @@ export class ReviewEventQueue {
       if (signal) {
         const onAbort = () => {
           if (!this.removeWaiter(waiter)) return;
-          appendSlog("review-events.cancel", {
-            documentPath: normalized.documentPath ?? null,
-            waiters: this.waiters.size,
-          });
           waiter.reject(signal.reason);
         };
         signal.addEventListener("abort", onAbort, { once: true });
         waiter.removeAbortListener = () =>
           signal.removeEventListener("abort", onAbort);
       }
-      appendSlog("review-events.wait", {
-        documentPath: normalized.documentPath ?? null,
-        afterSequence: normalized.afterSequence,
-        timeoutMs: normalized.timeoutMs,
-      });
     });
   }
 
@@ -254,21 +236,4 @@ function resultForEvents(
 function clamp(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min;
   return Math.min(max, Math.max(min, value));
-}
-
-function appendSlog(event: string, data: Record<string, unknown>): void {
-  const file = process.env.THOUGHTFUL_SLOG_FILE;
-  if (!file) return;
-
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.appendFileSync(
-    file,
-    `${JSON.stringify({
-      ts: new Date().toISOString(),
-      runId: process.env.THOUGHTFUL_SLOG_RUN_ID ?? "manual",
-      source: "packages/server/src/review-events.ts",
-      event,
-      data,
-    })}\n`,
-  );
 }

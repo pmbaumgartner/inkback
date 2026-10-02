@@ -1,7 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
   createMarkdownProject,
-  logE2eEvent,
   openMarkdownFile,
   readProjectFile,
   removeMarkdownProject,
@@ -51,7 +50,6 @@ test("preserves multiline code when saving and reloading a comment @smoke", asyn
       "Use two",
     );
     expect(await richTextEditor(page).textContent()).toBe(code);
-    logE2eEvent("criticmarkup.code-whitespace-preserved", { file: "code.md" });
   } finally {
     removeMarkdownProject(projectDir);
   }
