@@ -591,6 +591,7 @@ describe("createApp", () => {
         fileSystemBrowsing: true,
         remoteDocuments: true,
         remoteDocumentTokenRequired: false,
+        reviewSessions: true,
       },
     });
     expect(response.body).not.toHaveProperty("projectDir");

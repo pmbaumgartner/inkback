@@ -171,6 +171,8 @@ function buildLocationForPath(path?: string | null) {
   const nextPath = path?.trim() || null;
   const url = new URL(window.location.href);
 
+  if (nextPath !== getRawPathFromLocation())
+    url.searchParams.delete("reviewId");
   if (nextPath) {
     if (!nextPath.startsWith("/") && !nextPath.includes("\\")) {
       url.pathname = nextPath.startsWith("/") ? nextPath : `/${nextPath}`;

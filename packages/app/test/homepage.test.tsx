@@ -2,15 +2,13 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AGENT_SETUP_PROMPT } from "../../server/setup.mjs";
 import {
   Homepage,
   HomepageSubtitle,
   PreviewPage,
   RoughdraftFlavoredMarkdownPage,
 } from "../src/App";
-
-const AGENT_SETUP_PROMPT =
-  "Install Roughdraft for me using `npm install -g https://github.com/pmbaumgartner/roughdraft/releases/download/v0.1.11-pmbaumgartner.2/roughdraft-0.1.11-pmbaumgartner.2.tgz`, then read https://raw.githubusercontent.com/pmbaumgartner/roughdraft/main/packages/app/public/setup.md and set yourself up to use it.";
 
 function createDomRect({
   left = 0,

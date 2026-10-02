@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateRoughdraftMarkdown } from "@roughdraft/rfm";
+import { AGENT_SETUP_PROMPT } from "../setup.mjs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createCliDependencies,
@@ -1429,9 +1430,7 @@ describe("cli", () => {
     expect(test.logs).toContain(
       "To set up your coding agent, paste this into it:",
     );
-    expect(test.logs).toContain(
-      "Install Roughdraft for me using `npm install -g https://github.com/pmbaumgartner/roughdraft/releases/download/v0.1.11-pmbaumgartner.2/roughdraft-0.1.11-pmbaumgartner.2.tgz`, then read https://raw.githubusercontent.com/pmbaumgartner/roughdraft/main/packages/app/public/setup.md and set yourself up to use it.",
-    );
+    expect(test.logs).toContain(AGENT_SETUP_PROMPT);
     expect(test.logs).toContain(
       "This command only prints setup text. It does not edit agent instruction files.",
     );

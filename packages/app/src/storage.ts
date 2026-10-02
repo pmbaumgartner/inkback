@@ -29,6 +29,7 @@ export interface StoredAsset {
 
 export interface CompleteReviewResult {
   delivered: boolean;
+  state?: "waiting" | "queued" | "received" | "cancelled";
 }
 
 export interface CompleteReviewOptions {
@@ -38,6 +39,7 @@ export interface CompleteReviewOptions {
 export interface ReviewWatchStatus {
   watching: boolean;
   watcherCount: number;
+  state?: CompleteReviewResult["state"];
 }
 
 export interface BackendInfo {

@@ -46,7 +46,12 @@ import {
   PageCard,
 } from "./PageCard";
 import { RobotsHighFiveToy } from "./RobotsHighFiveToy";
-import type { CompleteReviewOptions, Page, StorageBackend } from "./storage";
+import type {
+  CompleteReviewOptions,
+  CompleteReviewResult,
+  Page,
+  StorageBackend,
+} from "./storage";
 import { useReviewLayoutShiftAnimation } from "./useReviewLayoutShiftAnimation";
 
 type DiskChangeState = "clean" | "changed" | "conflict" | "paused";
@@ -54,6 +59,9 @@ type ReviewHandoffState =
   | "idle"
   | "notifying"
   | "notified"
+  | "queued"
+  | "received"
+  | "cancelled"
   | "undelivered"
   | "error";
 type FileCopyAction = "path" | "filename" | "markdown" | "rich-text";
@@ -356,7 +364,9 @@ export function getReviewHandoffButtonLabel({
 }) {
   return reviewHandoffState === "notifying"
     ? "Finishing"
-    : reviewHandoffState === "notified" || reviewHandoffState === "undelivered"
+    : ["notified", "undelivered", "queued", "received", "cancelled"].includes(
+          reviewHandoffState,
+        )
       ? "Finished"
       : reviewHandoffState === "error"
         ? "Could not finish"
@@ -381,7 +391,7 @@ interface DocumentWorkspaceProps {
   onOverwriteDocumentOnDisk: () => void | Promise<void>;
   onCompleteReview: (
     options?: CompleteReviewOptions,
-  ) => Promise<{ delivered: boolean }>;
+  ) => Promise<CompleteReviewResult>;
   backend: StorageBackend | null;
 }
 
@@ -480,7 +490,13 @@ export function DocumentWorkspace({
         if (!cancelled) {
           const watcherCount = status?.watcherCount ?? 0;
           setReviewWatcherCount(watcherCount);
-          if (watcherCount > 0) setReviewWatcherSeen(true);
+          if (watcherCount > 0 || status?.state) setReviewWatcherSeen(true);
+          if (
+            status?.state === "queued" ||
+            status?.state === "received" ||
+            status?.state === "cancelled"
+          )
+            setReviewHandoffState(status.state);
         }
       } catch {
         if (!cancelled) {
@@ -578,7 +594,10 @@ export function DocumentWorkspace({
         const result = await onCompleteReview(options);
         if (documentGenerationRef.current !== documentGeneration) return;
         setOverallComment("");
-        if (result.delivered) {
+        if (result.state === "queued" || result.state === "received") {
+          setReviewHandoffState(result.state);
+          setReviewHandoffPopoverOpen(true);
+        } else if (result.delivered) {
           setReviewWatcherCount(0);
           setReviewHandoffState("notified");
           setReviewHandoffPopoverOpen(true);
@@ -668,21 +687,33 @@ export function DocumentWorkspace({
         ? AlertTriangle
         : null;
   const reviewHandoffStatusTitle =
-    reviewHandoffState === "notifying"
-      ? "Finishing review"
-      : reviewHandoffState === "undelivered"
-        ? "Review saved"
-        : reviewHandoffState === "error"
-          ? "Could not finish review"
-          : reviewCompleteTitle;
+    reviewHandoffState === "queued"
+      ? "Waiting for Pi"
+      : reviewHandoffState === "received"
+        ? "Received by Pi"
+        : reviewHandoffState === "cancelled"
+          ? "Review cancelled"
+          : reviewHandoffState === "notifying"
+            ? "Finishing review"
+            : reviewHandoffState === "undelivered"
+              ? "Review saved"
+              : reviewHandoffState === "error"
+                ? "Could not finish review"
+                : reviewCompleteTitle;
   const reviewHandoffStatusBody =
-    reviewHandoffState === "notifying"
-      ? "Saving your latest edits and finishing the handoff."
-      : reviewHandoffState === "undelivered"
-        ? "Your review is saved. No agent was connected when you finished. If your agent does not resume, send it the message below."
-        : reviewHandoffState === "error"
-          ? "Roughdraft could not finish the handoff. Check the save status and that the local server is still running, then try again."
-          : "Your review is saved. An agent was connected when you finished, but receipt has not been confirmed.";
+    reviewHandoffState === "queued"
+      ? "Your review is saved and queued for the Pi session that opened it. Receipt will be confirmed when that session accepts the feedback."
+      : reviewHandoffState === "received"
+        ? "Your review is saved. The Pi session that opened it has accepted the feedback."
+        : reviewHandoffState === "cancelled"
+          ? "Your edits remain saved. Pi stopped waiting for this review. Start a new review from Pi, or copy the message below."
+          : reviewHandoffState === "notifying"
+            ? "Saving your latest edits and finishing the handoff."
+            : reviewHandoffState === "undelivered"
+              ? "Your review is saved. No agent was connected when you finished. If your agent does not resume, send it the message below."
+              : reviewHandoffState === "error"
+                ? "Roughdraft could not finish the handoff. Check the save status and that the local server is still running, then try again."
+                : "Your review is saved. An agent was connected when you finished, but receipt has not been confirmed.";
   const reviewHandoffCopyMessage = buildReviewHandoffCopyMessage(
     activeDocumentPath ?? documentFilenameLabel,
   );

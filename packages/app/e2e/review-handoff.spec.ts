@@ -23,6 +23,70 @@ test.describe("review handoff", () => {
     removeMarkdownProject(projectDir);
   });
 
+  for (const terminal of ["received", "cancelled"] as const) {
+    test(`shows queued feedback until its Pi session is ${terminal} @smoke`, async ({
+      page,
+      request,
+    }) => {
+      const relativePath = "scoped-review.md";
+      const filePath = writeProjectFile(
+        projectDir,
+        relativePath,
+        "# Scoped review\n\nSaved text.\n",
+      );
+      const created = await request.post("/api/review-sessions", {
+        data: { projectPath: projectDir, path: relativePath },
+      });
+      expect(created.status()).toBe(201);
+      const { reviewId, receiptToken } = await created.json();
+      await page.goto(
+        `/?${new URLSearchParams({ path: filePath, editor: "code", reviewId })}`,
+      );
+      await expect(page.getByTestId("review-handoff-button")).toBeVisible();
+      await appendInCodeEditor(page, "\nHuman edit before handoff.");
+      await page.getByTestId("review-handoff-button").click();
+      const status = page.getByTestId("review-handoff-status");
+      await expect(status).toContainText("Waiting for Pi");
+      await expect(status).not.toContainText("Received by Pi");
+      expect(readProjectFile(projectDir, relativePath)).toContain(
+        "Human edit before handoff.",
+      );
+      if (terminal === "received") {
+        const completed = await request.post("/api/review-events/watch", {
+          data: {
+            projectPath: projectDir,
+            path: relativePath,
+            reviewId,
+            fromNow: false,
+            timeoutSeconds: 0,
+            batchWindowSeconds: 0,
+          },
+        });
+        const { events } = await completed.json();
+        expect(events).toHaveLength(1);
+        const acknowledged = await request.post(
+          `/api/review-sessions/${reviewId}/ack`,
+          {
+            headers: { "x-roughdraft-receipt-token": receiptToken },
+            data: { sequence: events[0].sequence },
+          },
+        );
+        expect(acknowledged.status()).toBe(200);
+        await expect(status).toContainText("Received by Pi");
+      } else {
+        const cancelled = await request.delete(
+          `/api/review-sessions/${reviewId}`,
+          { headers: { "x-roughdraft-receipt-token": receiptToken } },
+        );
+        expect(cancelled.status()).toBe(200);
+        await expect(status).toContainText("Review cancelled");
+        await expect(
+          status.getByTestId("review-handoff-copy-message"),
+        ).toBeVisible();
+      }
+    });
+  }
+
   test("persists an overall handoff comment from the primary done button to YAML endmatter @smoke", async ({
     page,
     request,

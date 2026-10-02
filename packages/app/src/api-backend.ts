@@ -1,3 +1,4 @@
+import { getRequestedPathState } from "./app-navigation";
 import {
   type BackendInfo,
   type CompleteReviewOptions,
@@ -39,6 +40,18 @@ export class ApiBackend implements StorageBackend {
     });
 
     return `${url.pathname}${url.search}`;
+  }
+
+  private reviewIdFor(relativePath: string): string | undefined {
+    const requested = getRequestedPathState();
+    if (
+      requested.documentPath !== relativePath ||
+      requested.projectPath !== this.info.projectPath
+    )
+      return undefined;
+    return (
+      new URLSearchParams(window.location.search).get("reviewId") || undefined
+    );
   }
 
   async getMarkdownFile(relativePath: string): Promise<Page> {
@@ -116,6 +129,7 @@ export class ApiBackend implements StorageBackend {
     options: CompleteReviewOptions = {},
   ): Promise<CompleteReviewResult> {
     const overallComment = options.overallComment?.trim();
+    const reviewId = this.reviewIdFor(relativePath);
     const res = await fetch(
       this.buildUrl("/api/review-events", { path: relativePath }),
       {
@@ -124,6 +138,7 @@ export class ApiBackend implements StorageBackend {
         body: JSON.stringify({
           projectPath: this.info.projectPath,
           path: relativePath,
+          ...(reviewId ? { reviewId } : {}),
           ...(overallComment ? { overallComment } : {}),
         }),
       },
@@ -135,13 +150,20 @@ export class ApiBackend implements StorageBackend {
       );
     }
 
-    const payload = (await res.json()) as { delivered?: unknown };
-    return { delivered: payload.delivered === true };
+    const payload = (await res.json()) as {
+      delivered?: unknown;
+      state?: CompleteReviewResult["state"];
+    };
+    return { delivered: payload.delivered === true, state: payload.state };
   }
 
   async getReviewWatchStatus(relativePath: string): Promise<ReviewWatchStatus> {
+    const reviewId = this.reviewIdFor(relativePath);
     const res = await fetch(
-      this.buildUrl("/api/review-events/status", { path: relativePath }),
+      this.buildUrl("/api/review-events/status", {
+        path: relativePath,
+        ...(reviewId ? { reviewId } : {}),
+      }),
     );
 
     if (!res.ok) {
@@ -153,8 +175,10 @@ export class ApiBackend implements StorageBackend {
     const payload = (await res.json()) as {
       watching?: unknown;
       watcherCount?: unknown;
+      state?: CompleteReviewResult["state"];
     };
     return {
+      state: payload.state,
       watching: payload.watching === true,
       watcherCount:
         typeof payload.watcherCount === "number" ? payload.watcherCount : 0,

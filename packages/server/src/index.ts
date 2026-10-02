@@ -16,6 +16,7 @@ import {
   resolveBindHosts,
 } from "./network.js";
 import { ReviewEventQueue } from "./review-events.js";
+import { type ReviewSession, ReviewSessions } from "./review-sessions.js";
 import { resolveUpdateStatus } from "./update-status.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -406,6 +407,7 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
   const app = express();
   const openRequestClients = new Set<OpenRequestClient>();
   const reviewEvents = new ReviewEventQueue();
+  const reviewSessions = new ReviewSessions();
   const remoteSessions = new Map<string, RemoteSession>();
 
   function isAuthorizedRemoteDocumentRequest(req: Request): boolean {
@@ -636,9 +638,100 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
     });
   });
 
+  function requestedReviewSession(
+    req: Request,
+    res: Response,
+    documentPath: string,
+  ): ReviewSession | undefined | false {
+    const id = req.body?.reviewId ?? req.query.reviewId;
+    if (id === undefined) return undefined;
+    const session = typeof id === "string" ? reviewSessions.get(id) : undefined;
+    if (!session || session.documentPath !== documentPath) {
+      res
+        .status(404)
+        .json({ error: "Review session not found for this document" });
+      return false;
+    }
+    return session;
+  }
+
+  app.post("/api/review-sessions", (req, res) => {
+    const target = markdownPathFromRequest(req, res);
+    if (!target) return;
+    const session = reviewSessions.create(target.absolutePath);
+    if (!session) {
+      res.status(503).json({
+        error: "Too many active reviews; cancel an unused review first",
+      });
+      return;
+    }
+    res.status(201).json({
+      reviewId: session.reviewId,
+      receiptToken: session.receiptToken,
+      state: session.state,
+    });
+  });
+
+  function receiptSession(
+    req: Request,
+    res: Response,
+  ): ReviewSession | undefined {
+    const session = reviewSessions.get(String(req.params.id));
+    if (!session) {
+      res.status(404).json({ error: "Review session not found" });
+      return;
+    }
+    if (req.get("x-roughdraft-receipt-token") !== session.receiptToken) {
+      res.status(403).json({ error: "Review receipt token required" });
+      return;
+    }
+    return session;
+  }
+
+  app.post("/api/review-sessions/:id/ack", (req, res) => {
+    const session = receiptSession(req, res);
+    if (!session) return;
+    if (
+      session.state === "cancelled" ||
+      !session.completion ||
+      req.body?.sequence !== session.completion.event.sequence
+    ) {
+      res
+        .status(409)
+        .json({ error: "No matching pending review to acknowledge" });
+      return;
+    }
+    session.state = "received";
+    res.json({ reviewId: session.reviewId, state: session.state });
+  });
+
+  app.delete("/api/review-sessions/:id", (req, res) => {
+    const session = receiptSession(req, res);
+    if (!session) return;
+    reviewSessions.cancel(session);
+    res.json({ reviewId: session.reviewId, state: session.state });
+  });
+
   app.post("/api/review-events", (req, res) => {
     const target = markdownPathFromRequest(req, res);
     if (!target) return;
+    const session = requestedReviewSession(req, res, target.absolutePath);
+    if (session === false) return;
+    if (session?.state === "cancelled") {
+      res.status(410).json({
+        error: "This review was cancelled. Reopen from the waiting agent.",
+      });
+      return;
+    }
+    // A browser retry must not append the overall comment or enqueue it twice.
+    if (session?.completion) {
+      res.status(201).json({
+        ...session.completion,
+        reviewId: session.reviewId,
+        state: session.state,
+      });
+      return;
+    }
 
     const overallComment = normalizeOverallComment(req.body?.overallComment);
     if (
@@ -664,6 +757,7 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
 
     const index = extractRoughdraftReviewIndex(persistedMarkdown);
     const result = reviewEvents.emit({
+      ...(session ? { reviewId: session.reviewId } : {}),
       documentPath: target.absolutePath,
       projectPath: target.projectDir,
       relativePath: target.relativePath,
@@ -672,12 +766,25 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
       overallComment,
     });
 
-    res.status(201).json(result);
+    if (session) {
+      session.completion = result;
+      session.state = "queued";
+    }
+    res.status(201).json({
+      ...result,
+      ...(session ? { reviewId: session.reviewId, state: session.state } : {}),
+    });
   });
 
   app.post("/api/review-events/watch", async (req, res) => {
     const target = markdownPathFromRequest(req, res);
     if (!target) return;
+    const session = requestedReviewSession(req, res, target.absolutePath);
+    if (session === false) return;
+    if (session?.state === "cancelled") {
+      res.status(410).json({ error: "Review cancelled" });
+      return;
+    }
 
     const fromNow = req.body?.fromNow !== false;
     const timeoutSeconds =
@@ -690,6 +797,15 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
         : 0.25;
     const afterSequence =
       typeof req.body?.afterSequence === "number" ? req.body.afterSequence : 0;
+    const cursor = fromNow ? reviewEvents.latestSequence() : afterSequence;
+    if (session?.completion && session.completion.event.sequence > cursor) {
+      res.json({
+        events: [session.completion.event],
+        timedOut: false,
+        nextSequence: reviewEvents.latestSequence() + 1,
+      });
+      return;
+    }
 
     const controller = new AbortController();
     const onClose = () => controller.abort();
@@ -699,17 +815,22 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
     if (res.destroyed) controller.abort();
     try {
       const result = await reviewEvents.wait({
+        reviewId: session?.reviewId,
         documentPath: target.absolutePath,
-        afterSequence: fromNow ? reviewEvents.latestSequence() : afterSequence,
+        afterSequence: cursor,
         timeoutMs:
           timeoutSeconds !== undefined ? timeoutSeconds * 1000 : undefined,
         batchWindowMs: batchWindowSeconds * 1000,
-        signal: controller.signal,
+        signal: session
+          ? AbortSignal.any([controller.signal, session.controller.signal])
+          : controller.signal,
       });
 
       if (!controller.signal.aborted) res.json(result);
     } catch (error) {
-      if (!controller.signal.aborted) throw error;
+      if (session?.controller.signal.aborted && !controller.signal.aborted)
+        res.status(410).json({ error: "Review cancelled" });
+      else if (!controller.signal.aborted) throw error;
     } finally {
       res.off("close", onClose);
     }
@@ -718,9 +839,12 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
   app.get("/api/review-events/status", (req, res) => {
     const target = markdownPathFromRequest(req, res);
     if (!target) return;
+    const session = requestedReviewSession(req, res, target.absolutePath);
+    if (session === false) return;
 
     const watcherCount = reviewEvents.waiterCountForDocument(
       target.absolutePath,
+      session?.reviewId,
     );
     res.json({
       documentPath: target.absolutePath,
@@ -728,6 +852,7 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
       relativePath: target.relativePath,
       watching: watcherCount > 0,
       watcherCount,
+      ...(session ? { reviewId: session.reviewId, state: session.state } : {}),
     });
   });
 
@@ -828,6 +953,7 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
         fileSystemBrowsing: true,
         remoteDocuments: true,
         remoteDocumentTokenRequired: remoteDocumentToken !== null,
+        reviewSessions: true,
       },
     });
   });

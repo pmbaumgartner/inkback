@@ -1,6 +1,6 @@
 {
   "name": "roughdraft",
-  "version": "0.1.11-pmbaumgartner.2",
+  "version": "0.1.11-pmbaumgartner.3",
   "description": "A local markdown review app",
   "license": "MIT",
   "author": "Nathan Baschez",
@@ -27,8 +27,10 @@
     "test:smoke": "playwright test --config packages/app/playwright.config.ts --grep @smoke",
     "test:package": "node scripts/test-package.mjs",
     "test:coverage": "pnpm --filter @roughdraft/app exec vitest run --coverage && pnpm --filter @roughdraft/server exec vitest run --coverage",
-    "check": "pnpm lint && pnpm test:selectors && pnpm test && pnpm build",
-    "build": "pnpm --filter @roughdraft/rfm build && pnpm --filter @roughdraft/app build && pnpm --filter @roughdraft/server build",
+    "check:release": "node scripts/check-release.mjs",
+    "release:prepare": "node scripts/prepare-fork-release.mjs",
+    "check": "pnpm check:release && pnpm lint && pnpm test:selectors && pnpm test && pnpm build",
+    "build": "node scripts/sync-agent-skill.mjs && pnpm --filter @roughdraft/rfm build && pnpm --filter @roughdraft/app build && pnpm --filter @roughdraft/server build",
     "preview": "node packages/server/bin/roughdraft.mjs open README.md"
   },
   "files": [
@@ -40,7 +42,8 @@
     "packages/server/defaults.mjs",
     "packages/server/defaults.d.mts",
     "packages/server/setup.mjs",
-    "packages/server/setup.d.mts"
+    "packages/server/setup.d.mts",
+    "packages/skill/roughdraft"
   ],
   "dependencies": {
     "@roughdraft/rfm": "file:packages/rfm",

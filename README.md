@@ -1,6 +1,6 @@
 # Roughdraft
 
-This fork of [Lex-Inc/roughdraft](https://github.com/Lex-Inc/roughdraft) includes the missing `yaml` runtime dependency and fixes for review replies, code formatting, cancellation, and long-running reviews. The current release is `0.1.11-pmbaumgartner.2`, based on upstream commit `686919ec0a3a0648fd2f1fdb2665816fb4b10608`.
+This fork of [Lex-Inc/roughdraft](https://github.com/Lex-Inc/roughdraft) includes the missing `yaml` runtime dependency and fixes for review replies, code formatting, cancellation, and long-running reviews. The current release is `0.1.11-pmbaumgartner.3`.
 
 Install the built release using the commands below; no separate `yaml` installation or source build is needed. A GitHub source archive does not contain the built app. To switch back after upstream publishes a fix, run `npm install -g roughdraft@<fixed-version>`.
 A local-first markdown editor and viewer for working with AI.
@@ -10,13 +10,13 @@ A local-first markdown editor and viewer for working with AI.
 Paste this into your coding agent:
 
 ```text
-Install Roughdraft for me using `npm install -g https://github.com/pmbaumgartner/roughdraft/releases/download/v0.1.11-pmbaumgartner.2/roughdraft-0.1.11-pmbaumgartner.2.tgz`, then read https://raw.githubusercontent.com/pmbaumgartner/roughdraft/main/packages/app/public/setup.md and set yourself up to use it.
+Install Roughdraft for me using `npm install -g https://github.com/pmbaumgartner/roughdraft/releases/download/v0.1.11-pmbaumgartner.3/roughdraft-0.1.11-pmbaumgartner.3.tgz`, then read https://raw.githubusercontent.com/pmbaumgartner/roughdraft/main/packages/app/public/setup.md and set yourself up to use it.
 ```
 
 Or install and open a file yourself:
 
 ```bash
-npm install -g https://github.com/pmbaumgartner/roughdraft/releases/download/v0.1.11-pmbaumgartner.2/roughdraft-0.1.11-pmbaumgartner.2.tgz
+npm install -g https://github.com/pmbaumgartner/roughdraft/releases/download/v0.1.11-pmbaumgartner.3/roughdraft-0.1.11-pmbaumgartner.3.tgz
 roughdraft open /absolute/path/to/file.md
 ```
 ## What is this?
@@ -40,7 +40,7 @@ Roughdraft opens a single markdown file directly for CriticMarkup comments and s
 Install Roughdraft and start the local server:
 
 ```bash
-npm install -g https://github.com/pmbaumgartner/roughdraft/releases/download/v0.1.11-pmbaumgartner.2/roughdraft-0.1.11-pmbaumgartner.2.tgz
+npm install -g https://github.com/pmbaumgartner/roughdraft/releases/download/v0.1.11-pmbaumgartner.3/roughdraft-0.1.11-pmbaumgartner.3.tgz
 roughdraft start
 ```
 
@@ -68,7 +68,7 @@ roughdraft stop
 
 `roughdraft open` will reuse the running server and auto-start it if needed. You can also use `roughdraft ./path/to/file.md` as a shortcut when the input clearly looks like a path.
 
-Roughdraft does not edit `~/CLAUDE.md`, `~/AGENTS.md`, or other user-level agent files. The setup prompt asks your agent to update its own guidance.
+Roughdraft does not edit `~/CLAUDE.md`, `~/AGENTS.md`, or other user-level agent files. Setup installs a reusable Agent Skill in a supported skill directory. For Pi, the extension package bundles that skill; for another agent, run `roughdraft skill install <supported-skill-root>/roughdraft` and reload its skills.
 
 If the local server is already running, you can also open a file directly by URL:
 
@@ -95,7 +95,7 @@ Agents can watch that handoff directly:
 roughdraft open ./path/to/my-essay/draft.md --json
 ```
 
-`roughdraft open` starts or reuses the local server, opens the document, registers a fresh watcher, blocks until the next `review.completed` event, then prints event JSON with the document path, file version, feedback counts, and any optional `overallComment` you submit at handoff. By default there is no watch timeout; pass `--timeout <seconds>` when you want one. Use `--no-watch` when you only want to open the document and return immediately. If no watcher is active when you click **Finish review**, Roughdraft shows a fallback prompt you can copy into the agent. Overall comments are written to Markdown as document-level YAML endmatter comments before the handoff event is emitted, so Markdown remains the durable source of truth.
+`roughdraft open` starts or reuses the local server, opens the document, registers a fresh watcher, blocks until the next `review.completed` event, then prints event JSON with the document path, file version, feedback counts, and any optional `overallComment` you submit at handoff. By default there is no watch timeout; pass `--timeout <seconds>` when you want one. Use `--no-watch` when you only want to open the document and return immediately. If no watcher is active when you click **Finish review**, Roughdraft shows a fallback prompt you can copy into the agent. Pi additionally creates a scoped review session. Its browser URL carries a review ID, and completion can reach only that job. The browser shows **Waiting for Pi** while feedback is queued, **Received by Pi** after that job accepts it, and cancellation preserves saved edits. A connected legacy watcher alone does not confirm receipt. Overall comments are written to Markdown as document-level YAML endmatter comments before the handoff event is emitted, so Markdown remains the durable source of truth.
 
 Experimental MCP clients can start the stdio server with:
 
@@ -114,9 +114,9 @@ The MCP server exposes tools to read the review index, list pending feedback, wa
 
 The two scripts coordinate through a lock file, so it's safe to start `./scripts/run.sh` while `./scripts/setup.sh` is still in progress. `run` will wait for setup to finish, or trigger setup itself if nothing has been built yet.
 
-If you prefer package scripts, the same commands are available as `pnpm setup` and `pnpm start`.
+If you prefer package scripts, the same commands are available as `pnpm run setup` and `pnpm start`.
 
-Running `pnpm setup` also installs a per-worktree dev CLI wrapper into `~/.local/bin` by default, using the current worktree directory name. For example, this checkout might install `roughdraft-dev-lyon-v2`, which points at this worktree's local code while leaving the published global `roughdraft` command untouched.
+Running `pnpm run setup` also installs a per-worktree dev CLI wrapper into `~/.local/bin` by default, using the current worktree directory name. For example, this checkout might install `roughdraft-dev-lyon-v2`, which points at this worktree's local code while leaving the published global `roughdraft` command untouched.
 
 Each dev wrapper keeps its own server state under `~/.roughdraft/dev/<wrapper-name>` by default, so opening a file from one worktree will not accidentally reuse a backend started from another worktree. `roughdraft-dev-<worktree> open ...` can start its own background server as needed; you do not need to run `pnpm dev` first just to open files in Roughdraft.
 
@@ -147,7 +147,7 @@ pnpm test:package
 npm pack
 ```
 
-Attach the resulting `.tgz` to a GitHub release whose tag matches `v<version>`. The package smoke check installs into an isolated prefix and runs the installed CLI. Fork releases are distributed on GitHub; the upstream npm publish workflow is restricted to `Lex-Inc/roughdraft`.
+Prepare a version with `pnpm release:prepare <version>`; this updates the manifest and README together. After checks pass, merge the version update to `main` (or push a matching `v<version>` tag). The **Release fork** workflow runs checks, browser smoke tests and a clean package install, then uploads the built `.tgz` and `SHA256SUMS` as a Latest GitHub release. Assets are immutable: existing releases are preserved, and publication refuses an overwrite if a release appears while the build runs. The package smoke check installs into an isolated prefix and runs the installed CLI. Fork releases are distributed on GitHub; the upstream npm publish workflow is restricted to `Lex-Inc/roughdraft`.
 
 ## Upstream publishing
 Roughdraft publishes from `main` when the root `package.json` version is newer than the current npm `latest` version.
@@ -179,10 +179,10 @@ my-essay/
 
 Roughdraft reads and writes the markdown file directly.
 ## Agent setup
-If you want your local agent to remember the Roughdraft workflow, ask it to read the live setup prompt:
+Install the workflow as an Agent Skill, rather than appending instructions to user-level agent files. Pi discovers it from the pi-roughdraft package. For other agents, use `roughdraft skill install <supported-skill-root>/roughdraft`; source development instructions are bundled in its environment setup reference. The setup prompt is:
 
 ```text
-Install Roughdraft for me using `npm install -g https://github.com/pmbaumgartner/roughdraft/releases/download/v0.1.11-pmbaumgartner.2/roughdraft-0.1.11-pmbaumgartner.2.tgz`, then read https://raw.githubusercontent.com/pmbaumgartner/roughdraft/main/packages/app/public/setup.md and set yourself up to use it.
+Install Roughdraft for me using `npm install -g https://github.com/pmbaumgartner/roughdraft/releases/download/v0.1.11-pmbaumgartner.3/roughdraft-0.1.11-pmbaumgartner.3.tgz`, then read https://raw.githubusercontent.com/pmbaumgartner/roughdraft/main/packages/app/public/setup.md and set yourself up to use it.
 ```
 
 Use `roughdraft help`, `roughdraft help agent`, or `roughdraft help criticmarkup` if you need a local refresher.
@@ -205,6 +205,8 @@ doctor [path]      Diagnose setup or validate Markdown
 help agent         Print the agent setup prompt
 help criticmarkup  Show CriticMarkup examples
 agent-setup        Print the agent setup prompt
+skill path         Locate the packaged Agent Skill
+skill install <dir> [--force]  Install/update the skill at an explicit path
 criticmarkup       Show CriticMarkup examples
 ```
 

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { ROUGHDRAFT_VERSION } from "../setup.mjs";
 import {
   appendRoughdraftReply,
   extractRoughdraftReviewIndex,
@@ -116,14 +117,23 @@ const tools: ToolDefinition[] = [
   },
 ];
 
-export function startMcpServer(options: McpOptions = {}): void {
+export function startMcpServer(options: McpOptions = {}): Promise<void> {
   const input = options.input ?? process.stdin;
   const output = options.output ?? process.stdout;
   const fetchImpl = options.fetchImpl ?? fetch;
   const env = options.env ?? process.env;
   const connection = new AbortController();
-  input.once("end", () => connection.abort());
-  input.once("close", () => connection.abort());
+  let finish!: () => void;
+  const closed = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const close = () => {
+    connection.abort();
+    finish();
+  };
+  input.once("end", close);
+  input.once("close", close);
+  const requests = new Map<string | number, AbortController>();
   let buffer: Buffer<ArrayBufferLike> = Buffer.alloc(0);
 
   input.on("data", (chunk: Buffer) => {
@@ -132,22 +142,83 @@ export function startMcpServer(options: McpOptions = {}): void {
       const parsed = takeMessage(buffer);
       if (!parsed) break;
       buffer = parsed.rest;
+      let request: JsonRpcRequest;
+      try {
+        request = JSON.parse(parsed.body);
+      } catch {
+        writeMessage(
+          output,
+          {
+            jsonrpc: "2.0",
+            id: null,
+            error: { code: -32700, message: "Invalid JSON" },
+          },
+          parsed.framing,
+        );
+        continue;
+      }
+      if (
+        !request ||
+        typeof request !== "object" ||
+        typeof request.method !== "string"
+      ) {
+        writeMessage(
+          output,
+          {
+            jsonrpc: "2.0",
+            id: null,
+            error: { code: -32600, message: "Invalid request" },
+          },
+          parsed.framing,
+        );
+        continue;
+      }
+      if (request.method === "notifications/cancelled") {
+        const id = (request.params as { requestId?: string | number })
+          ?.requestId;
+        if (id !== undefined) requests.get(id)?.abort();
+        continue;
+      }
+      const controller = new AbortController();
+      if (request.id != null) requests.set(request.id, controller);
       void handleMessage(
-        parsed.message,
+        request,
         output,
         env,
         fetchImpl,
-        connection.signal,
-      );
+        AbortSignal.any([connection.signal, controller.signal]),
+        parsed.framing,
+      ).finally(() => {
+        if (request.id != null) requests.delete(request.id);
+      });
     }
   });
 
   input.resume();
+  return closed;
 }
 
-function takeMessage(
-  buffer: Buffer<ArrayBufferLike>,
-): { message: JsonRpcRequest; rest: Buffer<ArrayBufferLike> } | null {
+function takeMessage(buffer: Buffer<ArrayBufferLike>): {
+  body: string;
+  rest: Buffer<ArrayBufferLike>;
+  framing: "lines" | "headers";
+} | null {
+  // MCP stdio uses one JSON message per line. Older Roughdraft clients used
+  // Content-Length framing; reply in the format of the incoming request.
+  if (
+    !buffer
+      .toString("utf8", 0, Math.min(buffer.length, 15))
+      .toLowerCase()
+      .startsWith("content-length:")
+  ) {
+    const lineEnd = buffer.indexOf("\n");
+    if (lineEnd === -1) return null;
+    return {
+      body: buffer.subarray(0, lineEnd).toString("utf8"),
+      rest: buffer.subarray(lineEnd + 1),
+      framing: "lines",
+    };
+  }
   const headerEnd = buffer.indexOf("\r\n\r\n");
   if (headerEnd === -1) return null;
 
@@ -163,8 +234,9 @@ function takeMessage(
   if (buffer.length < bodyEnd) return null;
 
   return {
-    message: JSON.parse(buffer.subarray(bodyStart, bodyEnd).toString("utf8")),
+    body: buffer.subarray(bodyStart, bodyEnd).toString("utf8"),
     rest: buffer.subarray(bodyEnd),
+    framing: "headers",
   };
 }
 
@@ -174,25 +246,31 @@ async function handleMessage(
   env: NodeJS.ProcessEnv,
   fetchImpl: typeof fetch,
   signal: AbortSignal,
+  framing: "lines" | "headers",
 ): Promise<void> {
   if (!request.id && request.id !== 0) return;
+  const send = (value: unknown) => writeMessage(output, value, framing);
 
   try {
+    if (request.method === "ping") {
+      send({ jsonrpc: "2.0", id: request.id, result: {} });
+      return;
+    }
     if (request.method === "initialize") {
-      writeMessage(output, {
+      send({
         jsonrpc: "2.0",
         id: request.id,
         result: {
           protocolVersion,
           capabilities: { tools: {} },
-          serverInfo: { name: "roughdraft", version: "0.1.0" },
+          serverInfo: { name: "roughdraft", version: ROUGHDRAFT_VERSION },
         },
       });
       return;
     }
 
     if (request.method === "tools/list") {
-      writeMessage(output, {
+      send({
         jsonrpc: "2.0",
         id: request.id,
         result: { tools },
@@ -210,7 +288,7 @@ async function handleMessage(
         signal,
       );
       if (signal.aborted) return;
-      writeMessage(output, {
+      send({
         jsonrpc: "2.0",
         id: request.id,
         result: {
@@ -225,14 +303,14 @@ async function handleMessage(
       return;
     }
 
-    writeMessage(output, {
+    send({
       jsonrpc: "2.0",
       id: request.id,
       error: { code: -32601, message: `Unknown method: ${request.method}` },
     });
   } catch (error) {
     if (signal.aborted) return;
-    writeMessage(output, {
+    send({
       jsonrpc: "2.0",
       id: request.id,
       error: {
@@ -332,10 +410,16 @@ export async function callTool(
   throw new Error(`Unknown tool: ${name}`);
 }
 
-function writeMessage(output: NodeJS.WriteStream, value: unknown): void {
+function writeMessage(
+  output: NodeJS.WriteStream,
+  value: unknown,
+  framing: "lines" | "headers",
+): void {
   const body = Buffer.from(JSON.stringify(value), "utf8");
-  output.write(`Content-Length: ${body.byteLength}\r\n\r\n`);
+  if (framing === "headers")
+    output.write(`Content-Length: ${body.byteLength}\r\n\r\n`);
   output.write(body);
+  if (framing === "lines") output.write("\n");
 }
 
 function objectArgs(value: unknown): Record<string, unknown> {

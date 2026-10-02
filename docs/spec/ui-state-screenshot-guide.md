@@ -200,3 +200,7 @@ The most reliable long-term solution is a dedicated screenshot harness route or 
 - Reload a review document containing a root comment and replies stored only in YAML endmatter. Capture the complete thread, then reply to its nested reply and reload again.
 - Comment on or suggest a change inside a multiline code block. Save and reload; capture preserved indentation, blank lines, and the review mark.
 - Disconnect the watcher, finish the review, and capture the saved-feedback fallback. Navigate to a different document that has never had a watcher and confirm it does not inherit the previous handoff control.
+
+## Scoped Pi review receipt
+
+Capture the Finish review popover for a session-specific Pi URL in these states: waiting before completion; queued (**Waiting for Pi**) while Pi is busy; acknowledged (**Received by Pi**); cancelled after `/roughdraft cancel` or navigation. Confirm the copy-message fallback remains available, saved Markdown stays visible, and opening a different document removes the previous review identity. Legacy watchers retain the unconfirmed-receipt message.

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 export interface ReviewCompletedEventInput {
+  reviewId?: string;
   documentPath: string;
   projectPath: string;
   relativePath: string;
@@ -22,6 +23,7 @@ export interface ReviewCompletedEvent extends ReviewCompletedEventInput {
 }
 
 export interface WaitForReviewEventsOptions {
+  reviewId?: string;
   documentPath?: string;
   afterSequence?: number;
   timeoutMs?: number;
@@ -48,8 +50,12 @@ const DEFAULT_BATCH_WINDOW_MS = 250;
 const MAX_RETAINED_EVENTS = 100;
 
 type NormalizedWaitOptions = Required<
-  Omit<WaitForReviewEventsOptions, "documentPath" | "timeoutMs" | "signal">
+  Omit<
+    WaitForReviewEventsOptions,
+    "documentPath" | "reviewId" | "timeoutMs" | "signal"
+  >
 > & {
+  reviewId?: string;
   documentPath?: string;
   timeoutMs?: number;
 };
@@ -153,10 +159,12 @@ export class ReviewEventQueue {
     return this.nextSequence - 1;
   }
 
-  waiterCountForDocument(documentPath: string): number {
+  waiterCountForDocument(documentPath: string, reviewId?: string): number {
     const normalizedPath = path.resolve(documentPath);
     return [...this.waiters].filter(
-      (waiter) => waiter.options.documentPath === normalizedPath,
+      (waiter) =>
+        waiter.options.documentPath === normalizedPath &&
+        waiter.options.reviewId === reviewId,
     ).length;
   }
 
@@ -204,6 +212,7 @@ function normalizeWaitOptions(
   options: WaitForReviewEventsOptions,
 ): NormalizedWaitOptions {
   return {
+    reviewId: options.reviewId,
     documentPath: options.documentPath
       ? path.resolve(options.documentPath)
       : undefined,
@@ -224,6 +233,7 @@ function matchesWaiter(
   event: ReviewCompletedEvent,
   options: NormalizedWaitOptions,
 ): boolean {
+  if (event.reviewId !== options.reviewId) return false;
   if (event.sequence <= options.afterSequence) return false;
   if (!options.documentPath) return true;
   return path.resolve(event.documentPath) === options.documentPath;

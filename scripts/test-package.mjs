@@ -1,7 +1,13 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -62,6 +68,25 @@ try {
     "CLI prints its version",
   );
   assert.match(run(cli, ["--help"]), /Usage:/, "CLI prints usage instructions");
+  const workspace = path.join(temporary, "agent-workspace");
+  const instructions = path.join(temporary, "AGENTS.md");
+  writeFileSync(instructions, "Existing agent instructions\n");
+  const skill = path.join(workspace, ".agents", "skills", "roughdraft");
+  run(cli, ["skill", "install", skill]);
+  assert.match(
+    readFileSync(path.join(skill, "SKILL.md"), "utf8"),
+    /name: roughdraft/,
+  );
+  assert.ok(
+    existsSync(path.join(skill, "references", "environment-setup.md")),
+    "Installed skill includes its setup reference",
+  );
+  assert.equal(
+    readFileSync(instructions, "utf8"),
+    "Existing agent instructions\n",
+    "Skill installation preserves agent instructions",
+  );
+  run(cli, ["skill", "install", skill, "--force"]);
   console.log(`Installed package CLI passed: roughdraft ${version}`);
 } finally {
   rmSync(temporary, { recursive: true, force: true });

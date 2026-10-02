@@ -19,6 +19,7 @@ import { findAvailablePort } from "./ports.js";
 import { resolveUpdateStatus, type UpdateStatus } from "./update-status.js";
 import { AGENT_SETUP_PROMPT, AGENT_SETUP_URL } from "../setup.mjs";
 import { watchReviewEvents } from "./watch-review-events.js";
+import { installSkill, skillDirectory } from "./skill.js";
 
 const ROUGHDRAFT_FLAVORED_MARKDOWN_SPEC_URL =
   "https://roughdraft.md/spec/roughdraft-flavored-markdown.md";
@@ -39,6 +40,7 @@ const KNOWN_COMMANDS = [
   "doctor",
   "help",
   "agent-setup",
+  "skill",
   "criticmarkup",
 ] as const;
 
@@ -148,6 +150,7 @@ interface ParsedCommandOptions {
   noOpen: boolean;
   noWatch: boolean;
   printUrl: boolean;
+  reviewId?: string;
   port?: string;
   replay: boolean;
   stateDir?: string;
@@ -308,6 +311,15 @@ function parseCommandOptions(
     if (arg === "--no-open") {
       if (!options.allowOpen) throw new Error(`Unknown flag: ${arg}`);
       parsed.noOpen = true;
+      continue;
+    }
+
+    if (arg === "--review-id") {
+      if (!options.allowOpen) throw new Error(`Unknown flag: ${arg}`);
+      const value = args[++index];
+      if (!value || !/^[a-zA-Z0-9-]{1,128}$/.test(value))
+        throw new Error("--review-id requires a review session ID");
+      parsed.reviewId = value;
       continue;
     }
 
@@ -856,6 +868,7 @@ function printHelp(log: (message: string) => void) {
   log("  help agent         Print the agent setup prompt");
   log("  help criticmarkup  Show CriticMarkup examples");
   log("  agent-setup        Print the agent setup prompt");
+  log("  skill              Locate or install the Roughdraft agent skill");
   log("  criticmarkup       Show CriticMarkup examples");
   log("");
   log("Flags:");
@@ -898,6 +911,9 @@ function printCommandHelp(
       "  --print-url          Print only the document URL and do not open it",
     );
     log("  --no-watch           Open the file without waiting");
+    log(
+      "  --review-id <id>     Route this viewer to an existing review session",
+    );
     log("  --timeout <seconds>  Maximum watch time; omitted means no timeout");
     log("  --replay             Allow watch to return retained older events");
     log("  --json               Print machine-readable output");
@@ -1017,6 +1033,16 @@ function printCommandHelp(
 
   if (command === "help") {
     printHelp(log);
+    return;
+  }
+
+  if (command === "skill") {
+    log(
+      "Usage: roughdraft skill path | roughdraft skill install <skill-root>/roughdraft [--force]",
+    );
+    log(
+      "Installs the packaged Agent Skill at an explicit path. Reload your agent's skills afterward.",
+    );
     return;
   }
 
@@ -2256,6 +2282,27 @@ export async function runCli(
       return 0;
     }
 
+    if (command === "skill") {
+      if (rest.length === 1 && rest[0] === "path") {
+        deps.log(skillDirectory);
+        return 0;
+      }
+      if (
+        rest[0] === "install" &&
+        rest[1] &&
+        (rest.length === 2 || (rest.length === 3 && rest[2] === "--force"))
+      ) {
+        deps.log(
+          `Installed Roughdraft skill: ${installSkill(rest[1], rest[2] === "--force")}`,
+        );
+        return 0;
+      }
+      deps.error(
+        "Usage: roughdraft skill path | roughdraft skill install <skill-root>/roughdraft [--force]",
+      );
+      return USAGE_ERROR;
+    }
+
     if (command === "agent-setup") {
       shouldPrintUpdateNotice = true;
       printAgentHelp(deps.log);
@@ -2594,8 +2641,8 @@ export async function runCli(
       }
 
       const { startMcpServer } = await import("./mcp.js");
-      startMcpServer({ env: deps.env, fetchImpl: deps.fetchImpl });
-      return new Promise<number>(() => {});
+      await startMcpServer({ env: deps.env, fetchImpl: deps.fetchImpl });
+      return 0;
     }
 
     if (command === "doctor") {
@@ -2703,7 +2750,10 @@ export async function runCli(
         baseUrl = buildPublicBaseUrl(result.server.port);
       }
 
-      const targetUrl = buildTargetUrl(baseUrl, openPath);
+      const viewer = new URL(buildTargetUrl(baseUrl, openPath));
+      if (options.reviewId)
+        viewer.searchParams.set("reviewId", options.reviewId);
+      const targetUrl = viewer.href;
       let openMode: OpenMode = "disabled";
       if (!options.noOpen && deps.env.ROUGHDRAFT_NO_OPEN !== "1") {
         openMode = (await sendOpenRequestToExistingWindow(

@@ -1,4 +1,5 @@
 import manifest from "../../package.json" with { type: "json" };
+export const ROUGHDRAFT_VERSION = manifest.version;
 
 export const AGENT_SETUP_URL =
   "https://raw.githubusercontent.com/pmbaumgartner/roughdraft/main/packages/app/public/setup.md";
