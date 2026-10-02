@@ -1,4 +1,0 @@
-interface:
-  display_name: "Test Desiderata"
-  short_description: "Review tests against Kent Beck's desiderata"
-  default_prompt: "Use $test-desiderata to review this test plan or test change against Kent Beck's desiderata."
