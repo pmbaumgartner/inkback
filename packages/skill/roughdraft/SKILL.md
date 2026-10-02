@@ -5,7 +5,7 @@ description: Set up Roughdraft and its Pi integration, open saved Markdown for h
 
 # Roughdraft
 
-For installation and development setup, read [environment setup](references/environment-setup.md). Install this skill in the agent's supported skill directory. Do not append it to AGENTS.md, CLAUDE.md, GEMINI.md, or another global instruction file. Do not create an `rd` executable or alias.
+For installation and development setup, read [environment setup](references/environment-setup.md). If this skill is not already discoverable, install it in the agent's supported skill directory. Pi's extension package already supplies it; do not install a second copy there. Do not append it to AGENTS.md, CLAUDE.md, GEMINI.md, or another global instruction file. Do not create an `rd` executable or alias.
 
 ## Review a document
 

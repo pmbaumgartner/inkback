@@ -912,7 +912,7 @@ function printCommandHelp(
     );
     log("  --no-watch           Open the file without waiting");
     log(
-      "  --review-id <id>     Route this viewer to an existing review session",
+      "  --review-id <id>     Route this viewer to a session (requires --no-watch)",
     );
     log("  --timeout <seconds>  Maximum watch time; omitted means no timeout");
     log("  --replay             Allow watch to return retained older events");
@@ -2705,6 +2705,12 @@ export async function runCli(
 
       if (options.watch && options.noWatch) {
         deps.error("Use either --watch or --no-watch, not both.");
+        return USAGE_ERROR;
+      }
+      if (options.reviewId && !options.noWatch) {
+        deps.error(
+          "--review-id requires --no-watch; its review is owned by an existing consumer.",
+        );
         return USAGE_ERROR;
       }
 
