@@ -1,4 +1,8 @@
 # Roughdraft
+
+This temporary fork of [Lex-Inc/roughdraft](https://github.com/Lex-Inc/roughdraft) fixes the missing `yaml` runtime dependency in the npm package. Its first release is `0.1.11-pmbaumgartner.1`, based on upstream commit `686919ec0a3a0648fd2f1fdb2665816fb4b10608`. The application and review protocol are unchanged.
+
+Install the built release using the commands below; no separate `yaml` installation or source build is needed. A GitHub source archive does not contain the built app. To switch back after upstream publishes a fix, run `npm install -g roughdraft@<fixed-version>`.
 A local-first markdown editor and viewer for working with AI.
 
 {==Open one markdown file on your machine. Review it, comment on it, and suggest edits.==}{>>What does this mean?<<}{id="c3" by="user" at="2026-04-30T20:18:51.163Z"}{>>It means Roughdraft works with a normal local Markdown file: you open one .md file from your computer, read it in the app, leave inline comments, and propose edits that are saved back into the Markdown using CriticMarkup.<<}{id="c4" by="AI" at="2026-04-30T20:19:39.000Z" re="c3"}{>>cjool<<}{id="c5" by="user" at="2026-05-07T20:38:25.621Z" re="c4"}
@@ -6,13 +10,13 @@ A local-first markdown editor and viewer for working with AI.
 Paste this into your coding agent:
 
 ```text
-Install Roughdraft for me using `npm i -g roughdraft`, then read https://roughdraft.md/setup.md and set yourself up to use it.
+Install Roughdraft for me using `npm install -g https://github.com/pmbaumgartner/roughdraft/releases/download/v0.1.11-pmbaumgartner.1/roughdraft-0.1.11-pmbaumgartner.1.tgz`, then read https://roughdraft.md/setup.md and set yourself up to use it.
 ```
 
 Or install and open a file yourself:
 
 ```bash
-npm i -g roughdraft
+npm install -g https://github.com/pmbaumgartner/roughdraft/releases/download/v0.1.11-pmbaumgartner.1/roughdraft-0.1.11-pmbaumgartner.1.tgz
 roughdraft open /absolute/path/to/file.md
 ```
 ## What is this?
@@ -36,7 +40,7 @@ Roughdraft opens a single markdown file directly for CriticMarkup comments and s
 Install Roughdraft and start the local server:
 
 ```bash
-npm i -g roughdraft
+npm install -g https://github.com/pmbaumgartner/roughdraft/releases/download/v0.1.11-pmbaumgartner.1/roughdraft-0.1.11-pmbaumgartner.1.tgz
 roughdraft start
 ```
 
@@ -132,7 +136,20 @@ pnpm check
 ```
 
 `pnpm check` is the same command the pull request workflow runs before merge.
-## Publishing
+## Fork releases
+
+Build and verify the release package from this checkout with pnpm 11.25 and Node 24:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm build
+pnpm test:package
+npm pack
+```
+
+Attach the resulting `.tgz` to a GitHub release whose tag matches `v<version>`. The package smoke check installs into an isolated prefix and runs the installed CLI. Fork releases are distributed on GitHub; the upstream npm publish workflow is restricted to `Lex-Inc/roughdraft`.
+
+## Upstream publishing
 Roughdraft publishes from `main` when the root `package.json` version is newer than the current npm `latest` version.
 
 Release flow:
@@ -165,7 +182,7 @@ Roughdraft reads and writes the markdown file directly.
 If you want your local agent to remember the Roughdraft workflow, ask it to read the live setup prompt:
 
 ```text
-Install Roughdraft for me using `npm i -g roughdraft`, then read https://roughdraft.md/setup.md and set yourself up to use it.
+Install Roughdraft for me using `npm install -g https://github.com/pmbaumgartner/roughdraft/releases/download/v0.1.11-pmbaumgartner.1/roughdraft-0.1.11-pmbaumgartner.1.tgz`, then read https://roughdraft.md/setup.md and set yourself up to use it.
 ```
 
 Use `roughdraft help`, `roughdraft help agent`, or `roughdraft help criticmarkup` if you need a local refresher.

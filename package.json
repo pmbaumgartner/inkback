@@ -1,6 +1,6 @@
 {
   "name": "roughdraft",
-  "version": "0.1.10",
+  "version": "0.1.11-pmbaumgartner.1",
   "description": "A local markdown review app",
   "license": "MIT",
   "author": "Nathan Baschez",
@@ -25,6 +25,7 @@
     "test": "pnpm --filter @roughdraft/rfm test && pnpm --filter @roughdraft/app test && pnpm --filter @roughdraft/server test",
     "test:e2e": "playwright test --config packages/app/playwright.config.ts",
     "test:smoke": "playwright test --config packages/app/playwright.config.ts --grep @smoke",
+    "test:package": "node scripts/test-package.mjs",
     "test:coverage": "pnpm --filter @roughdraft/app exec vitest run --coverage && pnpm --filter @roughdraft/server exec vitest run --coverage",
     "check": "pnpm lint && pnpm test:selectors && pnpm test && pnpm build",
     "build": "pnpm --filter @roughdraft/rfm build && pnpm --filter @roughdraft/app build && pnpm --filter @roughdraft/server build",
@@ -41,7 +42,8 @@
   ],
   "dependencies": {
     "@roughdraft/rfm": "file:packages/rfm",
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.12",
