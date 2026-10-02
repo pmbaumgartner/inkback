@@ -16,7 +16,7 @@ export interface RfmValidationSummary {
 }
 
 export interface RfmValidationResult {
-  format: "name-placeholder-flavored-markdown";
+  format: "inkback-flavored-markdown";
   version: "0.2";
   ok: boolean;
   diagnostics: RfmDiagnostic[];
@@ -54,14 +54,14 @@ export interface RfmReviewIndexSummary {
 }
 
 export interface RfmReviewIndex {
-  format: "name-placeholder-flavored-markdown";
+  format: "inkback-flavored-markdown";
   version: "0.2";
   items: RfmReviewItem[];
   diagnostics: RfmDiagnostic[];
   summary: RfmReviewIndexSummary;
 }
 
-export interface AppendNamePlaceholderReplyOptions {
+export interface AppendInkbackReplyOptions {
   parentId: string;
   message: string;
   author?: string;
@@ -69,14 +69,14 @@ export interface AppendNamePlaceholderReplyOptions {
   id?: string;
 }
 
-export interface AppendNamePlaceholderDocumentCommentOptions {
+export interface AppendInkbackDocumentCommentOptions {
   message: string;
   author?: string;
   at?: string;
   id?: string;
 }
 
-export interface MarkNamePlaceholderResolvedOptions {
+export interface MarkInkbackResolvedOptions {
   targetId: string;
   summary?: string;
 }
@@ -136,7 +136,7 @@ interface YamlMetadataEntry {
   [key: string]: unknown;
 }
 
-interface NamePlaceholderEndmatter {
+interface InkbackEndmatter {
   comments: Map<string, YamlMetadataEntry>;
   suggestions: Map<string, YamlMetadataEntry>;
   data: Record<string, unknown> | null;
@@ -151,11 +151,9 @@ const dateTimePattern =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 const attributeNamePattern = /^[A-Za-z][A-Za-z0-9_-]*$/;
 
-export function validateNamePlaceholderMarkdown(
-  markdown: string,
-): RfmValidationResult {
+export function validateInkbackMarkdown(markdown: string): RfmValidationResult {
   const lineStarts = createLineStarts(markdown);
-  const endmatter = parseNamePlaceholderEndmatter(markdown);
+  const endmatter = parseInkbackEndmatter(markdown);
   const diagnostics: RfmDiagnostic[] = [];
   const ids = new Map<string, IdReference>();
   const replies: ReplyReference[] = [];
@@ -438,7 +436,7 @@ export function validateNamePlaceholderMarkdown(
   );
 
   return {
-    format: "name-placeholder-flavored-markdown",
+    format: "inkback-flavored-markdown",
     version: RFM_VERSION,
     ok: errors.length === 0,
     diagnostics,
@@ -448,12 +446,10 @@ export function validateNamePlaceholderMarkdown(
   };
 }
 
-export function extractNamePlaceholderReviewIndex(
-  markdown: string,
-): RfmReviewIndex {
+export function extractInkbackReviewIndex(markdown: string): RfmReviewIndex {
   const lineStarts = createLineStarts(markdown);
-  const validation = validateNamePlaceholderMarkdown(markdown);
-  const endmatter = parseNamePlaceholderEndmatter(markdown);
+  const validation = validateInkbackMarkdown(markdown);
+  const endmatter = parseInkbackEndmatter(markdown);
   const items: RfmReviewItem[] = [];
   const noopDiagnostic = () => {};
 
@@ -586,7 +582,7 @@ export function extractNamePlaceholderReviewIndex(
   }
 
   return {
-    format: "name-placeholder-flavored-markdown",
+    format: "inkback-flavored-markdown",
     version: RFM_VERSION,
     items,
     diagnostics: validation.diagnostics,
@@ -599,14 +595,14 @@ export function extractNamePlaceholderReviewIndex(
   };
 }
 
-export function appendNamePlaceholderDocumentComment(
+export function appendInkbackDocumentComment(
   markdown: string,
-  options: AppendNamePlaceholderDocumentCommentOptions,
+  options: AppendInkbackDocumentCommentOptions,
 ): string {
   assertSafeCommentBodyText(options.message);
 
-  const index = extractNamePlaceholderReviewIndex(markdown);
-  const endmatter = parseNamePlaceholderEndmatter(markdown);
+  const index = extractInkbackReviewIndex(markdown);
+  const endmatter = parseInkbackEndmatter(markdown);
   const commentId = options.id ?? nextCommentId(index.items);
   const comments = new Map(endmatter.comments);
   comments.set(commentId, {
@@ -615,25 +611,25 @@ export function appendNamePlaceholderDocumentComment(
     at: options.at ?? new Date().toISOString(),
   });
 
-  return writeNamePlaceholderEndmatter(markdown, {
+  return writeInkbackEndmatter(markdown, {
     comments,
     suggestions: endmatter.suggestions,
   });
 }
 
-export function appendNamePlaceholderReply(
+export function appendInkbackReply(
   markdown: string,
-  options: AppendNamePlaceholderReplyOptions,
+  options: AppendInkbackReplyOptions,
 ): string {
   assertSafeCommentBodyText(options.message);
 
-  const index = extractNamePlaceholderReviewIndex(markdown);
+  const index = extractInkbackReviewIndex(markdown);
   const parent = index.items.find((item) => item.id === options.parentId);
   if (!parent) {
     throw new Error(`Review item not found: ${options.parentId}`);
   }
 
-  const endmatter = parseNamePlaceholderEndmatter(markdown);
+  const endmatter = parseInkbackEndmatter(markdown);
   if (isEndmatterBackedItem(markdown, parent)) {
     const replyId = options.id ?? nextCommentId(index.items);
     const comments = new Map(endmatter.comments);
@@ -643,7 +639,7 @@ export function appendNamePlaceholderReply(
       at: options.at ?? new Date().toISOString(),
       re: options.parentId,
     });
-    return writeNamePlaceholderEndmatter(markdown, {
+    return writeInkbackEndmatter(markdown, {
       comments,
       suggestions: endmatter.suggestions,
     });
@@ -668,17 +664,17 @@ function assertSafeCommentBodyText(message: string): void {
   );
 }
 
-export function markNamePlaceholderResolved(
+export function markInkbackResolved(
   markdown: string,
-  options: MarkNamePlaceholderResolvedOptions,
+  options: MarkInkbackResolvedOptions,
 ): string {
-  const index = extractNamePlaceholderReviewIndex(markdown);
+  const index = extractInkbackReviewIndex(markdown);
   const target = index.items.find((item) => item.id === options.targetId);
   if (!target) {
     throw new Error(`Review item not found: ${options.targetId}`);
   }
 
-  const endmatter = parseNamePlaceholderEndmatter(markdown);
+  const endmatter = parseInkbackEndmatter(markdown);
   const endmatterKind = endmatter.comments.has(options.targetId)
     ? "comment"
     : endmatter.suggestions.has(options.targetId)
@@ -695,7 +691,7 @@ export function markNamePlaceholderResolved(
       status: "resolved",
       ...(options.summary ? { resolved: options.summary } : {}),
     });
-    return writeNamePlaceholderEndmatter(markdown, { comments, suggestions });
+    return writeInkbackEndmatter(markdown, { comments, suggestions });
   }
 
   const metadataStart = findCanonicalMetadataStart(markdown, target.endOffset);
@@ -1100,10 +1096,8 @@ function parseLegacyAttributes(metadata: string): Map<string, string> {
   return attrs;
 }
 
-function parseNamePlaceholderEndmatter(
-  markdown: string,
-): NamePlaceholderEndmatter {
-  const empty: NamePlaceholderEndmatter = {
+function parseInkbackEndmatter(markdown: string): InkbackEndmatter {
+  const empty: InkbackEndmatter = {
     comments: new Map(),
     suggestions: new Map(),
     data: null,
@@ -1135,9 +1129,8 @@ function parseNamePlaceholderEndmatter(
   }
 
   if (!isPlainObject(parsed)) return empty;
-  const hasNamePlaceholderKeys =
-    "comments" in parsed || "suggestions" in parsed;
-  if (!hasNamePlaceholderKeys) return empty;
+  const hasInkbackKeys = "comments" in parsed || "suggestions" in parsed;
+  if (!hasInkbackKeys) return empty;
   if (
     !markdown.slice(0, match.offset).includes("{#") &&
     !hasDocumentLevelComment(parsed)
@@ -1204,7 +1197,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function hydrateMetadataAttrs(
   metadata: Metadata | null,
-  endmatter: NamePlaceholderEndmatter,
+  endmatter: InkbackEndmatter,
   kind: "comment" | "suggestion",
 ): Map<string, string> {
   const attrs = new Map(metadata?.attrs ?? []);
@@ -1268,14 +1261,14 @@ function validateEndmatterEntry(
   }
 }
 
-function writeNamePlaceholderEndmatter(
+function writeInkbackEndmatter(
   markdown: string,
   endmatter: {
     comments: Map<string, YamlMetadataEntry>;
     suggestions: Map<string, YamlMetadataEntry>;
   },
 ): string {
-  const existing = parseNamePlaceholderEndmatter(markdown);
+  const existing = parseInkbackEndmatter(markdown);
   const body =
     existing.offset === null
       ? markdown.replace(/\s*$/, "\n")

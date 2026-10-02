@@ -1,14 +1,14 @@
 ---
-name: name-placeholder
-description: Open saved Markdown in NAME_PLACEHOLDER for human review and respond to comments and suggested edits.
+name: inkback
+description: Open saved Markdown in Inkback for human review and respond to comments and suggested edits.
 ---
 
-# NAME_PLACEHOLDER
+# Inkback
 
 ## Review a document
 
 1. Save the document as one local `.md` file, preserving unrelated user edits.
-2. Run `name-placeholder open "/absolute/path/to/file.md"`. In a source checkout, run `node packages/server/bin/name-placeholder.mjs open "/absolute/path/to/file.md"`. Leave the command running until Finish review. Use `--no-watch` only when intentionally opening without a handoff.
+2. Run `inkback open "/absolute/path/to/file.md"`. In a source checkout, run `node packages/server/bin/inkback.mjs open "/absolute/path/to/file.md"`. Leave the command running until Finish review. Use `--no-watch` only when intentionally opening without a handoff.
 3. After completion, reread the current Markdown from disk. Do not edit a pre-review snapshot.
 4. Answer questions and address feedback within the user's existing authorization. Finish review alone does not approve implementing a plan or accepting every suggestion.
 5. Preserve unresolved items, IDs, metadata, links, images, frontmatter, and literal code examples. Reopen when useful or requested.
@@ -34,4 +34,4 @@ comments:
     re: c1
 ```
 
-Run `name-placeholder help criticmarkup` for exact syntax. Keep review data in the Markdown file.
+Run `inkback help criticmarkup` for exact syntax. Keep review data in the Markdown file.

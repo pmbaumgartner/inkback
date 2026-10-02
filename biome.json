@@ -4,7 +4,7 @@
     "includes": [
       "**",
       "!.context",
-      "!.name-placeholder-state",
+      "!.inkback-state",
       "!**/coverage",
       "!**/playwright-report",
       "!**/test-results",

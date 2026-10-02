@@ -1,7 +1,7 @@
 import type { BackendInfo, Page, StorageBackend, StoredAsset } from "./storage";
 
-const PAGES_KEY = "name-placeholder:pages";
-const ASSETS_KEY = "name-placeholder:assets";
+const PAGES_KEY = "inkback:pages";
+const ASSETS_KEY = "inkback:assets";
 
 interface LocalAssetRecord {
   path: string;
@@ -54,7 +54,7 @@ function nextAssetPath(
 
   while (true) {
     const suffix = counter === 0 ? "" : `-${counter}`;
-    const path = `./.name-placeholder-assets/${basename}${suffix}${extension}`;
+    const path = `./.inkback-assets/${basename}${suffix}${extension}`;
     if (!assets[path]) return path;
     counter += 1;
   }

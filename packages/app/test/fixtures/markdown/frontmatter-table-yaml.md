@@ -5,7 +5,7 @@ summary: |
   | --- | --- |
   | path | docs/table.md |
 tags:
-  - name-placeholder
+  - inkback
 ---
 
 # Body

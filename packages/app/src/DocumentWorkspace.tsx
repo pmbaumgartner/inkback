@@ -88,7 +88,7 @@ const conflictNoticeCopy: Record<
 > = {
   changed: {
     title: "File changed on disk",
-    body: "NAME_PLACEHOLDER found a newer version of this file on disk. Reload to use that version, or overwrite it with your current draft.",
+    body: "Inkback found a newer version of this file on disk. Reload to use that version, or overwrite it with your current draft.",
   },
   conflict: {
     title: "Save conflict",
@@ -651,7 +651,7 @@ export function DocumentWorkspace({
             : reviewHandoffState === "undelivered"
               ? "Your review is saved. No agent was connected when you finished. If your agent does not resume, send it the message below."
               : reviewHandoffState === "error"
-                ? "NAME_PLACEHOLDER could not finish the handoff. Check the save status and that the local server is still running, then try again."
+                ? "Inkback could not finish the handoff. Check the save status and that the local server is still running, then try again."
                 : "Your review is saved. An agent was connected when you finished, but receipt has not been confirmed.";
   const reviewHandoffCopyMessage = buildReviewHandoffCopyMessage(
     activeDocumentPath ?? documentFilenameLabel,

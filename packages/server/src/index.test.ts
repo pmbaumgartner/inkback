@@ -15,10 +15,8 @@ describe("createApp", () => {
   );
 
   beforeEach(() => {
-    projectDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), "name-placeholder-server-"),
-    );
-    homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "name-placeholder-home-"));
+    projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "inkback-server-"));
+    homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "inkback-home-"));
   });
 
   afterEach(() => {
@@ -177,7 +175,7 @@ describe("createApp", () => {
         path: "notes/draft.md",
       })
       .send({
-        content: "# NAME_PLACEHOLDER change\n",
+        content: "# Inkback change\n",
         expectedVersion: readResponse.body.version,
       });
 
@@ -222,7 +220,7 @@ describe("createApp", () => {
         path: "draft.md",
       })
       .send({
-        content: "# NAME_PLACEHOLDER\n",
+        content: "# Inkback\n",
         expectedVersion: readResponse.body.version,
       });
 
@@ -752,13 +750,13 @@ describe("createApp", () => {
 
     expect(assetResponse.status).toBe(201);
     expect(assetResponse.body).toMatchObject({
-      markdownPath: "./.name-placeholder-assets/My-Sketch.png",
+      markdownPath: "./.inkback-assets/My-Sketch.png",
       mimeType: "image/png",
     });
     expect(assetResponse.body.previewUrl).toContain("/api/files?");
     expect(
       fs.readFileSync(
-        path.join(projectDir, ".name-placeholder-assets", "My-Sketch.png"),
+        path.join(projectDir, ".inkback-assets", "My-Sketch.png"),
         "utf-8",
       ),
     ).toBe("png bytes");

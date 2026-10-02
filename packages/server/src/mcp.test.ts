@@ -12,7 +12,7 @@ describe("mcp", () => {
   let documentPath: string;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "name-placeholder-mcp-"));
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "inkback-mcp-"));
     projectDir = path.join(tempDir, "project");
     stateFile = path.join(tempDir, "state", "server.json");
     documentPath = path.join(projectDir, "draft.md");
@@ -40,15 +40,15 @@ describe("mcp", () => {
     };
 
     await callTool(
-      "name_placeholder_watch_review_events",
+      "inkback_watch_review_events",
       { documentPath, projectPath: projectDir },
-      { NAME_PLACEHOLDER_STATE_FILE: stateFile },
+      { INKBACK_STATE_FILE: stateFile },
       fetchImpl,
     );
     await callTool(
-      "name_placeholder_watch_review_events",
+      "inkback_watch_review_events",
       { documentPath, projectPath: projectDir, timeoutSeconds: 5 },
-      { NAME_PLACEHOLDER_STATE_FILE: stateFile },
+      { INKBACK_STATE_FILE: stateFile },
       fetchImpl,
     );
 
@@ -81,9 +81,9 @@ describe("mcp", () => {
     };
 
     const result = await callTool(
-      "name_placeholder_watch_review_events",
+      "inkback_watch_review_events",
       { documentPath },
-      { NAME_PLACEHOLDER_STATE_FILE: stateFile },
+      { INKBACK_STATE_FILE: stateFile },
       fetchImpl,
     );
 
@@ -112,9 +112,9 @@ describe("mcp", () => {
       );
 
     const result = await callTool(
-      "name_placeholder_watch_review_events",
+      "inkback_watch_review_events",
       { documentPath, projectPath: projectDir },
-      { NAME_PLACEHOLDER_STATE_FILE: stateFile },
+      { INKBACK_STATE_FILE: stateFile },
       fetchImpl,
     );
 
@@ -138,7 +138,7 @@ describe("mcp", () => {
     startMcpServer({
       input: input as unknown as NodeJS.ReadStream,
       output: output as unknown as NodeJS.WriteStream,
-      env: { NAME_PLACEHOLDER_STATE_FILE: stateFile },
+      env: { INKBACK_STATE_FILE: stateFile },
       fetchImpl: async (_input, init) => {
         signal = init?.signal;
         return new Promise((_resolve, reject) => {
@@ -151,7 +151,7 @@ describe("mcp", () => {
       id: 1,
       method: "tools/call",
       params: {
-        name: "name_placeholder_watch_review_events",
+        name: "inkback_watch_review_events",
         arguments: { documentPath },
       },
     });
@@ -172,13 +172,13 @@ describe("mcp", () => {
 
     await expect(
       callTool(
-        "name_placeholder_reply_to_comment",
+        "inkback_reply_to_comment",
         {
           documentPath,
           parentId: "c1",
           message: "This closes early <<} and breaks parsing.",
         },
-        { NAME_PLACEHOLDER_STATE_FILE: stateFile },
+        { INKBACK_STATE_FILE: stateFile },
       ),
     ).rejects.toThrow(/CriticMarkup close delimiter/);
 

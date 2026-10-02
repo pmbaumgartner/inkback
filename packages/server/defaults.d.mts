@@ -1,2 +1,2 @@
-export const NAME_PLACEHOLDER_DEFAULT_PORT: number;
-export const NAME_PLACEHOLDER_DEFAULT_API_PORT: number;
+export const INKBACK_DEFAULT_PORT: number;
+export const INKBACK_DEFAULT_API_PORT: number;

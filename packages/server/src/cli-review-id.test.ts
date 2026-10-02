@@ -5,9 +5,7 @@ import { expect, it, vi } from "vitest";
 import { createCliDependencies, runCli } from "./cli";
 
 it("requires --no-watch when routing a viewer to an existing review consumer", async () => {
-  const tempDir = fs.mkdtempSync(
-    path.join(os.tmpdir(), "name-placeholder-viewer-"),
-  );
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "inkback-viewer-"));
   const documentPath = path.join(tempDir, "draft.md");
   fs.writeFileSync(documentPath, "# Draft\n");
   const errors: string[] = [];
@@ -19,11 +17,8 @@ it("requires --no-watch when routing a viewer to an existing review consumer", a
   const deps = createCliDependencies({
     cwd: tempDir,
     env: {
-      NAME_PLACEHOLDER_STATE_DIR: path.join(tempDir, "state"),
-      NAME_PLACEHOLDER_DEV_FRONTEND_STATE_FILE: path.join(
-        tempDir,
-        "dev-frontend.json",
-      ),
+      INKBACK_STATE_DIR: path.join(tempDir, "state"),
+      INKBACK_DEV_FRONTEND_STATE_FILE: path.join(tempDir, "dev-frontend.json"),
     },
     log: () => {},
     error: (message) => errors.push(message),

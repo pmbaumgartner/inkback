@@ -1,4 +1,4 @@
-# NAME_PLACEHOLDER
+# Inkback
 
 A local Markdown editor and review app. Open a file, leave comments and suggested edits, and save review data in the Markdown itself.
 
@@ -17,7 +17,7 @@ The development command starts the frontend and API and prints the browser URL.
 
 ```bash
 pnpm build
-node packages/server/bin/name-placeholder.mjs open /absolute/path/to/document.md
+node packages/server/bin/inkback.mjs open /absolute/path/to/document.md
 ```
 
 The open command waits for Finish review. Use `--no-watch` to open without waiting for a review handoff. Run `help` for other CLI commands.
@@ -38,10 +38,10 @@ Browser smoke tests and installed-package verification run separately from `pnpm
 The package includes a portable skill for reviewing Markdown with a coding agent:
 
 ```bash
-node packages/server/bin/name-placeholder.mjs skill install /path/to/skills/name-placeholder
+node packages/server/bin/inkback.mjs skill install /path/to/skills/inkback
 ```
 
-See [`packages/skill/name-placeholder/SKILL.md`](packages/skill/name-placeholder/SKILL.md).
+See [`packages/skill/inkback/SKILL.md`](packages/skill/inkback/SKILL.md).
 
 ## License and attribution
 

@@ -66,7 +66,7 @@ test.describe("review handoff", () => {
         const acknowledged = await request.post(
           `/api/review-sessions/${reviewId}/ack`,
           {
-            headers: { "x-name-placeholder-receipt-token": receiptToken },
+            headers: { "x-inkback-receipt-token": receiptToken },
             data: { sequence: events[0].sequence },
           },
         );
@@ -75,7 +75,7 @@ test.describe("review handoff", () => {
       } else {
         const cancelled = await request.delete(
           `/api/review-sessions/${reviewId}`,
-          { headers: { "x-name-placeholder-receipt-token": receiptToken } },
+          { headers: { "x-inkback-receipt-token": receiptToken } },
         );
         expect(cancelled.status()).toBe(200);
         await expect(status).toContainText("Review cancelled");

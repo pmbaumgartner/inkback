@@ -1,22 +1,22 @@
-export { NAME_PLACEHOLDER_DEFAULT_PORT } from "../defaults.mjs";
-export const NAME_PLACEHOLDER_BIND_HOST = "127.0.0.1";
-export const NAME_PLACEHOLDER_LOOPBACK_HOSTS = ["127.0.0.1", "::1"] as const;
-export const NAME_PLACEHOLDER_PUBLIC_HOST = "localhost";
+export { INKBACK_DEFAULT_PORT } from "../defaults.mjs";
+export const INKBACK_BIND_HOST = "127.0.0.1";
+export const INKBACK_LOOPBACK_HOSTS = ["127.0.0.1", "::1"] as const;
+export const INKBACK_PUBLIC_HOST = "localhost";
 
-export const NAME_PLACEHOLDER_BIND_HOST_ENV = "NAME_PLACEHOLDER_BIND_HOST";
+export const INKBACK_BIND_HOST_ENV = "INKBACK_BIND_HOST";
 
 const LOOPBACK_HOST_NAMES = new Set<string>([
-  ...NAME_PLACEHOLDER_LOOPBACK_HOSTS,
+  ...INKBACK_LOOPBACK_HOSTS,
   "localhost",
 ]);
 
 export function resolveBindHosts(
   env: NodeJS.ProcessEnv = process.env,
 ): readonly string[] {
-  const raw = env[NAME_PLACEHOLDER_BIND_HOST_ENV];
+  const raw = env[INKBACK_BIND_HOST_ENV];
 
   if (raw === undefined) {
-    return NAME_PLACEHOLDER_LOOPBACK_HOSTS;
+    return INKBACK_LOOPBACK_HOSTS;
   }
 
   const hosts = raw
@@ -25,7 +25,7 @@ export function resolveBindHosts(
     .filter((host) => host.length > 0);
 
   if (hosts.length === 0) {
-    return NAME_PLACEHOLDER_LOOPBACK_HOSTS;
+    return INKBACK_LOOPBACK_HOSTS;
   }
 
   return hosts;

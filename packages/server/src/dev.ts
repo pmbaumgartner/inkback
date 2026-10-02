@@ -2,7 +2,7 @@ import { createServer } from "./index.js";
 import path from "node:path";
 import fs from "node:fs";
 import { findAvailablePort } from "./ports.js";
-import { NAME_PLACEHOLDER_DEFAULT_API_PORT } from "../defaults.mjs";
+import { INKBACK_DEFAULT_API_PORT } from "../defaults.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "../../..");
 const projectDir = process.argv[2]
@@ -12,7 +12,7 @@ const projectDir = process.argv[2]
 fs.mkdirSync(projectDir, { recursive: true });
 
 const preferredPort = parseInt(
-  process.env.API_PORT || String(NAME_PLACEHOLDER_DEFAULT_API_PORT),
+  process.env.API_PORT || String(INKBACK_DEFAULT_API_PORT),
   10,
 );
 const port = await findAvailablePort(preferredPort);

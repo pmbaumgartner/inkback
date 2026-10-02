@@ -1,8 +1,5 @@
 import net from "node:net";
-import {
-  NAME_PLACEHOLDER_BIND_HOST,
-  NAME_PLACEHOLDER_LOOPBACK_HOSTS,
-} from "./network.js";
+import { INKBACK_BIND_HOST, INKBACK_LOOPBACK_HOSTS } from "./network.js";
 
 async function canListenOnPort(port: number, host: string): Promise<boolean> {
   return new Promise((resolve, reject) => {
@@ -39,12 +36,10 @@ async function canListenOnPort(port: number, host: string): Promise<boolean> {
 
 export async function findAvailablePort(
   preferredPort: number,
-  host = NAME_PLACEHOLDER_BIND_HOST,
+  host = INKBACK_BIND_HOST,
 ): Promise<number> {
   try {
-    const hostsToCheck = Array.from(
-      new Set([host, ...NAME_PLACEHOLDER_LOOPBACK_HOSTS]),
-    );
+    const hostsToCheck = Array.from(new Set([host, ...INKBACK_LOOPBACK_HOSTS]));
     const results = await Promise.all(
       hostsToCheck.map((nextHost) => canListenOnPort(preferredPort, nextHost)),
     );

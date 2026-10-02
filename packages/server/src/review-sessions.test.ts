@@ -10,9 +10,7 @@ describe("review session receipts", () => {
   let app: ReturnType<typeof createApp>["app"];
 
   beforeEach(() => {
-    projectDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), "name-placeholder-receipts-"),
-    );
+    projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "inkback-receipts-"));
     fs.writeFileSync(path.join(projectDir, "draft.md"), "# Draft\n");
     app = createApp({ homeDir: projectDir, staticDirPath: projectDir }).app;
   });
@@ -73,7 +71,7 @@ describe("review session receipts", () => {
       });
       const acknowledged = await request(app)
         .post(`/api/review-sessions/${reviewId}/ack`)
-        .set("x-name-placeholder-receipt-token", receiptToken)
+        .set("x-inkback-receipt-token", receiptToken)
         .send({ sequence });
       expect(acknowledged.status).toBe(200);
       expect(await status(reviewId)).toMatchObject({
@@ -119,7 +117,7 @@ describe("review session receipts", () => {
       (
         await request(app)
           .post(`/api/review-sessions/${reviewId}/ack`)
-          .set("x-name-placeholder-receipt-token", receiptToken)
+          .set("x-inkback-receipt-token", receiptToken)
           .send({ sequence: completed.body.event.sequence + 1 })
       ).status,
     ).toBe(409);
@@ -127,7 +125,7 @@ describe("review session receipts", () => {
       (
         await request(app)
           .delete(`/api/review-sessions/${reviewId}`)
-          .set("x-name-placeholder-receipt-token", receiptToken)
+          .set("x-inkback-receipt-token", receiptToken)
       ).status,
     ).toBe(200);
     expect(await status(reviewId)).toMatchObject({

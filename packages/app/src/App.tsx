@@ -59,7 +59,7 @@ export function Homepage({ message }: { message: ReactNode }) {
       data-testid="homepage"
     >
       <div className="max-w-md text-center">
-        <h1 className="text-2xl font-semibold">NAME_PLACEHOLDER</h1>
+        <h1 className="text-2xl font-semibold">Inkback</h1>
         <p className="mt-3 text-slate-600 dark:text-slate-300">{message}</p>
       </div>
     </main>
@@ -137,7 +137,7 @@ export function App() {
           window.location.assign(nextUrl.href);
         }
       } catch (error) {
-        console.error("Failed to handle NAME_PLACEHOLDER open request:", error);
+        console.error("Failed to handle Inkback open request:", error);
       }
     };
 
@@ -184,7 +184,7 @@ export function App() {
           !requestedPathState.documentPath
         ) {
           setActiveDocumentPath(null);
-          setLoadError("NAME_PLACEHOLDER now opens one .md file at a time.");
+          setLoadError("Inkback now opens one .md file at a time.");
           setLoading(false);
           return;
         }
@@ -230,7 +230,7 @@ export function App() {
         )
       : null;
 
-    document.title = workspaceTitlePath ?? "NAME_PLACEHOLDER";
+    document.title = workspaceTitlePath ?? "Inkback";
   }, [activeDocumentPath, backend, requestedPathState.rawPath]);
 
   const handleSaveDocument = useCallback(

@@ -1,11 +1,11 @@
 {
-  "name": "name-placeholder",
+  "name": "inkback",
   "version": "0.1.0",
   "description": "A local markdown review app",
   "license": "MIT",
   "author": "Nathan Baschez",
   "bin": {
-    "name-placeholder": "./packages/server/bin/name-placeholder.mjs"
+    "inkback": "./packages/server/bin/inkback.mjs"
   },
   "scripts": {
     "dev": "node scripts/dev.mjs",
@@ -14,13 +14,13 @@
     "lint:fix": "biome check --write . --assist-enabled=false",
     "unused": "knip --no-progress",
     "format": "biome format --write .",
-    "test": "pnpm --filter @name-placeholder/rfm test && pnpm --filter @name-placeholder/app test && pnpm --filter @name-placeholder/server test",
+    "test": "pnpm --filter @inkback/rfm test && pnpm --filter @inkback/app test && pnpm --filter @inkback/server test",
     "test:e2e": "playwright test --config packages/app/playwright.config.ts",
     "test:smoke": "playwright test --config packages/app/playwright.config.ts --grep @smoke",
     "test:package": "node scripts/test-package.mjs",
-    "test:coverage": "pnpm --filter @name-placeholder/app exec vitest run --coverage && pnpm --filter @name-placeholder/server exec vitest run --coverage",
+    "test:coverage": "pnpm --filter @inkback/app exec vitest run --coverage && pnpm --filter @inkback/server exec vitest run --coverage",
     "check": "pnpm lint && pnpm test && pnpm build",
-    "build": "pnpm --filter @name-placeholder/rfm build && pnpm --filter @name-placeholder/app build && pnpm --filter @name-placeholder/server build"
+    "build": "pnpm --filter @inkback/rfm build && pnpm --filter @inkback/app build && pnpm --filter @inkback/server build"
   },
   "files": [
     "packages/app/dist",
@@ -30,10 +30,10 @@
     "packages/server/bin",
     "packages/server/defaults.mjs",
     "packages/server/defaults.d.mts",
-    "packages/skill/name-placeholder"
+    "packages/skill/inkback"
   ],
   "dependencies": {
-    "@name-placeholder/rfm": "file:packages/rfm",
+    "@inkback/rfm": "file:packages/rfm",
     "express": "^5.1.0",
     "yaml": "^2.9.0"
   },

@@ -8,9 +8,7 @@ import { describe, expect, it } from "vitest";
 type Encoding = "newline-delimited JSON" | "Content-Length";
 
 async function initializeOverStdio(encoding: Encoding): Promise<unknown> {
-  const tempDir = fs.mkdtempSync(
-    path.join(os.tmpdir(), "name-placeholder-mcp-stdio-"),
-  );
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "inkback-mcp-stdio-"));
   const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
   const tsconfig = path.join(tempDir, "tsconfig.json");
   // Resolve workspace source in the subprocess so a clean checkout needs no build.
@@ -19,7 +17,7 @@ async function initializeOverStdio(encoding: Encoding): Promise<unknown> {
     JSON.stringify({
       compilerOptions: {
         baseUrl: repoRoot,
-        paths: { "@name-placeholder/rfm": ["packages/rfm/src/index.ts"] },
+        paths: { "@inkback/rfm": ["packages/rfm/src/index.ts"] },
       },
     }),
   );
@@ -52,7 +50,7 @@ async function initializeOverStdio(encoding: Encoding): Promise<unknown> {
       const timer = setTimeout(() => {
         reject(
           new Error(
-            `NAME_PLACEHOLDER did not answer initialize over ${encoding}; received ${buffer.length} stdout bytes. stderr: ${stderr || "(empty)"}`,
+            `Inkback did not answer initialize over ${encoding}; received ${buffer.length} stdout bytes. stderr: ${stderr || "(empty)"}`,
           ),
         );
       }, 3_000);
@@ -119,14 +117,14 @@ describe("MCP stdio client compatibility", () => {
   it.each<Encoding>([
     "newline-delimited JSON",
     "Content-Length",
-  ])("initializes the NAME_PLACEHOLDER MCP process over %s", async (encoding) => {
+  ])("initializes the Inkback MCP process over %s", async (encoding) => {
     await expect(initializeOverStdio(encoding)).resolves.toMatchObject({
       jsonrpc: "2.0",
       id: 1,
       result: {
         protocolVersion: "2025-06-18",
         capabilities: { tools: {} },
-        serverInfo: { name: "name-placeholder" },
+        serverInfo: { name: "inkback" },
       },
     });
   });

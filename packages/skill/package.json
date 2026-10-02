@@ -1,6 +1,6 @@
 {
-  "name": "@name-placeholder/skill",
+  "name": "@inkback/skill",
   "version": "0.1.0",
   "private": true,
-  "description": "Portable agent skill for NAME_PLACEHOLDER"
+  "description": "Portable agent skill for Inkback"
 }

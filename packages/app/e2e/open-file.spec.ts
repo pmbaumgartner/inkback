@@ -37,7 +37,7 @@ test.describe("opening local markdown files", () => {
         "",
         "| Name | Status |",
         "| --- | --- |",
-        "| NAME_PLACEHOLDER | ready |",
+        "| Inkback | ready |",
         "",
         '![Sketch](./images/sketch.png "Sketch title")',
         "",
@@ -61,7 +61,7 @@ test.describe("opening local markdown files", () => {
     const editor = page.getByTestId("rich-text-editor");
     await expect(editor).toContainText("Smoke Fixture");
     await expect(editor).toContainText("first");
-    await expect(editor).toContainText("NAME_PLACEHOLDER");
+    await expect(editor).toContainText("Inkback");
     await expect(
       editor.locator('a[data-markdown-src="./notes.md"]', {
         hasText: "local link",

@@ -35,7 +35,7 @@ describe("app navigation", () => {
     );
   });
 
-  it("builds NAME_PLACEHOLDER routes for linked markdown documents", () => {
+  it("builds Inkback routes for linked markdown documents", () => {
     window.history.replaceState(
       null,
       "",

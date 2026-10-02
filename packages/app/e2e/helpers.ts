@@ -5,7 +5,7 @@ import type { Page } from "@playwright/test";
 import { expect } from "@playwright/test";
 
 export function createMarkdownProject(label: string) {
-  return fs.mkdtempSync(path.join(os.tmpdir(), `name-placeholder-${label}-`));
+  return fs.mkdtempSync(path.join(os.tmpdir(), `inkback-${label}-`));
 }
 
 export function removeMarkdownProject(projectDir: string) {

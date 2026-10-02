@@ -8,7 +8,7 @@ importers:
 
   .:
     dependencies:
-      '@name-placeholder/rfm':
+      '@inkback/rfm':
         specifier: file:packages/rfm
         version: link:packages/rfm
       express:
@@ -188,7 +188,7 @@ importers:
 
   packages/server:
     dependencies:
-      '@name-placeholder/rfm':
+      '@inkback/rfm':
         specifier: workspace:*
         version: link:../rfm
       express:

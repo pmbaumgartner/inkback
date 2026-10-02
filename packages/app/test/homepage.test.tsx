@@ -13,7 +13,7 @@ describe("Homepage", () => {
         <Homepage message="Open a local Markdown file to begin reviewing." />,
       );
     });
-    expect(container.querySelector("h1")?.textContent).toBe("NAME_PLACEHOLDER");
+    expect(container.querySelector("h1")?.textContent).toBe("Inkback");
     expect(container.textContent).toContain(
       "Open a local Markdown file to begin reviewing.",
     );

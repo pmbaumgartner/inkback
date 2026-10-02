@@ -84,7 +84,7 @@ export async function watchReviewEvents(
       (afterSequence !== undefined && nextSequence <= afterSequence)
     ) {
       throw new Error(
-        "NAME_PLACEHOLDER returned an invalid review cursor. Restart the review watch after checking that the server is up to date.",
+        "Inkback returned an invalid review cursor. Restart the review watch after checking that the server is up to date.",
       );
     }
     afterSequence = nextSequence - 1;

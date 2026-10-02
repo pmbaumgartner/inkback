@@ -5,15 +5,12 @@ import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
+import { type RfmDiagnostic, validateInkbackMarkdown } from "@inkback/rfm";
 import {
-  type RfmDiagnostic,
-  validateNamePlaceholderMarkdown,
-} from "@name-placeholder/rfm";
-import {
-  NAME_PLACEHOLDER_BIND_HOST,
-  NAME_PLACEHOLDER_DEFAULT_PORT,
-  NAME_PLACEHOLDER_LOOPBACK_HOSTS,
-  NAME_PLACEHOLDER_PUBLIC_HOST,
+  INKBACK_BIND_HOST,
+  INKBACK_DEFAULT_PORT,
+  INKBACK_LOOPBACK_HOSTS,
+  INKBACK_PUBLIC_HOST,
 } from "./network.js";
 import { findAvailablePort } from "./ports.js";
 import { watchReviewEvents } from "./watch-review-events.js";
@@ -39,7 +36,7 @@ const KNOWN_COMMANDS = [
   "criticmarkup",
 ] as const;
 
-export interface NamePlaceholderServerState {
+export interface InkbackServerState {
   port: number;
   pid: number;
   startedAt: string;
@@ -432,13 +429,9 @@ function applyCliEnvOverrides(
     ...deps,
     env: {
       ...deps.env,
-      ...(options.port ? { NAME_PLACEHOLDER_PORT: options.port } : {}),
-      ...(options.stateDir
-        ? { NAME_PLACEHOLDER_STATE_DIR: options.stateDir }
-        : {}),
-      ...(options.stateFile
-        ? { NAME_PLACEHOLDER_STATE_FILE: options.stateFile }
-        : {}),
+      ...(options.port ? { INKBACK_PORT: options.port } : {}),
+      ...(options.stateDir ? { INKBACK_STATE_DIR: options.stateDir } : {}),
+      ...(options.stateFile ? { INKBACK_STATE_FILE: options.stateFile } : {}),
     },
   };
 }
@@ -555,12 +548,8 @@ function applyWatchEnvOverrides(
     ...deps,
     env: {
       ...deps.env,
-      ...(options.stateDir
-        ? { NAME_PLACEHOLDER_STATE_DIR: options.stateDir }
-        : {}),
-      ...(options.stateFile
-        ? { NAME_PLACEHOLDER_STATE_FILE: options.stateFile }
-        : {}),
+      ...(options.stateDir ? { INKBACK_STATE_DIR: options.stateDir } : {}),
+      ...(options.stateFile ? { INKBACK_STATE_FILE: options.stateFile } : {}),
     },
   };
 }
@@ -692,7 +681,7 @@ export function createDefaultOpenUrl({
   openDetachedCommand?: OpenDetachedCommand;
 } = {}): (url: string) => OpenMode {
   return (url: string) => {
-    if (env.NAME_PLACEHOLDER_NO_OPEN === "1") {
+    if (env.INKBACK_NO_OPEN === "1") {
       return "disabled";
     }
 
@@ -807,7 +796,7 @@ function defaultSpawnServerProcess(options: {
   child.unref();
 
   if (!child.pid) {
-    throw new Error("Failed to start NAME_PLACEHOLDER in the background.");
+    throw new Error("Failed to start Inkback in the background.");
   }
 
   return { pid: child.pid };
@@ -835,13 +824,11 @@ export function createCliDependencies(
 }
 
 function printHelp(log: (message: string) => void) {
-  log(
-    "NAME_PLACEHOLDER is a local Markdown review app for AI-assisted workflows.",
-  );
+  log("Inkback is a local Markdown review app for AI-assisted workflows.");
   log("");
   log("Usage:");
-  log("  name-placeholder [flags] <command> [args]");
-  log("  name-placeholder <path>");
+  log("  inkback [flags] <command> [args]");
+  log("  inkback <path>");
   log("");
   log("Commands:");
   log("  open <path>        Open a Markdown file and wait for Finish review");
@@ -852,9 +839,7 @@ function printHelp(log: (message: string) => void) {
   log("  mcp                Start the experimental stdio MCP server");
   log("  doctor [path]      Diagnose setup or validate Markdown");
   log("  help criticmarkup  Show CriticMarkup examples");
-  log(
-    "  skill              Locate or install the NAME_PLACEHOLDER agent skill",
-  );
+  log("  skill              Locate or install the Inkback agent skill");
   log("  criticmarkup       Show CriticMarkup examples");
   log("");
   log("Flags:");
@@ -864,12 +849,12 @@ function printHelp(log: (message: string) => void) {
   log("  --no-color         Disable color");
   log("");
   log("Examples:");
-  log("  name-placeholder open ./draft.md");
-  log("  name-placeholder open ./draft.md --print-url");
-  log("  name-placeholder open ./draft.md --json");
-  log("  name-placeholder open ./draft.md --no-watch");
-  log("  name-placeholder watch ./draft.md --json");
-  log("  name-placeholder status --json");
+  log("  inkback open ./draft.md");
+  log("  inkback open ./draft.md --print-url");
+  log("  inkback open ./draft.md --json");
+  log("  inkback open ./draft.md --no-watch");
+  log("  inkback watch ./draft.md --json");
+  log("  inkback status --json");
   log("");
 }
 
@@ -880,11 +865,11 @@ function printCommandHelp(
   if (command === "open") {
     log("Usage:");
     log(
-      "  name-placeholder open <path> [--no-open] [--no-watch] [--print-url] [--port <port>]",
+      "  inkback open <path> [--no-open] [--no-watch] [--print-url] [--port <port>]",
     );
     log("");
     log(
-      "Opens one Markdown file and waits for Finish review. Starts NAME_PLACEHOLDER if needed.",
+      "Opens one Markdown file and waits for Finish review. Starts Inkback if needed.",
     );
     log("");
     log("Flags:");
@@ -906,35 +891,29 @@ function printCommandHelp(
     log("  --state-dir <dir>    Directory containing server.json");
     log("");
     log("Environment variables:");
-    log(
-      "  NAME_PLACEHOLDER_HOST       Route open through a hosted NAME_PLACEHOLDER instance",
-    );
+    log("  INKBACK_HOST       Route open through a hosted Inkback instance");
     log("                        (remote mode). The CLI registers a session,");
     log("                        opens an SSE channel, and writes save events");
     log("                        back to disk.");
-    log(
-      "  NAME_PLACEHOLDER_TOKEN      Bearer token sent on remote-document requests.",
-    );
+    log("  INKBACK_TOKEN      Bearer token sent on remote-document requests.");
     log("                        Required when the hosted server binds to a");
     log("                        non-loopback host. Must match the value the");
     log("                        hosted server was started with.");
-    log("  NAME_PLACEHOLDER_NO_OPEN    Set to 1 to suppress browser launch.");
-    log(
-      "  NAME_PLACEHOLDER_BIND_HOST  Comma-separated bind hosts for the hosted",
-    );
+    log("  INKBACK_NO_OPEN    Set to 1 to suppress browser launch.");
+    log("  INKBACK_BIND_HOST  Comma-separated bind hosts for the hosted");
     log(
       "                        server (default: loopback). Set to 0.0.0.0 or",
     );
     log("                        a Tailscale interface to expose remotely.");
-    log("                        Requires NAME_PLACEHOLDER_TOKEN.");
+    log("                        Requires INKBACK_TOKEN.");
     return;
   }
 
   if (command === "start") {
     log("Usage:");
-    log("  name-placeholder start [--port <port>] [--json]");
+    log("  inkback start [--port <port>] [--json]");
     log("");
-    log("Starts or reuses the background NAME_PLACEHOLDER server.");
+    log("Starts or reuses the background Inkback server.");
     log("");
     log("Flags:");
     log("  --json               Print machine-readable output");
@@ -946,9 +925,9 @@ function printCommandHelp(
 
   if (command === "status") {
     log("Usage:");
-    log("  name-placeholder status [--json]");
+    log("  inkback status [--json]");
     log("");
-    log("Shows whether NAME_PLACEHOLDER is running.");
+    log("Shows whether Inkback is running.");
     log("");
     log("Flags:");
     log("  --json               Print machine-readable output");
@@ -959,9 +938,9 @@ function printCommandHelp(
 
   if (command === "stop") {
     log("Usage:");
-    log("  name-placeholder stop [--all]");
+    log("  inkback stop [--all]");
     log("");
-    log("Stops the managed background NAME_PLACEHOLDER server.");
+    log("Stops the managed background Inkback server.");
     log("");
     log("Flags:");
     log(
@@ -974,11 +953,9 @@ function printCommandHelp(
 
   if (command === "watch") {
     log("Usage:");
-    log("  name-placeholder watch <path> [--json] [--timeout <seconds>]");
+    log("  inkback watch <path> [--json] [--timeout <seconds>]");
     log("");
-    log(
-      "Waits until NAME_PLACEHOLDER receives Finish review for one Markdown file.",
-    );
+    log("Waits until Inkback receives Finish review for one Markdown file.");
     log("");
     log("Flags:");
     log("  --json                    Print machine-readable output");
@@ -998,18 +975,18 @@ function printCommandHelp(
 
   if (command === "mcp") {
     log("Usage:");
-    log("  name-placeholder mcp");
+    log("  inkback mcp");
     log("");
-    log("Starts NAME_PLACEHOLDER's experimental stdio MCP server.");
+    log("Starts Inkback's experimental stdio MCP server.");
     return;
   }
 
   if (command === "doctor") {
     log("Usage:");
-    log("  name-placeholder doctor [path] [--json]");
+    log("  inkback doctor [path] [--json]");
     log("");
     log(
-      "Diagnoses local NAME_PLACEHOLDER setup and server state, or validates one Markdown file.",
+      "Diagnoses local Inkback setup and server state, or validates one Markdown file.",
     );
     log("");
     log("Flags:");
@@ -1026,7 +1003,7 @@ function printCommandHelp(
 
   if (command === "skill") {
     log(
-      "Usage: name-placeholder skill path | name-placeholder skill install <skill-root>/name-placeholder [--force]",
+      "Usage: inkback skill path | inkback skill install <skill-root>/inkback [--force]",
     );
     log(
       "Installs the packaged Agent Skill at an explicit path. Reload your agent's skills afterward.",
@@ -1099,23 +1076,21 @@ function printCriticMarkupHelp(log: (message: string) => void) {
 
 function parsePort(value: string | undefined): number {
   const parsed = Number.parseInt(value || "", 10);
-  return Number.isFinite(parsed) && parsed > 0
-    ? parsed
-    : NAME_PLACEHOLDER_DEFAULT_PORT;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : INKBACK_DEFAULT_PORT;
 }
 
 function getPreferredPort(env: NodeJS.ProcessEnv): number {
-  return parsePort(env.NAME_PLACEHOLDER_PORT || env.PORT);
+  return parsePort(env.INKBACK_PORT || env.PORT);
 }
 
 function buildPublicBaseUrl(port: number): string {
-  return `http://${NAME_PLACEHOLDER_PUBLIC_HOST}:${port}`;
+  return `http://${INKBACK_PUBLIC_HOST}:${port}`;
 }
 
 function getDevFrontendStateFilePath(
   env: NodeJS.ProcessEnv = process.env,
 ): string {
-  const explicitFile = env.NAME_PLACEHOLDER_DEV_FRONTEND_STATE_FILE?.trim();
+  const explicitFile = env.INKBACK_DEV_FRONTEND_STATE_FILE?.trim();
   if (explicitFile) {
     return path.resolve(explicitFile);
   }
@@ -1210,8 +1185,8 @@ async function runRemoteOpen(
 ): Promise<number> {
   const baseUrl = options.host.replace(/\/$/, "");
   const remoteToken =
-    typeof deps.env.NAME_PLACEHOLDER_TOKEN === "string"
-      ? deps.env.NAME_PLACEHOLDER_TOKEN.trim()
+    typeof deps.env.INKBACK_TOKEN === "string"
+      ? deps.env.INKBACK_TOKEN.trim()
       : "";
   const authHeaders: Record<string, string> =
     remoteToken.length > 0 ? { Authorization: `Bearer ${remoteToken}` } : {};
@@ -1255,7 +1230,7 @@ async function runRemoteOpen(
   if (!registerResponse.ok) {
     if (registerResponse.status === 401) {
       deps.error(
-        `Remote host rejected the session register (HTTP 401). Set NAME_PLACEHOLDER_TOKEN to the token configured on the host before retrying.`,
+        `Remote host rejected the session register (HTTP 401). Set INKBACK_TOKEN to the token configured on the host before retrying.`,
       );
     } else {
       deps.error(
@@ -1286,7 +1261,7 @@ async function runRemoteOpen(
     return 0;
   }
 
-  if (!options.noOpen && deps.env.NAME_PLACEHOLDER_NO_OPEN !== "1") {
+  if (!options.noOpen && deps.env.INKBACK_NO_OPEN !== "1") {
     deps.openUrl(viewerUrl);
   }
 
@@ -1300,7 +1275,7 @@ async function runRemoteOpen(
       path: options.openPath,
     });
   } else {
-    deps.log(`Opened remote NAME_PLACEHOLDER session: ${viewerUrl}`);
+    deps.log(`Opened remote Inkback session: ${viewerUrl}`);
     deps.log(`Holding session open for ${options.openPath}. Ctrl-C to exit.`);
   }
 
@@ -1421,16 +1396,12 @@ function resolveTargetPath(inputPath: string): ResolvedTargetPath {
   try {
     const stat = fs.statSync(resolvedPath);
     if (stat.isDirectory()) {
-      throw new Error(
-        `NAME_PLACEHOLDER can only open .md files: ${resolvedPath}`,
-      );
+      throw new Error(`Inkback can only open .md files: ${resolvedPath}`);
     }
 
     if (stat.isFile()) {
       if (!looksLikeMarkdownFile) {
-        throw new Error(
-          `NAME_PLACEHOLDER can only open .md files: ${resolvedPath}`,
-        );
+        throw new Error(`Inkback can only open .md files: ${resolvedPath}`);
       }
 
       return {
@@ -1441,7 +1412,7 @@ function resolveTargetPath(inputPath: string): ResolvedTargetPath {
   } catch (error) {
     if (
       error instanceof Error &&
-      error.message.startsWith("NAME_PLACEHOLDER can only open")
+      error.message.startsWith("Inkback can only open")
     ) {
       throw error;
     }
@@ -1460,25 +1431,23 @@ function resolveTargetPath(inputPath: string): ResolvedTargetPath {
 export function getServerStateFilePath(
   env: NodeJS.ProcessEnv = process.env,
 ): string {
-  const explicitFile = env.NAME_PLACEHOLDER_STATE_FILE?.trim();
+  const explicitFile = env.INKBACK_STATE_FILE?.trim();
   if (explicitFile) {
     return path.resolve(explicitFile);
   }
 
-  const explicitDir = env.NAME_PLACEHOLDER_STATE_DIR?.trim();
+  const explicitDir = env.INKBACK_STATE_DIR?.trim();
   if (explicitDir) {
     return path.join(path.resolve(explicitDir), "server.json");
   }
 
-  return path.join(os.homedir(), ".name-placeholder", "server.json");
+  return path.join(os.homedir(), ".inkback", "server.json");
 }
 
-function isValidServerState(
-  value: unknown,
-): value is NamePlaceholderServerState {
+function isValidServerState(value: unknown): value is InkbackServerState {
   if (!value || typeof value !== "object") return false;
 
-  const candidate = value as Partial<NamePlaceholderServerState>;
+  const candidate = value as Partial<InkbackServerState>;
   return (
     typeof candidate.port === "number" &&
     Number.isFinite(candidate.port) &&
@@ -1515,7 +1484,7 @@ function isValidDevFrontendState(value: unknown): value is DevFrontendState {
 
 function readServerStateFromDisk(
   stateFilePath: string,
-): NamePlaceholderServerState | null {
+): InkbackServerState | null {
   try {
     const raw = fs.readFileSync(stateFilePath, "utf8");
     const parsed = JSON.parse(raw) as unknown;
@@ -1547,7 +1516,7 @@ function readDevFrontendStateFromDisk(
 
 function writeServerStateToDisk(
   stateFilePath: string,
-  state: NamePlaceholderServerState,
+  state: InkbackServerState,
 ) {
   fs.mkdirSync(path.dirname(stateFilePath), { recursive: true });
   fs.writeFileSync(stateFilePath, `${JSON.stringify(state, null, 2)}\n`);
@@ -1563,10 +1532,7 @@ async function getStatusPayload(
   port: number,
   deps: CliDependencies,
 ): Promise<StatusPayload | null> {
-  for (const host of [
-    NAME_PLACEHOLDER_BIND_HOST,
-    ...NAME_PLACEHOLDER_LOOPBACK_HOSTS,
-  ]) {
+  for (const host of [INKBACK_BIND_HOST, ...INKBACK_LOOPBACK_HOSTS]) {
     try {
       const response = await deps.fetchImpl(
         buildLoopbackUrl(host, port, STATUS_PATH),
@@ -1598,7 +1564,7 @@ async function waitForServer(port: number, deps: CliDependencies) {
     await deps.sleepImpl(SERVER_WAIT_DELAY_MS);
   }
 
-  throw new Error("Timed out waiting for NAME_PLACEHOLDER to start.");
+  throw new Error("Timed out waiting for Inkback to start.");
 }
 
 async function waitForServerToStop(
@@ -1691,9 +1657,9 @@ async function resolveLiveDevFrontendBaseUrl(
 }
 
 async function normalizeTrackedState(
-  persistedState: NamePlaceholderServerState,
+  persistedState: InkbackServerState,
   stateFilePath: string,
-): Promise<NamePlaceholderServerState> {
+): Promise<InkbackServerState> {
   const normalizedState = {
     ...persistedState,
     url: buildPublicBaseUrl(persistedState.port),
@@ -1769,7 +1735,7 @@ async function findReusableServer(
 
 export async function readRunningServerState(
   deps: CliDependencies,
-): Promise<NamePlaceholderServerState | null> {
+): Promise<InkbackServerState | null> {
   const reusableServer = await findReusableServer(deps, {
     serverRoot: currentServerRoot,
   });
@@ -1815,7 +1781,7 @@ export async function ensureServerRunning(
     throw error;
   }
 
-  const state: NamePlaceholderServerState = {
+  const state: InkbackServerState = {
     port,
     pid: spawned.pid,
     startedAt: new Date().toISOString(),
@@ -1859,7 +1825,7 @@ function buildServerStatusJson(
 }
 
 async function stopTrackedServer(deps: CliDependencies): Promise<{
-  persistedState: NamePlaceholderServerState | null;
+  persistedState: InkbackServerState | null;
   stopped: boolean;
   portIsQuiet: boolean;
   failedPid: number | null;
@@ -1946,7 +1912,7 @@ async function runDoctor(
     preferredPortResponds: Boolean(preferredStatus),
     serverRoot: trackedStatus?.serverRoot ?? null,
     serverRootMatches,
-    browserOpeningDisabled: deps.env.NAME_PLACEHOLDER_NO_OPEN === "1",
+    browserOpeningDisabled: deps.env.INKBACK_NO_OPEN === "1",
     cwd: deps.cwd,
     cwdReadable,
   };
@@ -1994,9 +1960,7 @@ async function runMarkdownDoctor(
   json: boolean,
 ): Promise<number> {
   if (!isMarkdownPath(targetPath)) {
-    deps.error(
-      `NAME_PLACEHOLDER doctor can only validate .md files: ${targetPath}`,
-    );
+    deps.error(`Inkback doctor can only validate .md files: ${targetPath}`);
     return USAGE_ERROR;
   }
 
@@ -2023,7 +1987,7 @@ async function runMarkdownDoctor(
     return USAGE_ERROR;
   }
 
-  const validation = validateNamePlaceholderMarkdown(markdown);
+  const validation = validateInkbackMarkdown(markdown);
   const payload = {
     kind: "markdown" as const,
     path: absolutePath,
@@ -2041,7 +2005,7 @@ async function runMarkdownDoctor(
   }
 
   const displayPath = relativeDisplayPath(deps.cwd, absolutePath);
-  deps.log(`NAME_PLACEHOLDER Markdown doctor: ${displayPath}`);
+  deps.log(`Inkback Markdown doctor: ${displayPath}`);
   deps.log(`Status: ${validation.ok ? "passed" : "failed"}`);
 
   if (validation.errors.length > 0) {
@@ -2169,7 +2133,7 @@ export async function runCli(
   if (parsed.command === "help") {
     const [topic, ...extra] = parsed.rest;
     if (extra.length > 0) {
-      deps.error("Usage: name-placeholder help [criticmarkup|command]");
+      deps.error("Usage: inkback help [criticmarkup|command]");
       return USAGE_ERROR;
     }
 
@@ -2229,12 +2193,12 @@ export async function runCli(
       (rest.length === 2 || (rest.length === 3 && rest[2] === "--force"))
     ) {
       deps.log(
-        `Installed NAME_PLACEHOLDER skill: ${installSkill(rest[1], rest[2] === "--force")}`,
+        `Installed Inkback skill: ${installSkill(rest[1], rest[2] === "--force")}`,
       );
       return 0;
     }
     deps.error(
-      "Usage: name-placeholder skill path | name-placeholder skill install <skill-root>/name-placeholder [--force]",
+      "Usage: inkback skill path | inkback skill install <skill-root>/inkback [--force]",
     );
     return USAGE_ERROR;
   }
@@ -2254,7 +2218,7 @@ export async function runCli(
     }
 
     if (options.positionals.length > 0) {
-      deps.error("Usage: name-placeholder start [--port <port>] [--json]");
+      deps.error("Usage: inkback start [--port <port>] [--json]");
       return USAGE_ERROR;
     }
 
@@ -2275,10 +2239,10 @@ export async function runCli(
 
     if (result.reused) {
       if (result.server.tracked) {
-        deps.log(`NAME_PLACEHOLDER is already running at ${result.server.url}`);
+        deps.log(`Inkback is already running at ${result.server.url}`);
       } else {
         deps.log(
-          `NAME_PLACEHOLDER is already running at ${result.server.url}, but it is not managed by ${getServerStateFilePath(deps.env)}.`,
+          `Inkback is already running at ${result.server.url}, but it is not managed by ${getServerStateFilePath(deps.env)}.`,
         );
       }
       return 0;
@@ -2290,7 +2254,7 @@ export async function runCli(
       );
     }
 
-    deps.log(`NAME_PLACEHOLDER running at ${result.server.url}`);
+    deps.log(`Inkback running at ${result.server.url}`);
     return 0;
   }
 
@@ -2309,7 +2273,7 @@ export async function runCli(
     }
 
     if (options.positionals.length > 0) {
-      deps.error("Usage: name-placeholder status [--json]");
+      deps.error("Usage: inkback status [--json]");
       return USAGE_ERROR;
     }
 
@@ -2325,9 +2289,7 @@ export async function runCli(
         return 0;
       }
 
-      deps.log(
-        "NAME_PLACEHOLDER is not running. Start it with `name-placeholder start`.",
-      );
+      deps.log("Inkback is not running. Start it with `inkback start`.");
       return 1;
     }
 
@@ -2339,7 +2301,7 @@ export async function runCli(
       return 0;
     }
 
-    deps.log(`NAME_PLACEHOLDER is running at ${server.url}`);
+    deps.log(`Inkback is running at ${server.url}`);
     if (server.tracked && server.pid !== null && server.startedAt !== null) {
       deps.log(`PID: ${server.pid}`);
       deps.log(`Started: ${server.startedAt}`);
@@ -2367,7 +2329,7 @@ export async function runCli(
     }
 
     if (options.positionals.length > 0) {
-      deps.error("Usage: name-placeholder stop [--all]");
+      deps.error("Usage: inkback stop [--all]");
       return USAGE_ERROR;
     }
 
@@ -2399,7 +2361,7 @@ export async function runCli(
             }
 
             deps.log(
-              `Stopped unmanaged NAME_PLACEHOLDER at ${buildPublicBaseUrl(preferredPort)}.`,
+              `Stopped unmanaged Inkback at ${buildPublicBaseUrl(preferredPort)}.`,
             );
             return 0;
           }
@@ -2420,8 +2382,8 @@ export async function runCli(
 
         deps.error(
           options.all
-            ? `NAME_PLACEHOLDER is still running at ${buildPublicBaseUrl(preferredPort)}, but it could not be matched to a safe process candidate. Stop it manually.`
-            : `NAME_PLACEHOLDER is still running at ${buildPublicBaseUrl(preferredPort)}, but it is not managed by ${stateFilePath}. Stop it manually.`,
+            ? `Inkback is still running at ${buildPublicBaseUrl(preferredPort)}, but it could not be matched to a safe process candidate. Stop it manually.`
+            : `Inkback is still running at ${buildPublicBaseUrl(preferredPort)}, but it is not managed by ${stateFilePath}. Stop it manually.`,
         );
         return 1;
       }
@@ -2435,7 +2397,7 @@ export async function runCli(
         return 0;
       }
 
-      deps.log("NAME_PLACEHOLDER is not running.");
+      deps.log("Inkback is not running.");
       return 0;
     }
 
@@ -2449,9 +2411,7 @@ export async function runCli(
         return 1;
       }
 
-      deps.error(
-        `Failed to stop NAME_PLACEHOLDER process ${stopResult.failedPid}.`,
-      );
+      deps.error(`Failed to stop Inkback process ${stopResult.failedPid}.`);
       return 1;
     }
 
@@ -2481,11 +2441,9 @@ export async function runCli(
             }
 
             deps.log(
-              `Stopped NAME_PLACEHOLDER at ${buildPublicBaseUrl(stopResult.persistedState.port)}.`,
+              `Stopped Inkback at ${buildPublicBaseUrl(stopResult.persistedState.port)}.`,
             );
-            deps.log(
-              `Stopped unmanaged NAME_PLACEHOLDER process ${candidatePid}.`,
-            );
+            deps.log(`Stopped unmanaged Inkback process ${candidatePid}.`);
             return 0;
           }
         }
@@ -2506,7 +2464,7 @@ export async function runCli(
       }
 
       deps.error(
-        `Stopped tracked NAME_PLACEHOLDER process ${stopResult.persistedState.pid}, but another NAME_PLACEHOLDER instance is still running at ${buildPublicBaseUrl(stopResult.persistedState.port)}.`,
+        `Stopped tracked Inkback process ${stopResult.persistedState.pid}, but another Inkback instance is still running at ${buildPublicBaseUrl(stopResult.persistedState.port)}.`,
       );
       return 1;
     }
@@ -2522,7 +2480,7 @@ export async function runCli(
     }
 
     deps.log(
-      `Stopped NAME_PLACEHOLDER at ${buildPublicBaseUrl(stopResult.persistedState.port)}.`,
+      `Stopped Inkback at ${buildPublicBaseUrl(stopResult.persistedState.port)}.`,
     );
     return 0;
   }
@@ -2542,7 +2500,7 @@ export async function runCli(
     }
 
     if (options.positionals.length !== 1) {
-      deps.error("Usage: name-placeholder watch <path> [--json]");
+      deps.error("Usage: inkback watch <path> [--json]");
       return USAGE_ERROR;
     }
 
@@ -2564,7 +2522,7 @@ export async function runCli(
       return 0;
     }
     if (options.positionals.length > 0) {
-      deps.error("Usage: name-placeholder mcp");
+      deps.error("Usage: inkback mcp");
       return USAGE_ERROR;
     }
 
@@ -2588,7 +2546,7 @@ export async function runCli(
     }
 
     if (options.positionals.length > 1) {
-      deps.error("Usage: name-placeholder doctor [path] [--json]");
+      deps.error("Usage: inkback doctor [path] [--json]");
       return USAGE_ERROR;
     }
 
@@ -2621,12 +2579,12 @@ export async function runCli(
 
     const target = options.positionals[0];
     if (!target) {
-      deps.error("Usage: name-placeholder open <path>");
+      deps.error("Usage: inkback open <path>");
       return USAGE_ERROR;
     }
 
     if (options.positionals.length > 1) {
-      deps.error("Usage: name-placeholder open <path>");
+      deps.error("Usage: inkback open <path>");
       return USAGE_ERROR;
     }
 
@@ -2659,8 +2617,8 @@ export async function runCli(
     const { projectDir, openPath } = resolvedTarget;
 
     const remoteHost =
-      typeof deps.env.NAME_PLACEHOLDER_HOST === "string"
-        ? deps.env.NAME_PLACEHOLDER_HOST.trim()
+      typeof deps.env.INKBACK_HOST === "string"
+        ? deps.env.INKBACK_HOST.trim()
         : "";
     if (remoteHost.length > 0) {
       return runRemoteOpen(deps, {
@@ -2687,7 +2645,7 @@ export async function runCli(
     if (options.reviewId) viewer.searchParams.set("reviewId", options.reviewId);
     const targetUrl = viewer.href;
     let openMode: OpenMode = "disabled";
-    if (!options.noOpen && deps.env.NAME_PLACEHOLDER_NO_OPEN !== "1") {
+    if (!options.noOpen && deps.env.INKBACK_NO_OPEN !== "1") {
       openMode = (await sendOpenRequestToExistingWindow(
         deps,
         baseUrl,
@@ -2717,17 +2675,13 @@ export async function runCli(
     if (shouldWatch) {
       if (!json) {
         if (openMode === "chrome-app") {
-          deps.log(
-            `Opened NAME_PLACEHOLDER in a Chrome app window: ${targetUrl}`,
-          );
+          deps.log(`Opened Inkback in a Chrome app window: ${targetUrl}`);
         } else if (openMode === "existing-window") {
-          deps.log(`Reused an existing NAME_PLACEHOLDER window: ${targetUrl}`);
+          deps.log(`Reused an existing Inkback window: ${targetUrl}`);
         } else if (openMode === "browser") {
-          deps.log(
-            `Opened NAME_PLACEHOLDER in the default browser: ${targetUrl}`,
-          );
+          deps.log(`Opened Inkback in the default browser: ${targetUrl}`);
         } else {
-          deps.log(`NAME_PLACEHOLDER is running at ${targetUrl}`);
+          deps.log(`Inkback is running at ${targetUrl}`);
         }
         deps.log("Waiting for Finish review...");
       }
@@ -2758,21 +2712,21 @@ export async function runCli(
     }
 
     if (openMode === "chrome-app") {
-      deps.log(`Opened NAME_PLACEHOLDER in a Chrome app window: ${targetUrl}`);
+      deps.log(`Opened Inkback in a Chrome app window: ${targetUrl}`);
       return 0;
     }
 
     if (openMode === "existing-window") {
-      deps.log(`Reused an existing NAME_PLACEHOLDER window: ${targetUrl}`);
+      deps.log(`Reused an existing Inkback window: ${targetUrl}`);
       return 0;
     }
 
     if (openMode === "browser") {
-      deps.log(`Opened NAME_PLACEHOLDER in the default browser: ${targetUrl}`);
+      deps.log(`Opened Inkback in the default browser: ${targetUrl}`);
       return 0;
     }
 
-    deps.log(`NAME_PLACEHOLDER is running at ${targetUrl}`);
+    deps.log(`Inkback is running at ${targetUrl}`);
     return 0;
   }
 

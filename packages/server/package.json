@@ -1,5 +1,5 @@
 {
-  "name": "@name-placeholder/server",
+  "name": "@inkback/server",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,7 +9,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@name-placeholder/rfm": "workspace:*",
+    "@inkback/rfm": "workspace:*",
     "express": "^5.1.0"
   },
   "devDependencies": {

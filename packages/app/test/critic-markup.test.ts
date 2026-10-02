@@ -33,7 +33,7 @@ describe("CriticMarkup comments", () => {
       "  | --- | --- |",
       "  | path | docs/table.md |",
       "tags:",
-      "  - name-placeholder",
+      "  - inkback",
       "---",
       "",
       "# Body",
@@ -459,7 +459,7 @@ describe("CriticMarkup comments", () => {
 
   it("preserves inline code nested inside a comment anchor", () => {
     const input =
-      'Check {==`name-placeholder open`==}{>>Make sure this command is visible<<}{id="cmt-code" by="user" at="2024-01-15T10:31:00.000Z"} before sharing.\n';
+      'Check {==`inkback open`==}{>>Make sure this command is visible<<}{id="cmt-code" by="user" at="2024-01-15T10:31:00.000Z"} before sharing.\n';
 
     const { doc, comments } = criticMarkdownToEditorState(input);
     const paragraph = doc.content?.[0];
@@ -467,7 +467,7 @@ describe("CriticMarkup comments", () => {
 
     expect(codeNode).toMatchObject({
       type: "text",
-      text: "name-placeholder open",
+      text: "inkback open",
       marks: expect.arrayContaining([
         expect.objectContaining({
           type: "commentRef",
@@ -481,7 +481,7 @@ describe("CriticMarkup comments", () => {
 
   it("creates one comment anchor when a selection spans inline code", () => {
     const input =
-      "Each dev wrapper keeps its own server state under `~/.name-placeholder/dev/<wrapper-name>` by default, so opening works.\n";
+      "Each dev wrapper keeps its own server state under `~/.inkback/dev/<wrapper-name>` by default, so opening works.\n";
     const { doc } = criticMarkdownToEditorState(input);
     const editor = new Editor({
       extensions: createEditorExtensions(""),
@@ -515,7 +515,7 @@ describe("CriticMarkup comments", () => {
           ]),
         ),
       ).toBe(
-        'Each dev wrapper keeps {==its own server state under `~/.name-placeholder/dev/<wrapper-name>` by default==}{>>test<<}{id="c1" by="user" at="2026-04-25T21:54:47.475Z"}, so opening works.\n',
+        'Each dev wrapper keeps {==its own server state under `~/.inkback/dev/<wrapper-name>` by default==}{>>test<<}{id="c1" by="user" at="2026-04-25T21:54:47.475Z"}, so opening works.\n',
       );
     } finally {
       editor.destroy();
@@ -560,11 +560,11 @@ describe("CriticMarkup comments", () => {
 
   it("does not import a trailing blank line into fenced code blocks", () => {
     const input = `\`\`\`text
-Use NAME_PLACEHOLDER when I want to open, review, comment on, or compare markdown files.
+Use Inkback when I want to open, review, comment on, or compare markdown files.
 
-Start it with \`name-placeholder start\` if needed.
-Open files or folders with \`name-placeholder open "/absolute/path/to/file.md"\`.
-After I finish reviewing in NAME_PLACEHOLDER, continue by reading the markdown files from disk and making the requested changes there.
+Start it with \`inkback start\` if needed.
+Open files or folders with \`inkback open "/absolute/path/to/file.md"\`.
+After I finish reviewing in Inkback, continue by reading the markdown files from disk and making the requested changes there.
 Use CriticMarkup for inline review feedback in markdown.
 \`\`\`
 `;
@@ -576,11 +576,11 @@ Use CriticMarkup for inline review feedback in markdown.
     expect(codeBlock?.type).toBe("codeBlock");
     expect(textNode).toMatchObject({
       type: "text",
-      text: `Use NAME_PLACEHOLDER when I want to open, review, comment on, or compare markdown files.
+      text: `Use Inkback when I want to open, review, comment on, or compare markdown files.
 
-Start it with \`name-placeholder start\` if needed.
-Open files or folders with \`name-placeholder open "/absolute/path/to/file.md"\`.
-After I finish reviewing in NAME_PLACEHOLDER, continue by reading the markdown files from disk and making the requested changes there.
+Start it with \`inkback start\` if needed.
+Open files or folders with \`inkback open "/absolute/path/to/file.md"\`.
+After I finish reviewing in Inkback, continue by reading the markdown files from disk and making the requested changes there.
 Use CriticMarkup for inline review feedback in markdown.`,
     });
     expect(editorStateToCriticMarkdown(doc, new Map())).toBe(input);
@@ -588,7 +588,7 @@ Use CriticMarkup for inline review feedback in markdown.`,
 
   it("creates a comment anchor when a selection is inside a fenced code block", () => {
     const input = `\`\`\`ts
-const command = "name-placeholder open";
+const command = "inkback open";
 \`\`\`
 `;
     const { doc } = criticMarkdownToEditorState(input);
@@ -603,8 +603,8 @@ const command = "name-placeholder open";
         editor.state.doc.content.size,
         "\n",
       );
-      const start = text.indexOf("name-placeholder open");
-      const end = start + "name-placeholder open".length;
+      const start = text.indexOf("inkback open");
+      const end = start + "inkback open".length;
 
       editor.commands.setTextSelection({ from: start + 1, to: end + 1 });
       const added = editor.commands.setCommentRef({ commentIds: ["c1"] });
@@ -620,7 +620,7 @@ const command = "name-placeholder open";
           },
           {
             type: "text",
-            text: "name-placeholder open",
+            text: "inkback open",
             marks: [
               {
                 type: "commentRef",
@@ -649,7 +649,7 @@ const command = "name-placeholder open";
           ]),
         ),
       ).toBe(`\`\`\`ts
-const command = "{==name-placeholder open==}{>>test<<}{id="c1" by="user" at="2026-04-25T22:14:08.827Z"}";
+const command = "{==inkback open==}{>>test<<}{id="c1" by="user" at="2026-04-25T22:14:08.827Z"}";
 \`\`\`
 `);
     } finally {
@@ -659,7 +659,7 @@ const command = "{==name-placeholder open==}{>>test<<}{id="c1" by="user" at="202
 
   it("round-trips comment anchors inside fenced code blocks", () => {
     const input = `\`\`\`ts
-const command = "{==name-placeholder open==}{>>test<<}{id="c1" by="user" at="2026-04-25T22:14:08.827Z"}";
+const command = "{==inkback open==}{>>test<<}{id="c1" by="user" at="2026-04-25T22:14:08.827Z"}";
 \`\`\`
 `;
 
@@ -675,7 +675,7 @@ const command = "{==name-placeholder open==}{>>test<<}{id="c1" by="user" at="202
         },
         {
           type: "text",
-          text: "name-placeholder open",
+          text: "inkback open",
           marks: [
             {
               type: "commentRef",
@@ -1079,7 +1079,7 @@ describe("Markdown rich-text round-trip regressions", () => {
   });
 
   it("preserves inline link titles", () => {
-    const input = '[NAME_PLACEHOLDER](./README.md "Local title")\n';
+    const input = '[Inkback](./README.md "Local title")\n';
 
     expect(richTextRoundTrip(input)).toBe(input);
   });

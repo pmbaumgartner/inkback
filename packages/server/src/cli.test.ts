@@ -3,7 +3,7 @@ import { createServer as createHttpServer, type Server } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { validateNamePlaceholderMarkdown } from "@name-placeholder/rfm";
+import { validateInkbackMarkdown } from "@inkback/rfm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createCliDependencies,
@@ -13,7 +13,7 @@ import {
   runCli,
 } from "./cli";
 import { createApp } from "./index";
-import { NAME_PLACEHOLDER_DEFAULT_PORT } from "./network";
+import { INKBACK_DEFAULT_PORT } from "./network";
 
 interface StartedServer {
   close: () => Promise<void>;
@@ -84,7 +84,7 @@ describe("cli", () => {
   );
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "name-placeholder-cli-"));
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "inkback-cli-"));
     stateDir = path.join(tempDir, "state");
     projectDir = path.join(tempDir, "project");
     devFrontendStateFile = path.join(tempDir, "dev-frontend.json");
@@ -140,8 +140,8 @@ describe("cli", () => {
     const deps = createCliDependencies({
       env: {
         ...process.env,
-        NAME_PLACEHOLDER_STATE_DIR: stateDir,
-        NAME_PLACEHOLDER_DEV_FRONTEND_STATE_FILE: devFrontendStateFile,
+        INKBACK_STATE_DIR: stateDir,
+        INKBACK_DEV_FRONTEND_STATE_FILE: devFrontendStateFile,
       },
       cwd: projectDir,
       fetchImpl: async (input, init) => {
@@ -263,7 +263,7 @@ describe("cli", () => {
     const deps = createCliDependencies({
       env: {
         ...process.env,
-        NAME_PLACEHOLDER_STATE_DIR: stateDir,
+        INKBACK_STATE_DIR: stateDir,
       },
       cwd: projectDir,
       fetchImpl: async (input, init) => {
@@ -277,12 +277,12 @@ describe("cli", () => {
 
         if (
           url.pathname === "/api/status" &&
-          url.port === String(NAME_PLACEHOLDER_DEFAULT_PORT)
+          url.port === String(INKBACK_DEFAULT_PORT)
         ) {
           return new Response(
             JSON.stringify({
               backend: "local-files",
-              port: NAME_PLACEHOLDER_DEFAULT_PORT,
+              port: INKBACK_DEFAULT_PORT,
               projectDir,
               serverRoot,
             }),
@@ -322,7 +322,7 @@ describe("cli", () => {
     expect(postedOpenRequest).toEqual({
       path: documentPath,
       url: expectedOpenUrl(
-        `http://localhost:${NAME_PLACEHOLDER_DEFAULT_PORT}`,
+        `http://localhost:${INKBACK_DEFAULT_PORT}`,
         documentPath,
       ),
     });
@@ -543,8 +543,8 @@ describe("cli", () => {
     const deps = createCliDependencies({
       env: {
         ...process.env,
-        NAME_PLACEHOLDER_STATE_DIR: stateDir,
-        NAME_PLACEHOLDER_DEV_FRONTEND_STATE_FILE: devFrontendStateFile,
+        INKBACK_STATE_DIR: stateDir,
+        INKBACK_DEV_FRONTEND_STATE_FILE: devFrontendStateFile,
       },
       cwd: projectDir,
       fetchImpl: async (input, init) => {
@@ -629,8 +629,8 @@ describe("cli", () => {
     const deps = createCliDependencies({
       env: {
         ...process.env,
-        NAME_PLACEHOLDER_STATE_DIR: stateDir,
-        NAME_PLACEHOLDER_DEV_FRONTEND_STATE_FILE: devFrontendStateFile,
+        INKBACK_STATE_DIR: stateDir,
+        INKBACK_DEV_FRONTEND_STATE_FILE: devFrontendStateFile,
       },
       cwd: projectDir,
       fetchImpl: async (input, _init) => {
@@ -761,8 +761,8 @@ describe("cli", () => {
     const deps = createCliDependencies({
       env: {
         ...process.env,
-        NAME_PLACEHOLDER_STATE_DIR: stateDir,
-        NAME_PLACEHOLDER_DEV_FRONTEND_STATE_FILE: devFrontendStateFile,
+        INKBACK_STATE_DIR: stateDir,
+        INKBACK_DEV_FRONTEND_STATE_FILE: devFrontendStateFile,
       },
       cwd: projectDir,
       fetchImpl: async (input) => {
@@ -829,11 +829,11 @@ describe("cli", () => {
     expect(statusExitCode).toBe(1);
     expect(fs.existsSync(getServerStateFilePath(test.deps.env))).toBeFalsy();
     expect(test.logs).toContain(
-      "NAME_PLACEHOLDER is not running. Start it with `name-placeholder start`.",
+      "Inkback is not running. Start it with `inkback start`.",
     );
   });
 
-  it("returns successful JSON status when NAME_PLACEHOLDER is not running", async () => {
+  it("returns successful JSON status when Inkback is not running", async () => {
     const test = createTestDependencies();
 
     const exitCode = await runCli(["status", "--json"], test.deps);
@@ -849,7 +849,7 @@ describe("cli", () => {
     });
   });
 
-  it("emits JSON from status when NAME_PLACEHOLDER is running", async () => {
+  it("emits JSON from status when Inkback is running", async () => {
     const test = createTestDependencies();
     const result = await ensureServerRunning(test.deps, { projectDir });
 
@@ -1059,17 +1059,17 @@ describe("cli", () => {
     fs.writeFileSync(
       stateFilePath,
       JSON.stringify({
-        port: NAME_PLACEHOLDER_DEFAULT_PORT,
+        port: INKBACK_DEFAULT_PORT,
         pid: 424242,
         startedAt: new Date().toISOString(),
-        url: `http://localhost:${NAME_PLACEHOLDER_DEFAULT_PORT}`,
+        url: `http://localhost:${INKBACK_DEFAULT_PORT}`,
       }),
     );
 
     const deps = createCliDependencies({
       env: {
         ...process.env,
-        NAME_PLACEHOLDER_STATE_DIR: stateDir,
+        INKBACK_STATE_DIR: stateDir,
       },
       cwd: projectDir,
       fetchImpl: async (input) => {
@@ -1083,12 +1083,12 @@ describe("cli", () => {
 
         if (
           url.pathname === "/api/status" &&
-          url.port === String(NAME_PLACEHOLDER_DEFAULT_PORT)
+          url.port === String(INKBACK_DEFAULT_PORT)
         ) {
           return new Response(
             JSON.stringify({
               backend: "local-files",
-              port: NAME_PLACEHOLDER_DEFAULT_PORT,
+              port: INKBACK_DEFAULT_PORT,
               projectDir,
               serverRoot,
             }),
@@ -1123,7 +1123,7 @@ describe("cli", () => {
     expect(statusExitCode).toBe(0);
     expect(openExitCode).toBe(0);
     expect(logs).toContain(
-      `NAME_PLACEHOLDER is running at http://localhost:${NAME_PLACEHOLDER_DEFAULT_PORT}`,
+      `Inkback is running at http://localhost:${INKBACK_DEFAULT_PORT}`,
     );
     expect(logs).toContain(
       `This server is not managed by ${getServerStateFilePath(deps.env)}.`,
@@ -1139,12 +1139,12 @@ describe("cli", () => {
     expect(exitCode).toBe(1);
     expect(test.getSpawnCount()).toBe(0);
     expect(test.errors).toContain(
-      `NAME_PLACEHOLDER can only open .md files: ${projectDir}`,
+      `Inkback can only open .md files: ${projectDir}`,
     );
     expect(test.getLastOpenedUrl()).toBeNull();
   });
 
-  it("cleans stale state and warns when another NAME_PLACEHOLDER instance owns the port during stop", async () => {
+  it("cleans stale state and warns when another Inkback instance owns the port during stop", async () => {
     const errors: string[] = [];
     const stateFilePath = path.join(stateDir, "server.json");
 
@@ -1152,17 +1152,17 @@ describe("cli", () => {
     fs.writeFileSync(
       stateFilePath,
       JSON.stringify({
-        port: NAME_PLACEHOLDER_DEFAULT_PORT,
+        port: INKBACK_DEFAULT_PORT,
         pid: 424242,
         startedAt: new Date().toISOString(),
-        url: `http://localhost:${NAME_PLACEHOLDER_DEFAULT_PORT}`,
+        url: `http://localhost:${INKBACK_DEFAULT_PORT}`,
       }),
     );
 
     const deps = createCliDependencies({
       env: {
         ...process.env,
-        NAME_PLACEHOLDER_STATE_DIR: stateDir,
+        INKBACK_STATE_DIR: stateDir,
       },
       cwd: projectDir,
       fetchImpl: async (input) => {
@@ -1176,12 +1176,12 @@ describe("cli", () => {
 
         if (
           url.pathname === "/api/status" &&
-          url.port === String(NAME_PLACEHOLDER_DEFAULT_PORT)
+          url.port === String(INKBACK_DEFAULT_PORT)
         ) {
           return new Response(
             JSON.stringify({
               backend: "local-files",
-              port: NAME_PLACEHOLDER_DEFAULT_PORT,
+              port: INKBACK_DEFAULT_PORT,
               projectDir,
               serverRoot,
             }),
@@ -1208,7 +1208,7 @@ describe("cli", () => {
 
     expect(stopExitCode).toBe(1);
     expect(errors).toContain(
-      `Stopped tracked NAME_PLACEHOLDER process 424242, but another NAME_PLACEHOLDER instance is still running at http://localhost:${NAME_PLACEHOLDER_DEFAULT_PORT}.`,
+      `Stopped tracked Inkback process 424242, but another Inkback instance is still running at http://localhost:${INKBACK_DEFAULT_PORT}.`,
     );
     expect(fs.existsSync(stateFilePath)).toBeFalsy();
   });
@@ -1221,7 +1221,7 @@ describe("cli", () => {
     const deps = createCliDependencies({
       env: {
         ...process.env,
-        NAME_PLACEHOLDER_STATE_DIR: stateDir,
+        INKBACK_STATE_DIR: stateDir,
       },
       cwd: projectDir,
       fetchImpl: async (input) => {
@@ -1236,13 +1236,13 @@ describe("cli", () => {
         if (
           unmanagedRunning &&
           url.pathname === "/api/status" &&
-          url.port === String(NAME_PLACEHOLDER_DEFAULT_PORT)
+          url.port === String(INKBACK_DEFAULT_PORT)
         ) {
           return new Response(
             JSON.stringify({
               backend: "local-files",
               pid: 4242,
-              port: NAME_PLACEHOLDER_DEFAULT_PORT,
+              port: INKBACK_DEFAULT_PORT,
               projectDir,
               serverRoot,
             }),
@@ -1273,7 +1273,7 @@ describe("cli", () => {
     expect(exitCode).toBe(0);
     expect(stoppedPid).toBe(4242);
     expect(logs).toContain(
-      `Stopped unmanaged NAME_PLACEHOLDER at http://localhost:${NAME_PLACEHOLDER_DEFAULT_PORT}.`,
+      `Stopped unmanaged Inkback at http://localhost:${INKBACK_DEFAULT_PORT}.`,
     );
   });
 
@@ -1316,7 +1316,7 @@ describe("cli", () => {
       "Suggested changes with ids:",
       "Reply to an existing comment:",
     );
-    const validation = validateNamePlaceholderMarkdown(example);
+    const validation = validateInkbackMarkdown(example);
 
     expect(exitCode).toBe(0);
     expect(example).toContain("suggestions:");
@@ -1363,7 +1363,7 @@ describe("cli", () => {
 
     expect(exitCode).toBe(0);
     expect(test.logs).toContain(
-      "  name-placeholder open <path> [--no-open] [--no-watch] [--print-url] [--port <port>]",
+      "  inkback open <path> [--no-open] [--no-watch] [--print-url] [--port <port>]",
     );
     expect(test.logs).toContain(
       "  --no-watch           Open the file without waiting",
@@ -1379,7 +1379,7 @@ describe("cli", () => {
     const exitCode = await runCli(["doctor", "--help"], test.deps);
 
     expect(exitCode).toBe(0);
-    expect(test.logs).toContain("  name-placeholder doctor [path] [--json]");
+    expect(test.logs).toContain("  inkback doctor [path] [--json]");
   });
 
   it("rejects unknown command typos with suggestions", async () => {
@@ -1404,7 +1404,7 @@ describe("cli", () => {
     const exitCode = await runCli(["doctor", documentPath], test.deps);
 
     expect(exitCode).toBe(0);
-    expect(test.logs).toContain("NAME_PLACEHOLDER Markdown doctor: draft.md");
+    expect(test.logs).toContain("Inkback Markdown doctor: draft.md");
     expect(test.logs).toContain("Status: passed");
     expect(test.logs).toContain("Found 1 comment(s) and 0 suggestion(s).");
   });
@@ -1479,7 +1479,7 @@ describe("cli", () => {
 
     expect(exitCode).toBe(2);
     expect(test.errors).toContain(
-      `NAME_PLACEHOLDER doctor can only validate .md files: ${documentPath}`,
+      `Inkback doctor can only validate .md files: ${documentPath}`,
     );
   });
 
@@ -1494,17 +1494,17 @@ describe("cli", () => {
     fs.writeFileSync(
       stateFilePath,
       JSON.stringify({
-        port: NAME_PLACEHOLDER_DEFAULT_PORT,
+        port: INKBACK_DEFAULT_PORT,
         pid: 424242,
         startedAt: new Date().toISOString(),
-        url: `http://localhost:${NAME_PLACEHOLDER_DEFAULT_PORT}`,
+        url: `http://localhost:${INKBACK_DEFAULT_PORT}`,
       }),
     );
 
     const deps = createCliDependencies({
       env: {
         ...process.env,
-        NAME_PLACEHOLDER_STATE_DIR: stateDir,
+        INKBACK_STATE_DIR: stateDir,
       },
       cwd: projectDir,
       fetchImpl: async (input) => {
@@ -1520,11 +1520,11 @@ describe("cli", () => {
           throw new Error("Unexpected request");
         }
 
-        if (url.port === String(NAME_PLACEHOLDER_DEFAULT_PORT)) {
+        if (url.port === String(INKBACK_DEFAULT_PORT)) {
           return new Response(
             JSON.stringify({
               backend: "local-files",
-              port: NAME_PLACEHOLDER_DEFAULT_PORT,
+              port: INKBACK_DEFAULT_PORT,
               projectDir: path.join(tempDir, "other-project"),
               serverRoot: otherServerRoot,
             }),
@@ -1535,11 +1535,11 @@ describe("cli", () => {
           );
         }
 
-        if (url.port === String(NAME_PLACEHOLDER_DEFAULT_PORT + 1) && spawned) {
+        if (url.port === String(INKBACK_DEFAULT_PORT + 1) && spawned) {
           return new Response(
             JSON.stringify({
               backend: "local-files",
-              port: NAME_PLACEHOLDER_DEFAULT_PORT + 1,
+              port: INKBACK_DEFAULT_PORT + 1,
               projectDir,
               serverRoot,
             }),
@@ -1552,7 +1552,7 @@ describe("cli", () => {
 
         throw new Error("connect ECONNREFUSED");
       },
-      findAvailablePortImpl: async () => NAME_PLACEHOLDER_DEFAULT_PORT + 1,
+      findAvailablePortImpl: async () => INKBACK_DEFAULT_PORT + 1,
       spawnServerProcess: async ({ port, projectDir: nextProjectDir }) => {
         spawned = true;
         spawnedPort = port;
@@ -1569,9 +1569,9 @@ describe("cli", () => {
     const result = await ensureServerRunning(deps, { projectDir });
 
     expect(result.reused).toBe(false);
-    expect(spawnedPort).toBe(NAME_PLACEHOLDER_DEFAULT_PORT + 1);
+    expect(spawnedPort).toBe(INKBACK_DEFAULT_PORT + 1);
     expect(spawnedProjectDir).toBe(projectDir);
-    expect(result.server.port).toBe(NAME_PLACEHOLDER_DEFAULT_PORT + 1);
+    expect(result.server.port).toBe(INKBACK_DEFAULT_PORT + 1);
   });
 });
 
@@ -1580,9 +1580,7 @@ describe("runCli open in remote mode", () => {
   let projectDir: string;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), "name-placeholder-cli-remote-"),
-    );
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "inkback-cli-remote-"));
     projectDir = path.join(tempDir, "project");
     fs.mkdirSync(projectDir, { recursive: true });
   });
@@ -1626,7 +1624,7 @@ describe("runCli open in remote mode", () => {
     const errors: string[] = [];
 
     const exitCode = await runCli(["open", filePath], {
-      env: { NAME_PLACEHOLDER_HOST: "http://127.0.0.1:1" },
+      env: { INKBACK_HOST: "http://127.0.0.1:1" },
       cwd: projectDir,
       log: (m) => logs.push(m),
       error: (m) => errors.push(m),
@@ -1645,7 +1643,7 @@ describe("runCli open in remote mode", () => {
     let fetchCalls = 0;
 
     const exitCode = await runCli(["open", filePath], {
-      env: { NAME_PLACEHOLDER_HOST: "http://127.0.0.1:1" },
+      env: { INKBACK_HOST: "http://127.0.0.1:1" },
       cwd: projectDir,
       log: () => {},
       error: (m) => errors.push(m),
@@ -1674,7 +1672,7 @@ describe("runCli open in remote mode", () => {
       let openedUrl: string | null = null;
 
       const cliPromise = runCli(["open", filePath], {
-        env: { NAME_PLACEHOLDER_HOST: remote.url },
+        env: { INKBACK_HOST: remote.url },
         cwd: projectDir,
         log: (m) => logs.push(m),
         error: (m) => errors.push(m),
@@ -1724,14 +1722,14 @@ describe("runCli open in remote mode", () => {
       const exitCode = await cliPromise;
       expect(exitCode).toBe(0);
       expect(
-        logs.some((m) => m.includes("Opened remote NAME_PLACEHOLDER session")),
+        logs.some((m) => m.includes("Opened remote Inkback session")),
       ).toBe(true);
     } finally {
       await remote.close();
     }
   });
 
-  it("authenticates remote registration and the CLI save-back stream with NAME_PLACEHOLDER_TOKEN", {
+  it("authenticates remote registration and the CLI save-back stream with INKBACK_TOKEN", {
     timeout: 15_000,
   }, async () => {
     const remote = await startRemoteHost("secret-token");
@@ -1745,8 +1743,8 @@ describe("runCli open in remote mode", () => {
 
       const cliPromise = runCli(["open", filePath], {
         env: {
-          NAME_PLACEHOLDER_HOST: remote.url,
-          NAME_PLACEHOLDER_TOKEN: "secret-token",
+          INKBACK_HOST: remote.url,
+          INKBACK_TOKEN: "secret-token",
         },
         cwd: projectDir,
         log: (m) => logs.push(m),
@@ -1796,7 +1794,7 @@ describe("runCli open in remote mode", () => {
       expect(await cliPromise).toBe(0);
       expect(errors).toEqual([]);
       expect(
-        logs.some((m) => m.includes("Opened remote NAME_PLACEHOLDER session")),
+        logs.some((m) => m.includes("Opened remote Inkback session")),
       ).toBe(true);
     } finally {
       await remote.close();
@@ -1848,7 +1846,7 @@ describe("runCli open in remote mode", () => {
       let openedUrl: string | null = null;
 
       const cliPromise = runCli(["open", filePath], {
-        env: { NAME_PLACEHOLDER_HOST: remote.url },
+        env: { INKBACK_HOST: remote.url },
         cwd: projectDir,
         log: (m) => logs.push(m),
         error: (m) => errors.push(m),
@@ -1927,7 +1925,7 @@ describe("runCli open in remote mode", () => {
       let cliSettled = false;
 
       const cliPromise = runCli(["open", filePath], {
-        env: { NAME_PLACEHOLDER_HOST: remote.url },
+        env: { INKBACK_HOST: remote.url },
         cwd: projectDir,
         log: (m) => logs.push(m),
         error: (m) => errors.push(m),
@@ -1999,7 +1997,7 @@ describe("runCli open in remote mode", () => {
       expect(await cliPromise).toBe(0);
       expect(errors).toEqual([]);
       expect(
-        logs.some((m) => m.includes("Opened remote NAME_PLACEHOLDER session")),
+        logs.some((m) => m.includes("Opened remote Inkback session")),
       ).toBe(true);
     } finally {
       await browserEventsReader?.cancel().catch(() => undefined);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  NAME_PLACEHOLDER_BIND_HOST_ENV,
-  NAME_PLACEHOLDER_LOOPBACK_HOSTS,
+  INKBACK_BIND_HOST_ENV,
+  INKBACK_LOOPBACK_HOSTS,
   hasNonLoopbackHost,
   isLoopbackHost,
   resolveBindHosts,
@@ -9,39 +9,39 @@ import {
 
 describe("resolveBindHosts", () => {
   it("returns the default loopback list when the env var is unset", () => {
-    expect(resolveBindHosts({})).toEqual(NAME_PLACEHOLDER_LOOPBACK_HOSTS);
+    expect(resolveBindHosts({})).toEqual(INKBACK_LOOPBACK_HOSTS);
   });
 
   it("returns a single host when the env var names one host", () => {
-    expect(
-      resolveBindHosts({ [NAME_PLACEHOLDER_BIND_HOST_ENV]: "0.0.0.0" }),
-    ).toEqual(["0.0.0.0"]);
+    expect(resolveBindHosts({ [INKBACK_BIND_HOST_ENV]: "0.0.0.0" })).toEqual([
+      "0.0.0.0",
+    ]);
   });
 
   it("returns multiple hosts from a comma-separated value", () => {
-    expect(
-      resolveBindHosts({ [NAME_PLACEHOLDER_BIND_HOST_ENV]: "0.0.0.0,::" }),
-    ).toEqual(["0.0.0.0", "::"]);
+    expect(resolveBindHosts({ [INKBACK_BIND_HOST_ENV]: "0.0.0.0,::" })).toEqual(
+      ["0.0.0.0", "::"],
+    );
   });
 
   it("trims whitespace around comma-separated hosts", () => {
     expect(
       resolveBindHosts({
-        [NAME_PLACEHOLDER_BIND_HOST_ENV]: " 127.0.0.1 , ::1 ",
+        [INKBACK_BIND_HOST_ENV]: " 127.0.0.1 , ::1 ",
       }),
     ).toEqual(["127.0.0.1", "::1"]);
   });
 
   it("falls back to the loopback list when the env var is an empty string", () => {
-    expect(resolveBindHosts({ [NAME_PLACEHOLDER_BIND_HOST_ENV]: "" })).toEqual(
-      NAME_PLACEHOLDER_LOOPBACK_HOSTS,
+    expect(resolveBindHosts({ [INKBACK_BIND_HOST_ENV]: "" })).toEqual(
+      INKBACK_LOOPBACK_HOSTS,
     );
   });
 
   it("falls back to the loopback list when the env var is only commas and whitespace", () => {
-    expect(
-      resolveBindHosts({ [NAME_PLACEHOLDER_BIND_HOST_ENV]: " , , " }),
-    ).toEqual(NAME_PLACEHOLDER_LOOPBACK_HOSTS);
+    expect(resolveBindHosts({ [INKBACK_BIND_HOST_ENV]: " , , " })).toEqual(
+      INKBACK_LOOPBACK_HOSTS,
+    );
   });
 });
 
@@ -66,7 +66,7 @@ describe("isLoopbackHost", () => {
 
 describe("hasNonLoopbackHost", () => {
   it("returns false for the default loopback list", () => {
-    expect(hasNonLoopbackHost(NAME_PLACEHOLDER_LOOPBACK_HOSTS)).toBe(false);
+    expect(hasNonLoopbackHost(INKBACK_LOOPBACK_HOSTS)).toBe(false);
   });
 
   it("returns true when any host is non-loopback", () => {
