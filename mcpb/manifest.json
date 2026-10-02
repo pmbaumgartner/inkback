@@ -1,0 +1,63 @@
+{
+  "manifest_version": "0.3",
+  "name": "inkback",
+  "display_name": "Inkback",
+  "version": "0.1.0",
+  "description": "Review a Markdown file with comments and suggested edits inside the conversation.",
+  "author": { "name": "Nathan Baschez" },
+  "license": "MIT",
+  "icon": "icon.png",
+  "compatibility": { "runtimes": { "node": ">=24.0.0" } },
+  "server": {
+    "type": "node",
+    "entry_point": "node_modules/inkback/packages/server/bin/inkback.mjs",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/node_modules/inkback/packages/server/bin/inkback.mjs",
+        "mcp",
+        "${user_config.allowed_directories}"
+      ]
+    }
+  },
+  "user_config": {
+    "allowed_directories": {
+      "type": "directory",
+      "title": "Allowed Directories",
+      "description": "Inkback can save review changes only in these folders.",
+      "multiple": true,
+      "required": true,
+      "default": ["${HOME}/Documents"]
+    }
+  },
+  "tools": [
+    {
+      "name": "inkback_open_review",
+      "description": "Open a Markdown file for review in Inkback"
+    },
+    {
+      "name": "inkback_get_review_index",
+      "description": "Read the structured review index"
+    },
+    {
+      "name": "inkback_get_pending_feedback",
+      "description": "Read unresolved comments and suggestions"
+    },
+    {
+      "name": "inkback_reply_to_comment",
+      "description": "Reply to a comment or suggestion"
+    },
+    {
+      "name": "inkback_mark_resolved",
+      "description": "Resolve a comment or suggestion"
+    },
+    {
+      "name": "inkback_get_open_documents",
+      "description": "List open reviews"
+    },
+    {
+      "name": "inkback_watch_review_events",
+      "description": "Wait for Finish review in the terminal flow"
+    }
+  ]
+}

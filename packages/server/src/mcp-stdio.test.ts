@@ -5,9 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-type Encoding = "newline-delimited JSON" | "Content-Length";
-
-async function initializeOverStdio(encoding: Encoding): Promise<unknown> {
+async function initializeOverStdio(): Promise<unknown> {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "inkback-mcp-stdio-"));
   const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
   const tsconfig = path.join(tempDir, "tsconfig.json");
@@ -50,7 +48,7 @@ async function initializeOverStdio(encoding: Encoding): Promise<unknown> {
       const timer = setTimeout(() => {
         reject(
           new Error(
-            `Inkback did not answer initialize over ${encoding}; received ${buffer.length} stdout bytes. stderr: ${stderr || "(empty)"}`,
+            `Inkback did not answer initialize over stdio; received ${buffer.length} stdout bytes. stderr: ${stderr || "(empty)"}`,
           ),
         );
       }, 3_000);
@@ -68,20 +66,9 @@ async function initializeOverStdio(encoding: Encoding): Promise<unknown> {
       });
       child.stdout.on("data", (chunk: Buffer) => {
         buffer = Buffer.concat([buffer, chunk]);
-        let body: string;
-        if (encoding === "newline-delimited JSON") {
-          const end = buffer.indexOf("\n");
-          if (end === -1) return;
-          body = buffer.subarray(0, end).toString("utf8");
-        } else {
-          const end = buffer.indexOf("\r\n\r\n");
-          if (end === -1) return;
-          const header = buffer.subarray(0, end).toString("utf8");
-          const length = Number(header.match(/Content-Length:\s*(\d+)/i)?.[1]);
-          if (!Number.isFinite(length) || buffer.length < end + 4 + length)
-            return;
-          body = buffer.subarray(end + 4, end + 4 + length).toString("utf8");
-        }
+        const end = buffer.indexOf("\n");
+        if (end === -1) return;
+        const body = buffer.subarray(0, end).toString("utf8");
         clearTimeout(timer);
         try {
           resolve(JSON.parse(body));
@@ -100,11 +87,7 @@ async function initializeOverStdio(encoding: Encoding): Promise<unknown> {
         clientInfo: { name: "stdio-contract-test", version: "1.0.0" },
       },
     });
-    child.stdin.write(
-      encoding === "newline-delimited JSON"
-        ? `${request}\n`
-        : `Content-Length: ${Buffer.byteLength(request)}\r\n\r\n${request}`,
-    );
+    child.stdin.write(`${request}\n`);
     return await response;
   } finally {
     child.kill();
@@ -114,18 +97,122 @@ async function initializeOverStdio(encoding: Encoding): Promise<unknown> {
 }
 
 describe("MCP stdio client compatibility", () => {
-  it.each<Encoding>([
-    "newline-delimited JSON",
-    "Content-Length",
-  ])("initializes the Inkback MCP process over %s", async (encoding) => {
-    await expect(initializeOverStdio(encoding)).resolves.toMatchObject({
+  it("initializes the Inkback MCP process over stdio", async () => {
+    await expect(initializeOverStdio()).resolves.toMatchObject({
       jsonrpc: "2.0",
       id: 1,
       result: {
         protocolVersion: "2025-06-18",
-        capabilities: { tools: {} },
-        serverInfo: { name: "inkback" },
+        capabilities: { tools: {}, resources: {} },
+        serverInfo: { name: "Inkback" },
       },
     });
   });
+});
+
+it("uses the process working directory for guarded model writes over the SDK transport", async () => {
+  const { Client } = await import("@modelcontextprotocol/client");
+  const { StdioClientTransport } = await import(
+    "@modelcontextprotocol/client/stdio"
+  );
+  const directory = fs.mkdtempSync(
+    path.join(os.tmpdir(), "inkback-stdio-policy-"),
+  );
+  const outside = fs.mkdtempSync(
+    path.join(os.tmpdir(), "inkback-stdio-outside-"),
+  );
+  const documentPath = path.join(directory, "draft.md");
+  const outsidePath = path.join(outside, "other.md");
+  const content = "{>>Question<<}{#c1}\n";
+  fs.writeFileSync(documentPath, content);
+  fs.writeFileSync(outsidePath, content);
+  const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
+  const config = path.join(directory, "tsconfig.json");
+  fs.writeFileSync(
+    config,
+    JSON.stringify({
+      compilerOptions: {
+        baseUrl: repoRoot,
+        paths: { "@inkback/rfm": ["packages/rfm/src/index.ts"] },
+      },
+    }),
+  );
+  const client = new Client({ name: "stdio-policy-test", version: "1" });
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [
+      "--import",
+      path.join(repoRoot, "node_modules/tsx/dist/loader.mjs"),
+      "--input-type=module",
+      "--eval",
+      `import { runCli } from ${JSON.stringify(new URL("./cli.ts", import.meta.url).href)}; await runCli(["mcp", "--no-roots"]);`,
+    ],
+    cwd: directory,
+    env: {
+      ...process.env,
+      INKBACK_ALLOWED_DIRS: "",
+      TSX_TSCONFIG_PATH: config,
+    },
+    stderr: "pipe",
+  });
+  try {
+    await client.connect(transport);
+    expect(client.getServerCapabilities()).toMatchObject({
+      tools: {},
+      resources: {},
+    });
+    expect(
+      (await client.listTools()).tools.find(
+        (tool) => tool.name === "inkback_open_review",
+      )?._meta,
+    ).toMatchObject({ ui: { resourceUri: "ui://inkback/review.html" } });
+    const result = await client.callTool({
+      name: "inkback_get_review_index",
+      arguments: { documentPath },
+    });
+    const version = (result.structuredContent as { fileVersion: string })
+      .fileVersion;
+    expect(
+      (
+        await client.callTool({
+          name: "inkback_reply_to_comment",
+          arguments: {
+            documentPath,
+            parentId: "c1",
+            message: "Allowed",
+            expectedVersion: version,
+          },
+        })
+      ).isError,
+    ).not.toBe(true);
+    expect(
+      (
+        await client.callTool({
+          name: "inkback_reply_to_comment",
+          arguments: {
+            documentPath,
+            parentId: "c1",
+            message: "Stale",
+            expectedVersion: version,
+          },
+        })
+      ).isError,
+    ).toBe(true);
+    const refused = await client.callTool({
+      name: "inkback_reply_to_comment",
+      arguments: {
+        documentPath: outsidePath,
+        parentId: "c1",
+        message: "Refused",
+      },
+    });
+    expect(refused.isError).toBe(true);
+    expect(refused.content).toMatchObject([
+      { type: "text", text: expect.stringContaining("working directory") },
+    ]);
+  } finally {
+    await client.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+    fs.rmSync(outside, { recursive: true, force: true });
+  }
 });

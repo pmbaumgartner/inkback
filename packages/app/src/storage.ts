@@ -43,7 +43,7 @@ export interface ReviewWatchStatus {
 }
 
 export interface BackendInfo {
-  kind: "local-files" | "local-storage" | "remote";
+  kind: "local-files" | "local-storage" | "remote" | "mcp-app";
   label: string;
   detail: string;
   projectPath?: string;
@@ -54,6 +54,10 @@ export interface BackendInfo {
 export interface StorageBackend {
   info: BackendInfo;
   canManageProjects: boolean;
+  writable?: boolean;
+  notWritableReason?: string | null;
+  handoffMessage?: string | null;
+  prepareReview?(options?: CompleteReviewOptions): Promise<string>;
   getMarkdownFile(relativePath: string): Promise<Page>;
   saveMarkdownFile(
     relativePath: string,

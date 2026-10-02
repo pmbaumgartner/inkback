@@ -1,4 +1,23 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "ignoreDependencies": ["express"]
+  "ignoreDependencies": ["express", "@anthropic-ai/mcpb"],
+  "workspaces": {
+    ".": {
+      "ignoreDependencies": [
+        "@inkback/rfm",
+        "@modelcontextprotocol/core",
+        "@modelcontextprotocol/ext-apps",
+        "@modelcontextprotocol/server",
+        "yaml",
+        "zod"
+      ],
+      "entry": ["scripts/start-mcp-test-host.mjs"]
+    },
+    "packages/app": {
+      "entry": ["src/mcp-app/main.tsx", "e2e/*.ts"]
+    },
+    "packages/server": {
+      "entry": ["src/cli.ts", "src/index.ts", "test-support/*.ts"]
+    }
+  }
 }

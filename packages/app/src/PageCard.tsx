@@ -643,10 +643,11 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
   const parsedContent = useMemo(
     () =>
       criticMarkdownToEditorState(sourceMarkdown, {
+        blockRemoteImages: backend.info.kind === "mcp-app",
         resolveFileUrl,
         resolveLinkUrl,
       }),
-    [resolveFileUrl, resolveLinkUrl, sourceMarkdown],
+    [backend, resolveFileUrl, resolveLinkUrl, sourceMarkdown],
   );
   const [comments, setComments] = useState<Map<string, CriticComment>>(
     () => parsedContent.comments,
@@ -1970,52 +1971,57 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
             </div>
           </div>
         </div>
-        <DocumentReviewRail
-          className={reviewRailClass}
-          layout="anchored"
-          testId="document-review-rail"
-          commentGroups={commentGroups}
-          comments={comments}
-          suggestions={criticChanges}
-          selectedCommentId={selectedCommentId}
-          hoveredCommentId={hoveredCommentId}
-          selectedChangeId={selectedChangeId}
-          hoveredChangeId={hoveredChangeId}
-          contentHeight={contentHeight}
-          onDeleteComment={deleteComment}
-          onUpdateComment={(commentId, nextContent) => {
-            updateComment(commentId, (current) => ({
-              ...current,
-              content: nextContent,
-            }));
-          }}
-          onReplyComment={replyToComment}
-          onSelectComment={selectComment}
-          onFocusComment={focusComment}
-          onHoverComment={setHoveredCommentId}
-          onAcceptSuggestion={acceptSuggestion}
-          onRejectSuggestion={rejectSuggestion}
-          onReplySuggestion={replyToSuggestion}
-          onSelectSuggestion={selectSuggestion}
-          onFocusSuggestion={focusSuggestion}
-          onHoverSuggestion={setHoveredChangeId}
-          pendingFocusCommentId={pendingFocusCommentId}
-          newCommentDraftIds={newCommentDraftIds}
-          onAutoFocusComment={(commentId) => {
-            setPendingFocusCommentId((current) =>
-              current === commentId ? null : current,
-            );
-          }}
-          draftSuggestion={draftSuggestion}
-          onDraftSuggestionTextChange={(text) => {
-            setDraftSuggestion((current) =>
-              current ? { ...current, text } : current,
-            );
-          }}
-          onApplyDraftSuggestion={applyDraftSuggestion}
-          onCancelDraftSuggestion={() => setDraftSuggestion(null)}
-          editor={editor}
-        />
+        <div
+          className="contents"
+          inert={backend.writable === false ? true : undefined}
+        >
+          <DocumentReviewRail
+            className={reviewRailClass}
+            layout="anchored"
+            testId="document-review-rail"
+            commentGroups={commentGroups}
+            comments={comments}
+            suggestions={criticChanges}
+            selectedCommentId={selectedCommentId}
+            hoveredCommentId={hoveredCommentId}
+            selectedChangeId={selectedChangeId}
+            hoveredChangeId={hoveredChangeId}
+            contentHeight={contentHeight}
+            onDeleteComment={deleteComment}
+            onUpdateComment={(commentId, nextContent) => {
+              updateComment(commentId, (current) => ({
+                ...current,
+                content: nextContent,
+              }));
+            }}
+            onReplyComment={replyToComment}
+            onSelectComment={selectComment}
+            onFocusComment={focusComment}
+            onHoverComment={setHoveredCommentId}
+            onAcceptSuggestion={acceptSuggestion}
+            onRejectSuggestion={rejectSuggestion}
+            onReplySuggestion={replyToSuggestion}
+            onSelectSuggestion={selectSuggestion}
+            onFocusSuggestion={focusSuggestion}
+            onHoverSuggestion={setHoveredChangeId}
+            pendingFocusCommentId={pendingFocusCommentId}
+            newCommentDraftIds={newCommentDraftIds}
+            onAutoFocusComment={(commentId) => {
+              setPendingFocusCommentId((current) =>
+                current === commentId ? null : current,
+              );
+            }}
+            draftSuggestion={draftSuggestion}
+            onDraftSuggestionTextChange={(text) => {
+              setDraftSuggestion((current) =>
+                current ? { ...current, text } : current,
+              );
+            }}
+            onApplyDraftSuggestion={applyDraftSuggestion}
+            onCancelDraftSuggestion={() => setDraftSuggestion(null)}
+            editor={editor}
+          />
+        </div>
       </div>
     </div>
   );

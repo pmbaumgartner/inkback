@@ -7,6 +7,12 @@ description: Open saved Markdown in Inkback for human review and respond to comm
 
 ## Review a document
 
+If `inkback_open_review` is available, call it with the absolute document path. Then wait for the Inkback review message in the conversation. Do not call `inkback_watch_review_events` after opening an MCP App. Read feedback with `inkback_get_pending_feedback`; use the current `version` (or review index `fileVersion`) as `expectedVersion` with reply and resolve tools.
+
+Read the current file from disk before you act. Finish review does not approve all suggestions or the implementation of a plan. Act only within the scope that the user already gave you. Use inkback_get_pending_feedback for the item details.
+
+If the MCP App tool is unavailable, use the terminal flow:
+
 1. Save the document as one local `.md` file, preserving unrelated user edits.
 2. Run `inkback open "/absolute/path/to/file.md"`. In a source checkout, run `node packages/server/bin/inkback.mjs open "/absolute/path/to/file.md"`. Leave the command running until Finish review. Use `--no-watch` only when intentionally opening without a handoff.
 3. After completion, reread the current Markdown from disk. Do not edit a pre-review snapshot.

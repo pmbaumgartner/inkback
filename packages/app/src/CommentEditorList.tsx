@@ -460,9 +460,9 @@ function CommentThreadNode({
   const bodyTone =
     variant === "banner"
       ? isSelected
-        ? "bg-white"
+        ? "bg-white dark:bg-slate-800"
         : isHovered
-          ? "bg-white"
+          ? "bg-white dark:bg-slate-800"
           : "bg-transparent"
       : "bg-transparent";
   const treeLineTone =

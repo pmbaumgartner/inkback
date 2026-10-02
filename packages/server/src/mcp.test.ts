@@ -2,8 +2,42 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { callTool, startMcpServer } from "./mcp";
+import { createInkbackMcpServer } from "./mcp/server";
+import { startMcpServer } from "./mcp/stdio";
+
+async function callTool(
+  name: string,
+  args: Record<string, unknown>,
+  env: NodeJS.ProcessEnv,
+  fetchImpl: typeof fetch = fetch,
+) {
+  const { server } = createInkbackMcpServer({
+    env,
+    fetchImpl,
+    directories: [path.dirname(String(args.documentPath))],
+    log: () => {},
+  });
+  const [clientTransport, serverTransport] =
+    InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "test", version: "1" });
+  await server.connect(serverTransport);
+  await client.connect(clientTransport);
+  try {
+    const result = await client.callTool({ name, arguments: args });
+    if (result.isError)
+      throw new Error(
+        (result.content as Array<{ text: string }>)
+          .map((block) => block.text)
+          .join("\n"),
+      );
+    return result.structuredContent;
+  } finally {
+    await client.close();
+    await server.close();
+  }
+}
 
 describe("mcp", () => {
   let tempDir: string;
@@ -67,7 +101,16 @@ describe("mcp", () => {
 
   it("keeps waiting after a poll expires and receives feedback from the gap", async () => {
     const requests: Array<Record<string, unknown>> = [];
-    const event = { documentPath, type: "review.completed", sequence: 5 };
+    const event = {
+      documentPath,
+      projectPath: projectDir,
+      relativePath: "draft.md",
+      type: "review.completed",
+      sequence: 5,
+      createdAt: "2026-10-02T00:00:00.000Z",
+      version: "test-version",
+      summary: { comments: 1, replies: 0, suggestions: 0, unresolved: 1 },
+    };
     const fetchImpl: typeof fetch = async (_input, init) => {
       const body = JSON.parse(String(init?.body));
       requests.push(body);
@@ -98,7 +141,18 @@ describe("mcp", () => {
           events: [
             {
               documentPath,
+              projectPath: projectDir,
+              relativePath: "draft.md",
               type: "review.completed",
+              sequence: 1,
+              createdAt: "2026-10-02T00:00:00.000Z",
+              version: "test-version",
+              summary: {
+                comments: 1,
+                replies: 0,
+                suggestions: 0,
+                unresolved: 1,
+              },
               overallComment: "Please prioritize the CLI contract.",
             },
           ],
@@ -135,7 +189,7 @@ describe("mcp", () => {
     output.on("data", (chunk) => {
       response += chunk;
     });
-    startMcpServer({
+    void startMcpServer({
       input: input as unknown as NodeJS.ReadStream,
       output: output as unknown as NodeJS.WriteStream,
       env: { INKBACK_STATE_FILE: stateFile },
@@ -155,9 +209,7 @@ describe("mcp", () => {
         arguments: { documentPath },
       },
     });
-    input.write(
-      `Content-Length: ${Buffer.byteLength(message)}\r\n\r\n${message}`,
-    );
+    input.write(`${message}\n`);
     await vi.waitFor(() => expect(signal).toBeDefined());
     input.end();
     await vi.waitFor(() => expect(signal?.aborted).toBe(true));

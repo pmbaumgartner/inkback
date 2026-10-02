@@ -140,6 +140,7 @@ interface ParsedCommandOptions {
   json: boolean;
   noOpen: boolean;
   noWatch: boolean;
+  noRoots?: boolean;
   printUrl: boolean;
   reviewId?: string;
   port?: string;
@@ -250,6 +251,7 @@ type OptionFlag =
   | "print-url"
   | "watch"
   | "no-watch"
+  | "no-roots"
   | "replay"
   | "timeout"
   | "batch-window"
@@ -278,7 +280,7 @@ const commandFlags: Record<
   status: ["state-file", "state-dir"],
   stop: ["all", "state-file", "state-dir"],
   watch: ["replay", "timeout", "batch-window", "state-file", "state-dir"],
-  mcp: ["state-file", "state-dir"],
+  mcp: ["state-file", "state-dir", "no-roots"],
   doctor: ["state-file", "state-dir"],
 };
 
@@ -343,6 +345,7 @@ function parseOptions(
       parsed.noOpen = true;
     } else if (name === "watch") parsed.watch = true;
     else if (name === "no-watch") parsed.noWatch = true;
+    else if (name === "no-roots") parsed.noRoots = true;
     else if (name === "replay") parsed.replay = true;
     else if (name === "review-id") {
       const value = args[++index];
@@ -671,7 +674,9 @@ function printHelp(log: (message: string) => void) {
   log("  status             Show server status");
   log("  stop               Stop the managed background server");
   log("  watch <path>       Wait for a Finish review event");
-  log("  mcp                Start the experimental stdio MCP server");
+  log(
+    "  mcp [dir ...]      Start the MCP App server (default writes: working directory)",
+  );
   log("  doctor [path]      Diagnose setup or validate Markdown");
   log("  help criticmarkup  Show CriticMarkup examples");
   log("  skill              Locate or install the Inkback agent skill");
@@ -810,9 +815,10 @@ function printCommandHelp(
 
   if (command === "mcp") {
     log("Usage:");
-    log("  inkback mcp");
+    log("  inkback mcp [dir ...] [--no-roots]");
+    log("  Writes default to the working directory, except a filesystem root.");
     log("");
-    log("Starts Inkback's experimental stdio MCP server.");
+    log("Starts Inkback's stdio MCP App server.");
     return;
   }
 
@@ -1733,7 +1739,22 @@ async function runDoctor(
       ? path.resolve(trackedStatus.serverRoot) === currentServerRoot
       : false;
   const commandPath = process.argv[1] ? path.resolve(process.argv[1]) : null;
+  const { createPathPolicy } = await import("./path-policy.js");
+  const { REVIEW_HTML_PATH } = await import("./mcp/ui-resource.js");
+  const policy = createPathPolicy({
+    cwd: deps.cwd,
+    env: deps.env,
+    log: () => {},
+  });
+  const mcpApp = {
+    found: fs.existsSync(REVIEW_HTML_PATH),
+    bytes: fs.existsSync(REVIEW_HTML_PATH)
+      ? fs.statSync(REVIEW_HTML_PATH).size
+      : null,
+  };
   const report = {
+    mcpApp,
+    writableDirectories: policy.describe(),
     packageVersion: readPackageVersion(),
     nodeVersion: process.version,
     commandPath,
@@ -1786,6 +1807,17 @@ async function runDoctor(
     `Browser opening disabled: ${report.browserOpeningDisabled ? "yes" : "no"}`,
   );
   deps.log(`Current directory readable: ${report.cwdReadable ? "yes" : "no"}`);
+  deps.log(
+    `MCP App UI: ${mcpApp.found ? `found (${mcpApp.bytes} bytes)` : "missing; run pnpm build"}`,
+  );
+  deps.log(
+    `MCP writable directories: ${
+      policy
+        .describe()
+        .map((entry) => `${entry.path} (${entry.source})`)
+        .join(", ") || "none"
+    }`,
+  );
   return 0;
 }
 
@@ -2302,13 +2334,13 @@ export async function runCli(
   }
 
   if (command === "mcp") {
-    if (options.positionals.length > 0) {
-      deps.error("Usage: inkback mcp");
-      return USAGE_ERROR;
-    }
-
-    const { startMcpServer } = await import("./mcp.js");
-    await startMcpServer({ env: deps.env, fetchImpl: deps.fetchImpl });
+    const { startMcpServer } = await import("./mcp/stdio.js");
+    await startMcpServer({
+      env: deps.env,
+      fetchImpl: deps.fetchImpl,
+      directories: options.positionals,
+      noRoots: options.noRoots,
+    });
     return 0;
   }
 

@@ -1,3 +1,4 @@
+import { sanitizeMarkdownHtml } from "../markdown";
 import {
   parseRfmEndmatter,
   updateRfmEndmatter,
@@ -1398,7 +1399,9 @@ export function criticMarkdownToRenderedHtml(
     options,
     parsedEndmatter,
   );
-  const html = parser.parse(protectRichTextRoundTripMarkdown(body)) as string;
+  const html = sanitizeMarkdownHtml(
+    parser.parse(protectRichTextRoundTripMarkdown(body)) as string,
+  );
   addEndmatterFeedback(comments, parsedEndmatter);
 
   return { html, comments, changes, frontmatter, endmatter };
@@ -1416,7 +1419,9 @@ export function criticMarkdownToEditorState(
   const { frontmatter, body, endmatter } = splitYamlDocumentMetadata(markdown);
   const parsedEndmatter = parseReviewEndmatter(endmatter);
   const { parser, comments } = createCriticMarked(options, parsedEndmatter);
-  const html = parser.parse(protectRichTextRoundTripMarkdown(body)) as string;
+  const html = sanitizeMarkdownHtml(
+    parser.parse(protectRichTextRoundTripMarkdown(body)) as string,
+  );
   const doc = generateJSON(html, extensions) as JSONContent & {
     yamlFrontmatter?: string;
     yamlEndmatter?: string;

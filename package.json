@@ -20,7 +20,8 @@
     "test:package": "node scripts/test-package.mjs",
     "test:coverage": "pnpm --filter @inkback/app exec vitest run --coverage && pnpm --filter @inkback/server exec vitest run --coverage",
     "check": "pnpm lint && pnpm test && pnpm build",
-    "build": "pnpm --filter @inkback/rfm build && pnpm --filter @inkback/app build && pnpm --filter @inkback/server build"
+    "build": "pnpm --filter @inkback/rfm build && pnpm --filter @inkback/app build && pnpm --filter @inkback/server build && node scripts/check-mcp-app-size.mjs",
+    "build:mcpb": "node scripts/build-mcpb.mjs"
   },
   "files": [
     "packages/app/dist",
@@ -30,24 +31,30 @@
     "packages/server/bin",
     "packages/server/defaults.mjs",
     "packages/server/defaults.d.mts",
-    "packages/skill/inkback"
+    "packages/skill/inkback",
+    "packages/app/dist-mcp-app",
+    "LICENSE"
   ],
   "dependencies": {
     "@inkback/rfm": "file:packages/rfm",
+    "@modelcontextprotocol/core": "2.0.0",
+    "@modelcontextprotocol/ext-apps": "2.0.3",
+    "@modelcontextprotocol/server": "2.0.0",
     "express": "^5.1.0",
-    "yaml": "^2.9.0"
+    "yaml": "^2.9.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@anthropic-ai/mcpb": "2.1.2",
     "@biomejs/biome": "^2.4.12",
+    "@modelcontextprotocol/client": "2.0.0",
     "@playwright/test": "^1.59.1",
     "@vitest/coverage-v8": "^4.1.5",
     "knip": "^6.7.0",
     "tsx": "^4.21.0",
     "typescript": "^5.8.3"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
+  "engines": {
+    "node": ">=24"
   }
 }

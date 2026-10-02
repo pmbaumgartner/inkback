@@ -13,3 +13,5 @@ sandbox
 .inkback-state
 /inkback.json
 .context/
+
+/packages/app/dist-mcp-app/

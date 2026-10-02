@@ -24,6 +24,21 @@ export default defineConfig({
   ],
   webServer: [
     {
+      command: "pnpm exec tsx ../server/test-support/run-mcp-http.ts",
+      port: 4320,
+      reuseExistingServer: !process.env.CI,
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+    {
+      command: "node ../../scripts/start-mcp-test-host.mjs",
+      url: "http://localhost:8080",
+      timeout: 180_000,
+      reuseExistingServer: !process.env.CI,
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+    {
       command: `API_PORT=${apiPort} pnpm exec tsx e2e/start-api.ts`,
       port: apiPort,
       reuseExistingServer: !process.env.CI,

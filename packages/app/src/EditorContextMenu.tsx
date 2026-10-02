@@ -1,3 +1,4 @@
+import { openExternalLink } from "./mcp-app/host-bridge";
 import type { Editor } from "@tiptap/react";
 import { useEditorState } from "@tiptap/react";
 import type { ReactNode } from "react";
@@ -874,7 +875,7 @@ export function EditorContextMenu({
                 ) || linkPopoverState.href;
 
               if (target) {
-                window.open(target, "_blank", "noopener,noreferrer");
+                void openExternalLink(target);
               }
             }}
             aria-label="Open link in new tab"
@@ -1003,22 +1004,26 @@ export function EditorContextMenu({
               </button>
             </>
           ) : null}
-          <button
-            type="button"
-            data-testid="editor-context-menu-action-paste"
-            className="block w-full rounded-xl px-3 py-2 text-left text-sm text-slate-700 dark:text-slate-300 transition hover:bg-slate-50 dark:hover:bg-slate-700"
-            onClick={() => void handlePasteText()}
-          >
-            Paste
-          </button>
-          <button
-            type="button"
-            data-testid="editor-context-menu-action-paste-markdown"
-            className="block w-full rounded-xl px-3 py-2 text-left text-sm text-slate-700 dark:text-slate-300 transition hover:bg-slate-50 dark:hover:bg-slate-700"
-            onClick={() => void handlePasteMarkdown()}
-          >
-            Paste Markdown
-          </button>
+          {backend.info.kind !== "mcp-app" ? (
+            <>
+              <button
+                type="button"
+                data-testid="editor-context-menu-action-paste"
+                className="block w-full rounded-xl px-3 py-2 text-left text-sm text-slate-700 dark:text-slate-300 transition hover:bg-slate-50 dark:hover:bg-slate-700"
+                onClick={() => void handlePasteText()}
+              >
+                Paste
+              </button>
+              <button
+                type="button"
+                data-testid="editor-context-menu-action-paste-markdown"
+                className="block w-full rounded-xl px-3 py-2 text-left text-sm text-slate-700 dark:text-slate-300 transition hover:bg-slate-50 dark:hover:bg-slate-700"
+                onClick={() => void handlePasteMarkdown()}
+              >
+                Paste Markdown
+              </button>
+            </>
+          ) : null}
         </div>
       ) : null}
     </div>

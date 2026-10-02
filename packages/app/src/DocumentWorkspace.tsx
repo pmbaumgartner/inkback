@@ -1,3 +1,4 @@
+import { copyHostText } from "./mcp-app/host-bridge";
 import {
   AlertTriangle,
   Check,
@@ -339,6 +340,7 @@ interface DocumentWorkspaceProps {
     options?: CompleteReviewOptions,
   ) => Promise<CompleteReviewResult>;
   backend: StorageBackend | null;
+  onPrepareReview?: (options?: CompleteReviewOptions) => Promise<string>;
 }
 
 export function DocumentWorkspace({
@@ -355,6 +357,7 @@ export function DocumentWorkspace({
   onOverwriteDocumentOnDisk,
   onCompleteReview,
   backend,
+  onPrepareReview,
 }: DocumentWorkspaceProps) {
   const [documentInteractionMode, setDocumentInteractionMode] =
     useState<DocumentInteractionMode>("suggesting");
@@ -369,6 +372,10 @@ export function DocumentWorkspace({
   const [copiedFileAction, setCopiedFileAction] =
     useState<FileCopyAction | null>(null);
   const [overallComment, setOverallComment] = useState("");
+  const [preparedMessage, setPreparedMessage] = useState<string | null>(null);
+  const [prepareError, setPrepareError] = useState<string | null>(null);
+  const mcpApp = backend?.info.kind === "mcp-app";
+  const readOnly = backend?.writable === false;
   const sawNoWatcherAfterNotifiedRef = useRef(false);
   const copiedFileActionTimeoutRef = useRef<number | null>(null);
   const documentGenerationRef = useRef<{
@@ -444,7 +451,11 @@ export function DocumentWorkspace({
   }, [activeDocumentPath, backend]);
 
   useEffect(() => {
-    if (reviewHandoffState === "undelivered" && reviewWatcherCount > 0) {
+    if (
+      !mcpApp &&
+      reviewHandoffState === "undelivered" &&
+      reviewWatcherCount > 0
+    ) {
       setReviewHandoffState("idle");
       return;
     }
@@ -463,7 +474,7 @@ export function DocumentWorkspace({
       sawNoWatcherAfterNotifiedRef.current = false;
       setReviewHandoffState("idle");
     }
-  }, [reviewHandoffState, reviewWatcherCount]);
+  }, [mcpApp, reviewHandoffState, reviewWatcherCount]);
 
   useEffect(() => {
     return () => {
@@ -605,7 +616,9 @@ export function DocumentWorkspace({
     reviewHandoffState === "queued"
       ? "Waiting for Pi"
       : reviewHandoffState === "received"
-        ? "Received by Pi"
+        ? mcpApp
+          ? "Sent"
+          : "Received by Pi"
         : reviewHandoffState === "cancelled"
           ? "Review cancelled"
           : reviewHandoffState === "notifying"
@@ -619,7 +632,9 @@ export function DocumentWorkspace({
     reviewHandoffState === "queued"
       ? "Your review is saved and queued for the Pi session that opened it. Receipt will be confirmed when that session accepts the feedback."
       : reviewHandoffState === "received"
-        ? "Your review is saved. The Pi session that opened it has accepted the feedback."
+        ? mcpApp
+          ? "Sent. You can close this view."
+          : "Your review is saved. The Pi session that opened it has accepted the feedback."
         : reviewHandoffState === "cancelled"
           ? "Your edits remain saved. Pi stopped waiting for this review. Start a new review from Pi, or copy the message below."
           : reviewHandoffState === "notifying"
@@ -629,9 +644,9 @@ export function DocumentWorkspace({
               : reviewHandoffState === "error"
                 ? "Inkback could not finish the handoff. Check the save status and that the local server is still running, then try again."
                 : "Your review is saved. An agent was connected when you finished, but receipt has not been confirmed.";
-  const reviewHandoffCopyMessage = buildReviewHandoffCopyMessage(
-    activeDocumentPath ?? documentFilenameLabel,
-  );
+  const reviewHandoffCopyMessage =
+    backend?.handoffMessage ??
+    buildReviewHandoffCopyMessage(activeDocumentPath ?? documentFilenameLabel);
   const reviewHandoffDisabled = isReviewHandoffDisabled({
     saveState,
     documentDiskChangeState,
@@ -693,7 +708,7 @@ export function DocumentWorkspace({
                   disabled={reviewHandoffButtonDisabled}
                   aria-disabled={reviewHandoffButtonDisabled || undefined}
                   onClick={() => {
-                    if (reviewHandoffState !== "idle") {
+                    if (mcpApp || reviewHandoffState !== "idle") {
                       setReviewHandoffPopoverOpen(true);
                       return;
                     }
@@ -748,9 +763,18 @@ export function DocumentWorkspace({
                     className="space-y-3"
                     onSubmit={(event) => {
                       event.preventDefault();
-                      void handleCompleteReview({
-                        overallComment: trimmedOverallComment,
-                      });
+                      if (onPrepareReview && !preparedMessage) {
+                        setPrepareError(null);
+                        void onPrepareReview({
+                          overallComment: trimmedOverallComment,
+                        })
+                          .then(setPreparedMessage)
+                          .catch((error) => setPrepareError(String(error)));
+                      } else {
+                        void handleCompleteReview({
+                          overallComment: trimmedOverallComment,
+                        });
+                      }
                     }}
                   >
                     <div>
@@ -760,23 +784,38 @@ export function DocumentWorkspace({
                         aria-label="Overall comment"
                         placeholder="Overall comment"
                         value={overallComment}
-                        onChange={(event) =>
-                          setOverallComment(event.currentTarget.value)
-                        }
+                        disabled={!!preparedMessage}
+                        onChange={(event) => {
+                          setOverallComment(event.currentTarget.value);
+                          setPreparedMessage(null);
+                        }}
                         maxLength={4000}
                         rows={4}
                         className="min-h-24 resize-none"
                       />
                     </div>
+                    {preparedMessage && (
+                      <Textarea
+                        aria-label="Message preview"
+                        readOnly
+                        value={preparedMessage}
+                        rows={10}
+                      />
+                    )}
+                    {prepareError && <p role="alert">{prepareError}</p>}
                     <Button
                       type="submit"
                       data-testid="review-handoff-submit-comment"
                       size="lg"
                       className="w-full rounded-[7px] bg-black text-sm font-bold text-white hover:bg-black/85 focus-visible:ring-black/25 dark:bg-white dark:text-black dark:hover:bg-white/90"
-                      disabled={!trimmedOverallComment}
+                      disabled={!mcpApp && !trimmedOverallComment}
                     >
                       <CheckCheck className="size-4" />
-                      Submit with comment
+                      {mcpApp
+                        ? preparedMessage
+                          ? "Send to conversation"
+                          : "Preview message"
+                        : "Submit with comment"}
                     </Button>
                   </form>
                 ) : (
@@ -823,23 +862,27 @@ export function DocumentWorkspace({
                               variant="outline"
                               className="w-full"
                               onClick={() =>
-                                void writePlainTextToClipboard(
-                                  reviewHandoffCopyMessage,
-                                )
+                                void (
+                                  mcpApp
+                                    ? copyHostText
+                                    : writePlainTextToClipboard
+                                )(reviewHandoffCopyMessage)
                               }
                             >
                               Copy message for agent
                             </Button>
-                            <Button
-                              type="button"
-                              data-testid="review-handoff-close-window"
-                              size="lg"
-                              variant="outline"
-                              className="mt-4 w-full rounded-[7px] text-sm font-semibold"
-                              onClick={() => window.close()}
-                            >
-                              Close window
-                            </Button>
+                            {!mcpApp && (
+                              <Button
+                                type="button"
+                                data-testid="review-handoff-close-window"
+                                size="lg"
+                                variant="outline"
+                                className="mt-4 w-full rounded-[7px] text-sm font-semibold"
+                                onClick={() => window.close()}
+                              >
+                                Close window
+                              </Button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1024,7 +1067,8 @@ export function DocumentWorkspace({
                 </Popover>
                 <div className="ml-auto inline-flex h-[1.25rem] shrink-0 items-center">
                   <Select<DocumentInteractionMode>
-                    value={documentInteractionMode}
+                    disabled={readOnly}
+                    value={readOnly ? "viewing" : documentInteractionMode}
                     onValueChange={(value) => {
                       if (value) setDocumentInteractionMode(value);
                     }}
@@ -1071,7 +1115,7 @@ export function DocumentWorkspace({
               selected
               saveController={saveController}
               editorViewMode={documentEditorViewMode}
-              interactionMode={documentInteractionMode}
+              interactionMode={readOnly ? "viewing" : documentInteractionMode}
               backend={backend}
               onCommentRailPresenceChange={setDocumentHasComments}
             />

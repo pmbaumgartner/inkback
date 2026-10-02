@@ -63,8 +63,22 @@ export function Homepage({ message }: { message: ReactNode }) {
   );
 }
 
-export function App() {
-  const initialRequestedPathState = getRequestedPathState();
+export function App({
+  bootstrap,
+}: {
+  bootstrap?: {
+    backend: StorageBackend;
+    documentPath: string;
+    onSaveController?: (controller: DocumentSaveController | null) => void;
+  };
+} = {}) {
+  const initialRequestedPathState = bootstrap
+    ? {
+        rawPath: bootstrap.documentPath,
+        documentPath: bootstrap.backend.info.detail,
+        projectPath: null,
+      }
+    : getRequestedPathState();
   const [requestedPathState] = useState(initialRequestedPathState);
   const [backend, setBackend] = useState<StorageBackend | null>(null);
   const [activeDocumentPath, setActiveDocumentPath] = useState<string | null>(
@@ -81,7 +95,9 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [documentEditorViewMode, setDocumentEditorViewMode] = useState(() =>
-    getDocumentEditorViewModeFromLocation("rich-text"),
+    bootstrap
+      ? "rich-text"
+      : getDocumentEditorViewModeFromLocation("rich-text"),
   );
   const backendRef = useRef<StorageBackend | null>(null);
   const saveControllerRef = useRef<DocumentSaveController | null>(null);
@@ -103,12 +119,14 @@ export function App() {
       );
       saveControllerRef.current = controller;
       setSaveController(controller);
+      bootstrap?.onSaveController?.(controller);
       setActiveDocumentPath(relativePath);
     },
-    [],
+    [bootstrap],
   );
 
   useEffect(() => {
+    if (bootstrap) return;
     const sourceUrl = new URL("/api/open-requests", window.location.origin);
     if (requestedPathState.rawPath) {
       sourceUrl.searchParams.set("path", requestedPathState.rawPath);
@@ -138,7 +156,7 @@ export function App() {
       source.removeEventListener("open-request", handleOpenRequest);
       source.close();
     };
-  }, [requestedPathState.rawPath]);
+  }, [bootstrap, requestedPathState.rawPath]);
 
   useEffect(() => {
     let cancelled = false;
@@ -148,12 +166,12 @@ export function App() {
       setLoadError(null);
 
       try {
-        const detectedBackend = await detectBackend();
+        const detectedBackend = bootstrap?.backend ?? (await detectBackend());
         if (cancelled) return;
 
         setBackend(detectedBackend);
 
-        if (detectedBackend.info.kind === "remote") {
+        if (bootstrap || detectedBackend.info.kind === "remote") {
           const documentPath = detectedBackend.info.detail || "remote.md";
           await loadDocument(detectedBackend, documentPath, () => cancelled);
           if (cancelled) return;
@@ -209,8 +227,10 @@ export function App() {
       cancelled = true;
       saveControllerRef.current?.dispose();
       saveControllerRef.current = null;
+      bootstrap?.onSaveController?.(null);
     };
   }, [
+    bootstrap,
     loadDocument,
     requestedPathState.documentPath,
     requestedPathState.projectPath,
@@ -230,6 +250,7 @@ export function App() {
   }, [activeDocumentPath, backend, requestedPathState.rawPath]);
 
   useEffect(() => {
+    if (bootstrap) return;
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       if (
         !shouldWarnBeforeUnload({
@@ -249,7 +270,7 @@ export function App() {
 
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, []);
+  }, [bootstrap]);
 
   const handleReloadDocumentFromDisk = useCallback(async () => {
     await saveControllerRef.current?.reload();
@@ -262,6 +283,20 @@ export function App() {
   const handleOverwriteDocumentOnDisk = useCallback(async () => {
     await saveControllerRef.current?.overwrite();
   }, []);
+
+  const handlePrepareReview = useCallback(
+    async (options?: CompleteReviewOptions) => {
+      const controller = saveControllerRef.current;
+      const currentBackend = backendRef.current;
+      if (!controller || !currentBackend?.prepareReview)
+        throw new Error("Review is not ready.");
+      const result = await controller.flushSave();
+      if (result.status !== "saved")
+        throw new Error("Save is blocked. Resolve it before finishing.");
+      return currentBackend.prepareReview(options);
+    },
+    [],
+  );
 
   const handleCompleteReview = useCallback(
     async (options?: CompleteReviewOptions) => {
@@ -299,15 +334,16 @@ export function App() {
     (nextMode: DocumentEditorViewMode) => {
       setDocumentEditorViewMode((current) => {
         if (nextMode === current) return current;
-        window.history.replaceState(
-          null,
-          "",
-          buildLocationForDocumentEditorViewMode(nextMode),
-        );
+        if (!bootstrap)
+          window.history.replaceState(
+            null,
+            "",
+            buildLocationForDocumentEditorViewMode(nextMode),
+          );
         return nextMode;
       });
     },
-    [],
+    [bootstrap],
   );
 
   if (loading) {
@@ -349,6 +385,9 @@ export function App() {
         onKeepEditingWithoutAutosave={handleKeepEditingWithoutAutosave}
         onOverwriteDocumentOnDisk={handleOverwriteDocumentOnDisk}
         onCompleteReview={handleCompleteReview}
+        onPrepareReview={
+          backend?.prepareReview ? handlePrepareReview : undefined
+        }
         backend={backend}
       />
     </main>

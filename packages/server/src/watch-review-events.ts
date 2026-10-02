@@ -9,7 +9,7 @@ interface WatchReviewEventsOptions {
   fetchImpl: typeof fetch;
 }
 
-interface ReviewWatchResult {
+export interface ReviewWatchResult {
   events?: unknown[];
   timedOut?: boolean;
   nextSequence?: number;

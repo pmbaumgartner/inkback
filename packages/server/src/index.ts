@@ -1,3 +1,13 @@
+import {
+  titleFromContent,
+  fileVersionFromFile,
+  normalizeOverallComment,
+  markdownPageFromFile,
+  nextAssetPath,
+  MAX_OVERALL_COMMENT_LENGTH,
+  writeDocument,
+  updateDocument,
+} from "./document-files.js";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import { createServer as createHttpServer } from "node:http";
@@ -106,7 +116,6 @@ interface RemoteDocumentSavePayload {
 const REMOTE_SESSION_TTL_MS = 5 * 60 * 1000;
 const REMOTE_SESSION_SWEEP_INTERVAL_MS = 60 * 1000;
 const REMOTE_SESSION_KEEPALIVE_MS = 15 * 1000;
-const MAX_OVERALL_COMMENT_LENGTH = 4_000;
 
 let nextOpenRequestClientId = 1;
 
@@ -148,66 +157,11 @@ function listMdFiles(projectDir: string): string[] {
   }
 }
 
-function titleFromContent(content: string, fallback: string): string {
-  const firstLine = content.split("\n")[0] || "";
-  return firstLine.replace(/^#*\s*/, "").trim() || fallback;
-}
-
-function fileVersionFromContent(
-  stats: fs.Stats,
-  content: string | Buffer,
-): string {
-  const contentHash = crypto.createHash("sha256").update(content).digest("hex");
-  return `${stats.mtimeMs}:${stats.size}:${contentHash}`;
-}
-
-function fileVersionFromFile(filePath: string): string {
-  const content = fs.readFileSync(filePath);
-  const stats = fs.statSync(filePath);
-  return fileVersionFromContent(stats, content);
-}
-
-function normalizeOverallComment(input: unknown): string | undefined {
-  if (typeof input !== "string") return undefined;
-  const trimmed = input.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
-
-function markdownPageFromFile(
-  relativePath: string,
-  absolutePath: string,
-): {
-  id: string;
-  title: string;
-  content: string;
-  version: string;
-} {
-  const content = fs.readFileSync(absolutePath, "utf-8");
-  const stats = fs.statSync(absolutePath);
-  const fallbackTitle = path.basename(relativePath, ".md");
-
-  return {
-    id: pageIdFromRelativePath(relativePath),
-    title: titleFromContent(content, fallbackTitle),
-    content,
-    version: fileVersionFromContent(stats, content),
-  };
-}
-
-function pageIdFromRelativePath(relativePath: string): string {
-  return relativePath.replace(/\.md$/i, "").split(path.sep).join("/");
-}
-
 function nextUntitledId(projectDir: string): string {
   const existing = listMdFiles(projectDir);
   let i = 1;
   while (existing.includes(`untitled-${i}`)) i++;
   return `untitled-${i}`;
-}
-
-function sanitizeFilename(filename: string): string {
-  const trimmed = filename.trim() || "attachment";
-  return trimmed.replace(/[^a-zA-Z0-9._-]/g, "-");
 }
 
 function ensureProjectPath(
@@ -227,28 +181,6 @@ function ensureProjectPath(
 
 function pageFilePathFromId(projectDir: string, id: string): string | null {
   return ensureProjectPath(projectDir, `${id}.md`);
-}
-
-function nextAssetPath(projectDir: string, filename: string): string {
-  const assetsDir = path.join(projectDir, ".inkback-assets");
-  fs.mkdirSync(assetsDir, { recursive: true });
-
-  const safeName = sanitizeFilename(filename);
-  const extensionIndex = safeName.lastIndexOf(".");
-  const basename =
-    extensionIndex > 0 ? safeName.slice(0, extensionIndex) : safeName;
-  const extension = extensionIndex > 0 ? safeName.slice(extensionIndex) : "";
-
-  let counter = 0;
-  while (true) {
-    const suffix = counter === 0 ? "" : `-${counter}`;
-    const relativePath = `.inkback-assets/${basename}${suffix}${extension}`;
-    const absolutePath = path.join(projectDir, relativePath);
-    if (!fs.existsSync(absolutePath)) {
-      return relativePath;
-    }
-    counter += 1;
-  }
 }
 
 function ensureDirectoryExists(dir: string): void {
@@ -722,7 +654,12 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
         })
       : markdown;
     if (persistedMarkdown !== markdown) {
-      fs.writeFileSync(target.absolutePath, persistedMarkdown);
+      updateDocument(
+        target.absolutePath,
+        () => persistedMarkdown,
+        undefined,
+        Infinity,
+      );
     }
 
     const index = extractInkbackReviewIndex(persistedMarkdown);
@@ -850,18 +787,21 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
       content: string;
       expectedVersion?: string;
     };
-    const currentVersion = fileVersionFromFile(absolutePath);
-
-    if (expectedVersion && expectedVersion !== currentVersion) {
+    const result = writeDocument(
+      absolutePath,
+      content,
+      expectedVersion,
+      relativePath,
+      Infinity,
+    );
+    if (result.status === "conflict") {
       res.status(409).json({
         error: "Markdown file changed on disk",
-        current: markdownPageFromFile(relativePath, absolutePath),
+        current: result.current,
       });
       return;
     }
-
-    fs.writeFileSync(absolutePath, content);
-    res.json(markdownPageFromFile(relativePath, absolutePath));
+    res.json(result.page);
   });
 
   app.post("/api/pages", (req, res) => {

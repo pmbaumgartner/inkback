@@ -1,3 +1,4 @@
+import DOMPurify from "dompurify";
 import { parseRfmEndmatter } from "@inkback/rfm";
 import { tables, taskListItems } from "@joplin/turndown-plugin-gfm";
 import { marked } from "marked";
@@ -6,6 +7,7 @@ import TurndownService from "turndown";
 export const rawMarkdownBlockAttribute = "data-markdown-raw-block";
 
 export interface MarkdownOptions {
+  blockRemoteImages?: boolean;
   resolveFileUrl?: (path: string) => string | null;
   resolveLinkUrl?: (path: string) => string | null;
 }
@@ -286,6 +288,11 @@ export function createMarkedRenderer(options?: MarkdownOptions) {
 
   renderer.image = ({ href, title, text }) => {
     const rawHref = href || "";
+    if (
+      options?.blockRemoteImages &&
+      /^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(rawHref)
+    )
+      return `<span>${escapeHtml(text || "")}</span>`;
     const renderedHref = resolveRenderedUrl(rawHref, resolveFileUrl);
     const alt = text || "";
     const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
@@ -527,9 +534,20 @@ export function toMarkdown(html: string): string {
 }
 
 export function toHtml(markdown: string, options?: MarkdownOptions): string {
-  return marked.parse(markdown, {
-    async: false,
-    gfm: true,
-    renderer: createMarkedRenderer(options),
-  }) as string;
+  return sanitizeMarkdownHtml(
+    marked.parse(markdown, {
+      async: false,
+      gfm: true,
+      renderer: createMarkedRenderer(options),
+    }) as string,
+  );
+}
+
+export function sanitizeMarkdownHtml(html: string): string {
+  return DOMPurify.sanitize(html, {
+    ADD_ATTR: ["data-markdown-src", "data-markdown-autolink", "target"],
+    ALLOWED_URI_REGEXP:
+      /^(?:(?:https?|ftp|ftps|mailto|tel|callto|sms|cid|xmpp|file):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
+    FORBID_TAGS: ["script", "iframe", "object", "embed", "form"],
+  });
 }

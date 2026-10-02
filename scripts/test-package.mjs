@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+import { smokeMcp } from "./mcp-package-smoke.mjs";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -75,6 +75,22 @@ try {
     "Skill installation preserves agent instructions",
   );
   run(cli, ["skill", "install", skill, "--force"]);
+  const installedRoot = path.join(
+    prefix,
+    ...(process.platform === "win32"
+      ? ["node_modules", "inkback"]
+      : ["lib", "node_modules", "inkback"]),
+  );
+  assert.match(
+    readFileSync(path.join(installedRoot, "LICENSE"), "utf8"),
+    /Nathan Baschez/,
+  );
+  assert.ok(
+    readFileSync(
+      path.join(installedRoot, "packages/app/dist-mcp-app/mcp-app.html"),
+    ).length > 1_000_000,
+  );
+  await smokeMcp(path.join(installedRoot, "packages/server/bin/inkback.mjs"));
   console.log(`Installed package CLI passed: inkback ${version}`);
 } finally {
   rmSync(temporary, { recursive: true, force: true });

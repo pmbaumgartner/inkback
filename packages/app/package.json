@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && vite build -c vite.mcp-app.config.ts",
     "preview": "vite preview",
     "test": "vitest run"
   },
@@ -18,6 +18,7 @@
     "@fontsource-variable/inter": "^5.2.8",
     "@inkback/rfm": "workspace:*",
     "@joplin/turndown-plugin-gfm": "^1.0.64",
+    "@modelcontextprotocol/ext-apps": "2.0.3",
     "@tiptap/core": "^3.22.4",
     "@tiptap/extension-code": "^3.22.4",
     "@tiptap/extension-code-block": "^3.22.4",
@@ -36,6 +37,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "codemirror": "^6.0.2",
+    "dompurify": "^3.4.16",
     "lucide-react": "^1.8.0",
     "marked": "^15.0.0",
     "react": "^19.1.0",
@@ -56,6 +58,7 @@
     "tailwindcss": "^4.2.4",
     "typescript": "^5.8.3",
     "vite": "^6.3.4",
+    "vite-plugin-singlefile": "^2.3.3",
     "vitest": "^4.1.5"
   }
 }

@@ -9,7 +9,8 @@
       "!**/playwright-report",
       "!**/test-results",
       "!**/node_modules",
-      "!**/dist"
+      "!**/dist",
+      "!**/dist-mcp-app"
     ]
   },
   "formatter": {
