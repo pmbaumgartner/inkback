@@ -2,6 +2,26 @@
 
 ## Executive summary
 
+**Current product decision (supersedes MCP Apps recommendations below):**
+Peter decided not to support embedded MCP Apps. The desktop compatibility gate
+`inkback#r65k` is withdrawn (`wontfix`), not passed. Historical MCPB/App build
+and verification results below remain evidence of what was tested, not future
+support requirements. Complete removal is being planned in parked placeholder
+`inkback#d31j`; no removal has been implemented. Browser CLI review remains
+supported. Retention of ordinary MCP tools and MCPB distribution is unresolved
+and must be stated in that plan. Optional bundling remains deferred with its
+Apps-specific requirements withdrawn; the Markdown track remains independent.
+
+Manual-test learning: select the intended host and surface, confirm MCP
+connection and `inkback_open_review` availability, and explicitly invoke that
+tool rather than a terminal fallback. MCPB installation can supply connection
+configuration; checkout/manual integrations need their host-specific config.
+The observed Code-tab flow used the checkout browser CLI and does not establish
+embedded-app compatibility. No broader host support finding was established.
+The separate dev-frontend project-access fallback patch is tracked in
+`inkback#1d5n` pending review, verification and commit; it remains relevant to
+the supported browser workflow.
+
 **Fix 9 is worth doing as a publication-boundary cleanup.** Separate the private workspace from the generated `inkback` release package first. Bundling and flattening the release are a second, optional decision: they require deliberate changes to runtime paths and the detached HTTP server entrypoint. The original half-day estimate understates that combined change.
 
 **Fix 10 merits a two-day spike, not a committed rewrite.** Direct Markdown ↔ TipTap JSON conversion is feasible, but stock `@tiptap/markdown` is not a byte-preserving replacement. Inkback already preserves unchanged source; most of its review model, metadata handling, opaque raw blocks, and source snapshots must remain. The spike must demonstrate simpler *edited-block conversion*, not just passing ordinary Markdown examples.
