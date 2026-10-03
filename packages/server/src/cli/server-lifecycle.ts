@@ -272,6 +272,7 @@ export async function waitForServerToStop(
 
 export async function resolveLiveDevFrontendBaseUrl(
   deps: CliDependencies,
+  projectDir: string,
 ): Promise<LiveDevFrontend | null> {
   const state = readDevFrontendStateFromDisk(
     getDevFrontendStateFilePath(deps.env),
@@ -324,6 +325,19 @@ export async function resolveLiveDevFrontendBaseUrl(
         state.apiPort !== null &&
         payload.port !== state.apiPort
       ) {
+        return null;
+      }
+
+      const projectResponse = await deps.fetchImpl(
+        new URL("/api/project/open", frontendUrl),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: projectDir }),
+          signal: AbortSignal.timeout(STATUS_TIMEOUT_MS),
+        },
+      );
+      if (!projectResponse.ok) {
         return null;
       }
     }

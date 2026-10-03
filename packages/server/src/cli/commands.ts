@@ -147,7 +147,7 @@ export async function runOpen(
 
   const { projectDir, openPath } = resolvedTarget;
 
-  const liveDevFrontend = await resolveLiveDevFrontendBaseUrl(deps);
+  const liveDevFrontend = await resolveLiveDevFrontendBaseUrl(deps, projectDir);
   let result: EnsureRunningResult | null = null;
   let baseUrl: string;
 

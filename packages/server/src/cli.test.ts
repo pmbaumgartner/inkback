@@ -140,7 +140,9 @@ describe("cli", () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  function createTestDependencies() {
+  function createTestDependencies(
+    overrideFetch?: (url: URL) => Response | undefined,
+  ) {
     const logs: string[] = [];
     const errors: string[] = [];
     let lastOpenedUrl: string | null = null;
@@ -161,6 +163,8 @@ describe("cli", () => {
                 typeof input === "string" ? input : input.url,
                 "http://localhost",
               );
+        const overridden = overrideFetch?.(url);
+        if (overridden) return overridden;
         const port = Number.parseInt(url.port || "80", 10);
         const hasActiveServer = Array.from(portByPid.entries()).some(
           ([pid, activePort]) => runningPids.has(pid) && activePort === port,
@@ -618,6 +622,10 @@ describe("cli", () => {
           );
         }
 
+        if (url.pathname === "/api/project/open" && url.port === "5173") {
+          return Response.json({ backend: "local-files", projectDir });
+        }
+
         return fetch(input, init);
       },
       spawnServerProcess: async () => {
@@ -705,6 +713,10 @@ describe("cli", () => {
           );
         }
 
+        if (url.pathname === "/api/project/open" && url.port === "5173") {
+          return Response.json({ backend: "local-files", projectDir });
+        }
+
         if (url.pathname === "/api/review-events/watch") {
           watchUrl = url.toString();
           return new Response(
@@ -781,6 +793,66 @@ describe("cli", () => {
     expect(test.getSpawnCount()).toBe(1);
     expect(test.getLastOpenedUrl()).toBe(
       expectedOpenUrl(`http://localhost:${persisted.port}`, documentPath),
+    );
+  });
+
+  it("falls back to the api server when the dev frontend cannot access the project", async () => {
+    const documentPath = path.join(projectDir, "draft.md");
+    fs.writeFileSync(documentPath, "# Draft\n");
+    fs.writeFileSync(
+      devFrontendStateFile,
+      `${JSON.stringify({
+        apiPort: 3000,
+        appPort: 5173,
+        mode: "full-dev",
+        repoRoot: serverRoot,
+        startedAt: new Date().toISOString(),
+        url: "http://localhost:5173",
+      })}\n`,
+    );
+
+    let watchUrl: string | null = null;
+    const test = createTestDependencies((url) => {
+      if (url.pathname === "/api/review-events/watch") {
+        watchUrl = url.toString();
+        return Response.json({
+          events: [{ documentPath, type: "review.completed" }],
+          timedOut: false,
+          nextSequence: 2,
+        });
+      }
+      if (url.port !== "5173") return undefined;
+      if (url.pathname === "/api/status") {
+        return Response.json({
+          backend: "local-files",
+          port: 3000,
+          projectDir: path.join(serverRoot, "sandbox"),
+          serverRoot,
+        });
+      }
+      if (url.pathname === "/api/project/open") {
+        return Response.json(
+          { error: "Path is outside the allowed directories" },
+          { status: 403 },
+        );
+      }
+      return undefined;
+    });
+    const exitCode = await runCli(
+      ["open", documentPath, "--json", "--batch-window", "0"],
+      test.deps,
+    );
+    const persisted = JSON.parse(
+      fs.readFileSync(getServerStateFilePath(test.deps.env), "utf8"),
+    ) as { port: number };
+
+    expect(exitCode).toBe(0);
+    expect(test.getSpawnCount()).toBe(1);
+    expect(test.getLastOpenedUrl()).toBe(
+      expectedOpenUrl(`http://localhost:${persisted.port}`, documentPath),
+    );
+    expect(watchUrl).toBe(
+      `http://localhost:${persisted.port}/api/review-events/watch`,
     );
   });
 

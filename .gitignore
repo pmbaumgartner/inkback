@@ -16,3 +16,5 @@ sandbox
 .context/
 
 /packages/app/dist-mcp-app/
+.kata.local.toml
+.kata/
