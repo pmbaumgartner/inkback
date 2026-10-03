@@ -24,7 +24,11 @@ function run(command, args, cwd = root) {
 try {
   if (!process.argv.includes("--skip-build")) run("pnpm", ["build"]);
   const [packed] = JSON.parse(
-    run("npm", ["pack", "--json", "--pack-destination", temporary]),
+    run(
+      "npm",
+      ["pack", "--json", "--pack-destination", temporary],
+      path.join(root, "packages/cli/dist"),
+    ),
   );
   const stage = path.join(temporary, "stage");
   fs.mkdirSync(stage);
@@ -58,7 +62,7 @@ try {
     path.join(root, "mcpb/icon.png"),
     path.join(stage, "icon.png"),
   );
-  await smokeMcp(path.join(stage, manifest.server.entry_point));
+  await smokeMcp(path.join(stage, manifest.server.entry_point), version);
   const outputDirectory = path.join(root, "dist");
   fs.mkdirSync(outputDirectory, { recursive: true });
   const output = path.join(outputDirectory, `inkback-${version}.mcpb`);

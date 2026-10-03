@@ -90,6 +90,8 @@ For Goose, add a stdio extension with the same command and arguments. Each host 
 
 ### MCP verification
 
+The repository root is private. After `pnpm build`, the generated release is in `packages/cli/dist`; inspect it with `cd packages/cli/dist && npm pack --dry-run`. Do not publish the repository root. `pnpm test:package` packs and installs that generated release with install scripts disabled; `pnpm build:mcpb` uses the same release artifact. These commands verify packaging locally, not authorization to publish.
+
 `pnpm check` builds both editor entries and checks the UI size. `pnpm test:smoke` also tests the production MCP App with the official `ext-apps` 2.0.3 basic-host sandbox. On its first run, the test harness downloads that pinned example into the temporary directory and installs its build dependencies. It uses loopback ports 4320, 8080, and 8081. `pnpm test:package` checks the installed stdio server and UI outside the workspace; `pnpm build:mcpb` verifies the staged server before packing it.
 
 Automated checks do not establish desktop-host compatibility. The browser CLI flow remains available alongside the MCP App. See [release notes](CHANGELOG.md) for protocol and write-policy changes.

@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-export async function smokeMcp(entry) {
+export async function smokeMcp(entry, expectedVersion) {
   const directory = mkdtempSync(path.join(os.tmpdir(), "inkback-mcp-package-"));
   const child = spawn(process.execPath, [entry, "mcp", directory], {
     stdio: "pipe",
@@ -60,6 +60,7 @@ export async function smokeMcp(entry) {
       clientInfo: { name: "package-smoke", version: "1" },
     });
     assert.ok(init.result.capabilities.resources);
+    assert.equal(init.result.serverInfo.version, expectedVersion);
     child.stdin.write(
       `${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`,
     );

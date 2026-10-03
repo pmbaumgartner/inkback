@@ -1,13 +1,11 @@
 {
   "name": "inkback",
+  "private": true,
   "version": "0.1.0",
   "description": "A local markdown review app",
   "license": "MIT",
   "author": "Nathan Baschez",
   "packageManager": "pnpm@12.8.1",
-  "bin": {
-    "inkback": "./packages/server/bin/inkback.mjs"
-  },
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:web": "node scripts/dev-web.mjs",
@@ -22,29 +20,8 @@
     "test:coverage": "pnpm --filter @inkback/app exec vitest run --coverage && pnpm --filter @inkback/server exec vitest run --coverage",
     "typecheck": "pnpm -r typecheck",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
-    "build": "pnpm --filter @inkback/rfm build && pnpm --filter @inkback/app build && pnpm --filter @inkback/server build && node scripts/check-mcp-app-size.mjs",
+    "build": "pnpm --filter @inkback/rfm build && pnpm --filter @inkback/app build && pnpm --filter @inkback/server build && node scripts/check-mcp-app-size.mjs && node packages/cli/build-release.mjs",
     "build:mcpb": "node scripts/build-mcpb.mjs"
-  },
-  "files": [
-    "packages/app/dist",
-    "packages/rfm/dist",
-    "packages/rfm/package.json",
-    "packages/server/dist",
-    "packages/server/bin",
-    "packages/server/defaults.mjs",
-    "packages/server/defaults.d.mts",
-    "packages/skill/inkback",
-    "packages/app/dist-mcp-app",
-    "LICENSE"
-  ],
-  "dependencies": {
-    "@inkback/rfm": "file:packages/rfm",
-    "@modelcontextprotocol/core": "2.0.0",
-    "@modelcontextprotocol/ext-apps": "2.0.3",
-    "@modelcontextprotocol/server": "2.0.0",
-    "express": "^5.1.0",
-    "yaml": "^2.9.0",
-    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@anthropic-ai/mcpb": "2.1.2",

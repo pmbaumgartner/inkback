@@ -9,6 +9,10 @@ import { smokeMcp } from "./mcp-package-smoke.mjs";
 // Test the distributed package outside the workspace so development dependencies
 // cannot hide missing runtime dependencies. Run after building the workspace.
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
+const releaseRoot = path.join(repoRoot, "packages/cli/dist");
+const expectedVersion = JSON.parse(
+  readFileSync(path.join(repoRoot, "package.json")),
+).version;
 const temporary = mkdtempSync(path.join(tmpdir(), "inkback-package-"));
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 
@@ -32,7 +36,11 @@ try {
   let packageSpec = process.argv[2];
   if (!packageSpec) {
     const packed = JSON.parse(
-      run(npm, ["pack", "--json", "--pack-destination", temporary], repoRoot),
+      run(
+        npm,
+        ["pack", "--json", "--pack-destination", temporary],
+        releaseRoot,
+      ),
     );
     packageSpec = path.join(temporary, packed[0].filename);
   } else if (packageSpec.endsWith(".tgz") && !packageSpec.includes("://")) {
@@ -54,11 +62,7 @@ try {
     ...(process.platform === "win32" ? ["inkback.cmd"] : ["bin", "inkback"]),
   );
   const version = run(cli, ["--version"]);
-  assert.match(
-    version,
-    /^\d+\.\d+\.\d+(?:-[\w.-]+)?$/,
-    "CLI prints its version",
-  );
+  assert.equal(version, expectedVersion, "CLI prints the release version");
   assert.match(run(cli, ["--help"]), /Usage:/, "CLI prints usage instructions");
   const workspace = path.join(temporary, "agent-workspace");
   const instructions = path.join(temporary, "AGENTS.md");
@@ -90,7 +94,10 @@ try {
       path.join(installedRoot, "packages/app/dist-mcp-app/mcp-app.html"),
     ).length > 1_000_000,
   );
-  await smokeMcp(path.join(installedRoot, "packages/server/bin/inkback.mjs"));
+  await smokeMcp(
+    path.join(installedRoot, "packages/server/bin/inkback.mjs"),
+    expectedVersion,
+  );
   console.log(`Installed package CLI passed: inkback ${version}`);
 } finally {
   rmSync(temporary, { recursive: true, force: true });

@@ -3,15 +3,10 @@
   "ignoreDependencies": ["express", "@anthropic-ai/mcpb"],
   "workspaces": {
     ".": {
-      "ignoreDependencies": [
-        "@inkback/rfm",
-        "@modelcontextprotocol/core",
-        "@modelcontextprotocol/ext-apps",
-        "@modelcontextprotocol/server",
-        "yaml",
-        "zod"
-      ],
       "entry": ["scripts/start-mcp-test-host.mjs"]
+    },
+    "packages/cli": {
+      "entry": ["build-release.mjs"]
     },
     "packages/app": {
       "entry": ["src/mcp-app/main.tsx", "e2e/*.ts"]
