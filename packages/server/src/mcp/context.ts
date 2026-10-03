@@ -1,6 +1,6 @@
-import type { PathPolicy } from "../path-policy.js";
 import type { ChangeWatcher } from "../change-watch.js";
 import type { OpenDocuments } from "../open-documents.js";
+import type { PathPolicy } from "../path-policy.js";
 export interface ToolContext {
   policy: PathPolicy;
   changes: ChangeWatcher;

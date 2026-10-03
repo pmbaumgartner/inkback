@@ -1,6 +1,7 @@
 import type { App } from "@modelcontextprotocol/ext-apps";
 import { afterEach, expect, it, vi } from "vitest";
 import { applyHostTheme, openExternalLink, setHostBridge } from "./host-bridge";
+
 afterEach(() => {
   setHostBridge(null);
   document.body.innerHTML = "";

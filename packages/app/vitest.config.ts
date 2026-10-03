@@ -1,13 +1,31 @@
-import { defineConfig } from "vitest/config";
 import { fileURLToPath, URL } from "node:url";
+import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   resolve: {
+    conditions: [
+      "inkback-source",
+      "module",
+      "browser",
+      "development|production",
+    ],
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
+  ssr: {
+    resolve: {
+      conditions: [
+        "inkback-source",
+        "module",
+        "node",
+        "development|production",
+      ],
+    },
+  },
   test: {
+    // jsdom/editor workers are CPU-heavy; avoid saturating the host machine.
+    maxWorkers: 4,
     coverage: {
       provider: "v8",
       reportsDirectory: "../../coverage/app",

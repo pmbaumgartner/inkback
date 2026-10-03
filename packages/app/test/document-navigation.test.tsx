@@ -106,6 +106,7 @@ describe("interaction mode across view changes", () => {
           <DocumentWorkspace
             documentPage={createPage()}
             activeDocumentPath="test.md"
+            documentCopyPath={null}
             documentFilenameLabel="test.md"
             documentEditorViewMode={viewMode}
             onDocumentEditorViewModeChange={() => {}}
@@ -114,7 +115,6 @@ describe("interaction mode across view changes", () => {
                 "test.md",
                 createPage(),
                 createBackend(),
-                () => {},
               )
             }
             documentDiskChangeState="clean"

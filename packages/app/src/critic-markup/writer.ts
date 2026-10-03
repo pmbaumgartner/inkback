@@ -572,14 +572,17 @@ export function editorStateToCriticMarkdown(
   let body = "";
   for (let index = 0; index < blocks.length; ) {
     const previous = blocks[index - 1];
-    const block = blocks[index++]!;
+    const block = blocks[index++];
+    if (!block) throw new Error("Expected an editor Markdown block");
     const group = [block];
-    if (block.attrs?.sourceGroup)
-      while (
-        index < blocks.length &&
-        blocks[index]?.attrs?.sourceGroup === block.attrs.sourceGroup
-      )
-        group.push(blocks[index++]!);
+    if (block.attrs?.sourceGroup) {
+      while (index < blocks.length) {
+        const next = blocks[index];
+        if (!next || next.attrs?.sourceGroup !== block.attrs.sourceGroup) break;
+        group.push(next);
+        index++;
+      }
+    }
     const grouped = { type: "doc", content: group };
     const source = block.attrs?.originalSource;
     if (

@@ -38,7 +38,10 @@ function createDomRect({
   } as DOMRect;
 }
 
-function findTextRange(editor: Editor, text: string) {
+function findTextRange(
+  editor: Editor,
+  text: string,
+): { from: number; to: number } | null {
   let range: { from: number; to: number } | null = null;
 
   editor.state.doc.descendants((node, pos) => {
@@ -141,7 +144,10 @@ async function typeTextAsBrowserInput(editor: Editor, text: string) {
       let handled = false;
 
       editor.view.someProp("handleTextInput", (handler) => {
-        handled = handler(editor.view, from, to, character);
+        handled =
+          handler(editor.view, from, to, character, () =>
+            editor.state.tr.insertText(character, from, to),
+          ) === true;
         return handled;
       });
 
@@ -165,15 +171,16 @@ async function pressEditorKey(
     let handled = false;
 
     editor.view.someProp("handleKeyDown", (handler) => {
-      handled = handler(
-        editor.view,
-        new KeyboardEvent("keydown", {
-          key,
-          ...options,
-          bubbles: true,
-          cancelable: true,
-        }),
-      );
+      handled =
+        handler(
+          editor.view,
+          new KeyboardEvent("keydown", {
+            key,
+            ...options,
+            bubbles: true,
+            cancelable: true,
+          }),
+        ) === true;
       return handled;
     });
 
@@ -361,7 +368,7 @@ describe("PageCard editor integration", () => {
       globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
     ).IS_REACT_ACT_ENVIRONMENT = true;
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
-      function getBoundingClientRect() {
+      function getBoundingClientRect(this: HTMLElement) {
         const isEditor = this.classList.contains("ProseMirror");
         const isAnchor = this.classList.contains("comment-anchor");
 
@@ -893,7 +900,9 @@ describe("PageCard editor integration", () => {
       editor.commands.focus("end");
       const position = editor.state.selection.from;
       editor.view.someProp("handleTextInput", (handler) =>
-        handler(editor.view, position, position, " now"),
+        handler(editor.view, position, position, " now", () =>
+          editor.state.tr.insertText(" now", position, position),
+        ),
       );
     });
 
@@ -963,7 +972,9 @@ describe("PageCard editor integration", () => {
     await act(async () => {
       const { from, to } = editor.state.selection;
       editor.view.someProp("handleTextInput", (handler) =>
-        handler(editor.view, from, to, "new"),
+        handler(editor.view, from, to, "new", () =>
+          editor.state.tr.insertText("new", from, to),
+        ),
       );
     });
 
@@ -1678,9 +1689,9 @@ comments:
       rendered.container,
       "comment-rail-c1-action-delete-thread",
     );
-    expect(button).not.toBeNull();
+    if (!button) throw new Error("Expected delete-thread button");
     await act(async () => {
-      button!.click();
+      button.click();
       await Promise.resolve();
     });
     await act(async () => {

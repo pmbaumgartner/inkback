@@ -1,26 +1,26 @@
-import { useState } from "react";
-import { createRoot } from "react-dom/client";
-import {
-  App as McpApp,
-  type McpUiHostContext,
-} from "@modelcontextprotocol/ext-apps";
 import {
   extractInkbackReviewIndex,
   type RfmReviewIndexSummary,
 } from "@inkback/rfm";
+import {
+  App as McpApp,
+  type McpUiHostContext,
+} from "@modelcontextprotocol/ext-apps";
+import { useState } from "react";
+import { createRoot } from "react-dom/client";
 import manifest from "../../../../package.json";
 import { App } from "../App";
-import type { DocumentSaveController } from "../DocumentSaveController";
-import { TooltipProvider } from "../components/ui/tooltip";
 import { Button } from "../components/ui/button";
-import { McpAppBackend } from "./McpAppBackend";
-import { InlineCard } from "./InlineCard";
+import { TooltipProvider } from "../components/ui/tooltip";
+import type { DocumentSaveController } from "../DocumentSaveController";
 import {
   applyHostTheme,
   captureHostLinks,
   setHostBridge,
   showLinkNotice,
 } from "./host-bridge";
+import { InlineCard } from "./InlineCard";
+import { McpAppBackend } from "./McpAppBackend";
 import "../style.css";
 const host = new McpApp(
   { name: "Inkback", version: manifest.version },

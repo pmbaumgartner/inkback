@@ -1,5 +1,7 @@
+// @vitest-environment node
 import { expect, it, vi } from "vitest";
 import { ImageCache } from "./image-cache";
+
 it("prefetches nested local images with at most four concurrent reads", async () => {
   const cache = new ImageCache();
   let active = 0;

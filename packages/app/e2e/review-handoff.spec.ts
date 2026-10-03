@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { type APIResponse, expect, test } from "@playwright/test";
 import {
   appendInCodeEditor,
   createMarkdownProject,
@@ -125,7 +125,7 @@ test.describe("review handoff", () => {
         /---\ncomments:\n {2}c1:\n {4}body: Please prioritize the CLI contract\.\n {4}by: user\n {4}at: [^\n]+\n?$/,
       );
 
-    const watchResponse = await pendingWatch;
+    const watchResponse = (await pendingWatch) as APIResponse;
     const payload = await watchResponse.json();
     expect(payload.events).toHaveLength(1);
     expect(payload.events[0]).toMatchObject({

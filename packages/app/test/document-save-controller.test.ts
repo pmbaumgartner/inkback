@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DocumentSaveController } from "../src/DocumentSaveController";
 import { MarkdownFileConflictError, type StorageBackend } from "../src/storage";
@@ -245,7 +246,13 @@ describe("document save queue", () => {
   it("blocks queued autosave on a conflict and allows an explicit overwrite", async () => {
     const save = vi
       .fn()
-      .mockRejectedValueOnce(new MarkdownFileConflictError("a.md"))
+      .mockRejectedValueOnce(
+        new MarkdownFileConflictError({
+          ...page,
+          content: "disk",
+          version: "v2",
+        }),
+      )
       .mockResolvedValueOnce({ ...page, content: "local", version: "v3" });
     const draft = controller(save);
     draft.edit("local");

@@ -2,4 +2,3 @@
 - Use the checkout CLI (`node packages/server/bin/inkback.mjs`), not a globally installed app, when verifying local changes.
 - Keep the bundled agent skill aligned with supported CLI behavior.
 - Keep the loopback HTTP transport in `packages/server/test-support/` out of distributed packages; use it only for host tests.
-- Record host verification in `.planning/inkback-mcp-app-plan.md` (S11.6 and S11.8); automated checks do not establish desktop-host compatibility.

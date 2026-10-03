@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { gzipSync } from "node:zlib";
+
 const html = fs.readFileSync(
   new URL("../packages/app/dist-mcp-app/mcp-app.html", import.meta.url),
 );

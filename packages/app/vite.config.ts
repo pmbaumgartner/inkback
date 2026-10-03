@@ -1,7 +1,7 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath, URL } from "node:url";
+import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
 
 export default defineConfig(() => {
   const apiPort = parseInt(process.env.API_PORT || "3001", 10);
@@ -9,6 +9,12 @@ export default defineConfig(() => {
   return {
     plugins: [tailwindcss(), react()],
     resolve: {
+      conditions: [
+        "inkback-source",
+        "module",
+        "browser",
+        "development|production",
+      ],
       alias: {
         "@": fileURLToPath(new URL("./src", import.meta.url)),
       },

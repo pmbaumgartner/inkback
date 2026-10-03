@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createApp } from "./index";
+import { createApp } from "./index.js";
 
 describe("createApp", () => {
   let projectDir: string;

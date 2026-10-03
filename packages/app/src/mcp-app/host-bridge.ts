@@ -1,4 +1,5 @@
 import type { App, McpUiHostContext } from "@modelcontextprotocol/ext-apps";
+
 let host: App | null = null;
 export function setHostBridge(app: App | null) {
   host = app;

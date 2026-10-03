@@ -361,7 +361,8 @@ function renderCriticCodeText(
   let result = "";
   let cursor = 0;
   for (let index = 0; index < tokens.length; index++) {
-    const token = tokens[index]!;
+    const token = tokens[index];
+    if (!token) throw new Error("Expected a CriticMarkup code token");
     const parsed = token.parsed;
     if (parsed.offset < cursor) continue;
     if (token.kind === "comment") {
@@ -371,11 +372,18 @@ function renderCriticCodeText(
           : parsed.offset;
       result += escapeHtml(text.slice(cursor, anchorStart));
       const grouped = [token];
-      while (
-        tokens[index + 1]?.kind === "comment" &&
-        tokens[index + 1]!.parsed.offset === grouped.at(-1)!.parsed.endOffset
-      )
-        grouped.push(tokens[++index]! as typeof token);
+      let lastComment = token;
+      while (true) {
+        const next = tokens[index + 1];
+        if (
+          next?.kind !== "comment" ||
+          next.parsed.offset !== lastComment.parsed.endOffset
+        )
+          break;
+        grouped.push(next);
+        lastComment = next;
+        index++;
+      }
       const ids: string[] = [];
       for (const commentToken of grouped) {
         const comment = createCommentWithContext(
@@ -400,7 +408,7 @@ function renderCriticCodeText(
         ids.push(comment.id);
       }
       result += `<span data-comment-ids="${escapeHtml(JSON.stringify(ids))}">${token.anchorText !== undefined ? renderCriticCodeText(token.anchorText, comments, changes, endmatter, reservedIds) : unanchoredCommentSentinel}</span>`;
-      cursor = grouped.at(-1)!.parsed.endOffset;
+      cursor = lastComment.parsed.endOffset;
     } else {
       result += escapeHtml(text.slice(cursor, parsed.offset));
       const metadata = commentMetadata(
@@ -674,7 +682,8 @@ export function criticMarkdownToEditorState(
   let cursor = 0;
   const materialTokens = tokens.filter((token) => token.type !== "space");
   for (let index = 0; index < materialTokens.length; index++) {
-    const token = materialTokens[index]!;
+    const token = materialTokens[index];
+    if (!token) throw new Error("Expected a Markdown block token");
     const start = body.indexOf(token.raw, cursor);
     const next = materialTokens[index + 1];
     const end = next
@@ -701,7 +710,9 @@ export function criticMarkdownToEditorState(
       const preserved = generateJSON(
         `<div data-markdown-raw-block="${escapeHtml(encodeURIComponent(gap))}"></div>`,
         extensions,
-      ).content![0]!;
+      ).content?.[0];
+      if (!preserved)
+        throw new Error("Failed to preserve Markdown between blocks");
       preserved.attrs = {
         ...preserved.attrs,
         originalSource: gap,
@@ -723,12 +734,15 @@ export function criticMarkdownToEditorState(
   doc.lineEnding = lineEnding;
   addEndmatterFeedback(comments, parsedEndmatter);
   for (let index = 0; index < blocks.length; ) {
-    const group: JSONContent[] = [blocks[index++]!];
-    while (
-      index < blocks.length &&
-      blocks[index]?.attrs?.sourceGroup === group[0]?.attrs?.sourceGroup
-    )
-      group.push(blocks[index++]!);
+    const first = blocks[index++];
+    if (!first) throw new Error("Expected a parsed Markdown block");
+    const group: JSONContent[] = [first];
+    while (index < blocks.length) {
+      const next = blocks[index];
+      if (!next || next.attrs?.sourceGroup !== first.attrs?.sourceGroup) break;
+      group.push(next);
+      index++;
+    }
     const grouped = { type: "doc", content: group };
     const snapshot = blockSnapshot(grouped);
     const commentSnapshot = blockCommentSnapshot(grouped, comments);

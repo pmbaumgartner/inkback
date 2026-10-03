@@ -1,10 +1,10 @@
-import { createInkbackMcpServer } from "./mcp/server";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { createMcpHarness } from "../test-support/mcp-harness";
+import { createMcpHarness } from "../test-support/mcp-harness.js";
+import { createInkbackMcpServer } from "./mcp/server.js";
 
 let directory: string;
 let documentPath: string;

@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import { expect, it } from "vitest";
-import { buildReviewHandoffMessage, REVIEW_AUTHORIZATION } from "./handoff";
-import { extractInkbackReviewIndex } from "./index";
+import { buildReviewHandoffMessage, REVIEW_AUTHORIZATION } from "./handoff.js";
+import { extractInkbackReviewIndex } from "./index.js";
+
 it("caps handoff IDs and includes the user's comment and authorization boundary", () => {
   const markdown = Array.from(
     { length: 53 },

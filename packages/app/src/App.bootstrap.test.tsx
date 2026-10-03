@@ -2,6 +2,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import type { StorageBackend } from "./storage";
+
 const renderWorkspace = vi.hoisted(() => vi.fn());
 vi.mock("./DocumentWorkspace", () => ({
   DocumentWorkspace: (props: unknown) => {
@@ -14,7 +15,9 @@ vi.mock("./detect-backend", () => ({
     throw new Error("Sandbox has no browser API backend");
   },
 }));
+
 import { App } from "./App";
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();

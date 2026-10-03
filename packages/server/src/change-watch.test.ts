@@ -2,8 +2,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { ChangeWatcher } from "./change-watch";
-import { fileVersionFromFile } from "./document-files";
+import { ChangeWatcher } from "./change-watch.js";
+import { fileVersionFromFile } from "./document-files.js";
+
 let directory: string;
 let document: string;
 let watcher: ChangeWatcher;

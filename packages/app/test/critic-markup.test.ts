@@ -1155,7 +1155,10 @@ it("preserves code review metadata when editing the code block", () => {
   const parsed = criticMarkdownToEditorState(
     '```js\n{==const x = 1;==}{>>done<<}{id="c1" by="user" at="2026-04-28T12:00:00Z" status="resolved" resolved="Fixed"}\n{++extra++}{id="s1" by="AI" at="2026-04-28T12:00:00Z" status="resolved"}\n```\n',
   );
-  parsed.doc.content![0]!.content!.push({ type: "text", text: "\n// changed" });
+  const codeBlock = parsed.doc.content?.[0];
+  if (!codeBlock?.content)
+    throw new Error("Expected parsed code block content");
+  codeBlock.content.push({ type: "text", text: "\n// changed" });
   const output = editorStateToCriticMarkdown(parsed.doc, parsed.comments);
   expect(output).toContain('status="resolved" resolved="Fixed"');
   expect(output).toContain("{++extra++}");

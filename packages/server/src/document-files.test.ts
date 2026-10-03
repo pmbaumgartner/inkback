@@ -7,7 +7,8 @@ import {
   readDocument,
   updateDocument,
   writeDocument,
-} from "./document-files";
+} from "./document-files.js";
+
 let directory: string;
 let document: string;
 beforeEach(() => {

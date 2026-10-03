@@ -12,6 +12,10 @@ import { createBackend } from "./support/backend";
 import { setupDomMocks } from "./support/dom-mocks";
 import { createReactHarness } from "./support/react-harness";
 
+// Handoff behavior belongs to the workspace; editor integration is covered in
+// page-card.test.tsx.
+vi.mock("../src/PageCard", () => ({ PageCard: () => null }));
+
 function createPage(content = "Hello world"): Page {
   return {
     id: "test-doc",
@@ -94,6 +98,7 @@ describe("review handoff watcher affordance", () => {
         <DocumentWorkspace
           documentPage={{ ...createPage(), id: documentPath }}
           activeDocumentPath={documentPath}
+          documentCopyPath={null}
           documentFilenameLabel="test.md"
           documentEditorViewMode="rich-text"
           onDocumentEditorViewModeChange={() => {}}
@@ -102,7 +107,6 @@ describe("review handoff watcher affordance", () => {
               documentPath,
               { ...createPage(), id: documentPath },
               createBackend(),
-              () => {},
             )
           }
           documentDiskChangeState="clean"

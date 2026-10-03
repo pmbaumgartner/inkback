@@ -2,7 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { createPathPolicy } from "./path-policy";
+import { createPathPolicy } from "./path-policy.js";
+
 let directory: string;
 let inside: string;
 let outside: string;

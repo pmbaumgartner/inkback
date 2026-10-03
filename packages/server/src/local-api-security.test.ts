@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import request from "supertest";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { createApp } from "./index";
+import { createApp } from "./index.js";
 
 let root: string;
 let outside: string;
@@ -130,14 +130,17 @@ it("delivers open requests as document paths and review IDs", async () => {
     const stream = await fetch(
       `${base}/api/open-requests?path=${encodeURIComponent(documentPath)}`,
     );
-    reader = stream.body!.getReader();
+    if (!stream.body) throw new Error("Expected open-request event stream");
+    reader = stream.body.getReader();
     await reader.read();
     const response = await request(app)
       .post("/api/open-request")
       .send({ path: documentPath, reviewId: "review-1" });
     expect(response.body).toEqual({ delivered: true });
     const event = new TextDecoder().decode((await reader.read()).value);
-    const payload = JSON.parse(event.split("data: ")[1]!.trim());
+    const data = event.split("data: ")[1];
+    if (!data) throw new Error(`Expected open-request event data: ${event}`);
+    const payload = JSON.parse(data.trim());
     expect(payload).toEqual({ path: documentPath, reviewId: "review-1" });
   } finally {
     await reader?.cancel();

@@ -3,8 +3,3 @@ packages:
 allowBuilds:
   esbuild: true
   msw: false
-
-onlyBuiltDependencies:
-  - esbuild
-ignoredBuiltDependencies:
-  - msw

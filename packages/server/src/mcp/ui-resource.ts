@@ -1,10 +1,10 @@
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import type { McpServer } from "@modelcontextprotocol/server";
 import {
-  registerAppResource,
   RESOURCE_MIME_TYPE,
+  registerAppResource,
 } from "@modelcontextprotocol/ext-apps/server";
+import type { McpServer } from "@modelcontextprotocol/server";
 export const REVIEW_UI_URI = "ui://inkback/review.html";
 export const REVIEW_HTML_PATH = fileURLToPath(
   new URL("../../../app/dist-mcp-app/mcp-app.html", import.meta.url),

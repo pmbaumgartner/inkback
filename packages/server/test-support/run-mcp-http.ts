@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { startMcpHttp } from "./mcp-http.js";
+
 const directory =
   process.env.INKBACK_MCP_TEST_DIR ?? path.join(os.tmpdir(), "inkback-mcp-e2e");
 fs.mkdirSync(directory, { recursive: true });

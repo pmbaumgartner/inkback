@@ -1,10 +1,10 @@
-import { smokeMcp } from "./mcp-package-smoke.mjs";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { smokeMcp } from "./mcp-package-smoke.mjs";
 
 // Test the distributed package outside the workspace so development dependencies
 // cannot hide missing runtime dependencies. Run after building the workspace.

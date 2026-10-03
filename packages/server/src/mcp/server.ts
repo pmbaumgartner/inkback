@@ -1,9 +1,9 @@
 import { fileURLToPath } from "node:url";
 import { McpServer } from "@modelcontextprotocol/server";
 import manifest from "../../../../package.json" with { type: "json" };
-import { createPathPolicy, type PolicyOptions } from "../path-policy.js";
 import { ChangeWatcher } from "../change-watch.js";
 import { OpenDocuments } from "../open-documents.js";
+import { createPathPolicy, type PolicyOptions } from "../path-policy.js";
 import { registerAppTools } from "./app-tools.js";
 import { registerModelTools } from "./model-tools.js";
 import { registerReviewUi } from "./ui-resource.js";

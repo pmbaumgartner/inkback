@@ -4,7 +4,7 @@ A local Markdown editor and review app. Open a file, leave comments and suggeste
 
 ## Develop
 
-Use Node.js 24 and pnpm 10.
+Use Node.js 24 and pnpm 12.8.1.
 
 ```bash
 pnpm install
@@ -92,7 +92,7 @@ For Goose, add a stdio extension with the same command and arguments. Each host 
 
 `pnpm check` builds both editor entries and checks the UI size. `pnpm test:smoke` also tests the production MCP App with the official `ext-apps` 2.0.3 basic-host sandbox. On its first run, the test harness downloads that pinned example into the temporary directory and installs its build dependencies. It uses loopback ports 4320, 8080, and 8081. `pnpm test:package` checks the installed stdio server and UI outside the workspace; `pnpm build:mcpb` verifies the staged server before packing it.
 
-Desktop-host verification and remaining release gates are recorded in [the implementation plan](.planning/inkback-mcp-app-plan.md). The browser CLI flow remains available alongside the MCP App. See [release notes](CHANGELOG.md) for protocol and write-policy changes.
+Automated checks do not establish desktop-host compatibility. The browser CLI flow remains available alongside the MCP App. See [release notes](CHANGELOG.md) for protocol and write-policy changes.
 
 ## Agent skill
 

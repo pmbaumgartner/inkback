@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import type { RfmReviewIndexSummary } from "@inkback/rfm";
+
 interface FinishResult {
   summary: RfmReviewIndexSummary;
   version: string;

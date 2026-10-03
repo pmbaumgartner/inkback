@@ -6,6 +6,7 @@
       "!.context",
       "!.inkback-state",
       "!**/coverage",
+      "!**/.vitest",
       "!**/playwright-report",
       "!**/test-results",
       "!**/node_modules",

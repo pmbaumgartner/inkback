@@ -5,13 +5,24 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateInkbackMarkdown } from "@inkback/rfm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { runCli } from "./cli";
-import { createDefaultOpenUrl } from "./cli/browser";
-import { createCliDependencies } from "./cli/dependencies";
-import { getServerStateFilePath } from "./cli/paths";
-import { ensureServerRunning } from "./cli/server-lifecycle";
-import { createApp } from "./index";
-import { INKBACK_DEFAULT_PORT } from "./network";
+import { createDefaultOpenUrl } from "./cli/browser.js";
+import { createCliDependencies } from "./cli/dependencies.js";
+import { getServerStateFilePath } from "./cli/paths.js";
+import { ensureServerRunning } from "./cli/server-lifecycle.js";
+import type { SpawnSyncCommand } from "./cli/types.js";
+import { runCli } from "./cli.js";
+import { createApp } from "./index.js";
+import { INKBACK_DEFAULT_PORT } from "./network.js";
+
+// spawnSync is overloaded, so an inline stub cannot infer its parameter types.
+type SpawnSyncStub = (
+  command: string,
+  args?: readonly string[],
+) => ReturnType<typeof import("node:child_process").spawnSync>;
+
+function stubSpawnSync(stub: SpawnSyncStub): SpawnSyncCommand {
+  return stub as SpawnSyncCommand;
+}
 
 interface StartedServer {
   close: () => Promise<void>;
@@ -366,7 +377,7 @@ describe("cli", () => {
     const openUrl = createDefaultOpenUrl({
       env: {},
       platform: "darwin",
-      spawnSyncCommand: (command, args) => {
+      spawnSyncCommand: stubSpawnSync((command, args) => {
         if (command === "plutil") {
           expect(args?.join(" ")).toContain(
             "com.apple.launchservices.secure.plist",
@@ -390,7 +401,7 @@ describe("cli", () => {
         }
 
         throw new Error(`unexpected spawnSync command ${command}`);
-      },
+      }),
       openDetachedCommand: (command, args) => {
         opened.push({ command, args });
       },
@@ -409,7 +420,7 @@ describe("cli", () => {
     const openUrl = createDefaultOpenUrl({
       env: {},
       platform: "darwin",
-      spawnSyncCommand: (command, args) => {
+      spawnSyncCommand: stubSpawnSync((command, args) => {
         if (command === "plutil") {
           return {
             status: 0,
@@ -430,7 +441,7 @@ describe("cli", () => {
         }
 
         throw new Error(`unexpected spawnSync command ${command}`);
-      },
+      }),
       openDetachedCommand: (command, args) => {
         opened.push({ command, args });
       },
@@ -988,13 +999,17 @@ describe("cli", () => {
     const test = createTestDependencies();
     const documentPath = path.join(projectDir, "draft.md");
     fs.writeFileSync(documentPath, "# Draft\n");
-    let watchRequestBody: {
+    // Assigned in a callback, so keep TypeScript from narrowing it to null.
+    let watchRequestBody = null as {
       timeoutSeconds?: number;
       batchWindowSeconds?: number;
-    } | null = null;
+    } | null;
     const deps = {
       ...test.deps,
-      fetchImpl: async (input: Parameters<typeof fetch>[0], init) => {
+      fetchImpl: async (
+        input: Parameters<typeof fetch>[0],
+        init?: RequestInit,
+      ) => {
         const url =
           input instanceof URL
             ? input

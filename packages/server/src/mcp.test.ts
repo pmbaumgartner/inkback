@@ -3,8 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createMcpHarness } from "../test-support/mcp-harness";
-import { startMcpServer } from "./mcp/stdio";
+import { createMcpHarness } from "../test-support/mcp-harness.js";
+import { startMcpServer } from "./mcp/stdio.js";
 
 async function callTool(
   name: string,

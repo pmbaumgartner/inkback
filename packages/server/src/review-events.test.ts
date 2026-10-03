@@ -1,6 +1,6 @@
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ReviewEventQueue } from "./review-events";
+import { ReviewEventQueue } from "./review-events.js";
 
 function eventInput(documentPath = "/tmp/project/draft.md") {
   return {

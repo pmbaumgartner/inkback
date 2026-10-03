@@ -5,7 +5,8 @@ import {
   Client,
   StreamableHTTPClientTransport,
 } from "@modelcontextprotocol/client";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
+
 const directory = path.join(os.tmpdir(), "inkback-mcp-e2e");
 async function openReview(page: Page, documentPath: string) {
   await page.goto("http://localhost:8080");

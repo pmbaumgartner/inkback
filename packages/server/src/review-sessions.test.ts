@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "./index";
+import { createApp } from "./index.js";
 
 describe("review session receipts", () => {
   let projectDir: string;

@@ -88,11 +88,11 @@ describe("Markdown rich-text preservation", () => {
 it("preserves unchanged Markdown blocks byte-for-byte through an unrelated edit", () => {
   const preserved =
     "#### Four\n\n##### Five\n\n###### Six\n\nLiteral \\*word\\* and \\_word\\_.\n\n```html\n<details>\n<summary>Example</summary>\n</details>\n\n<!-- literal -->\n```\n\n";
-  const parsed = criticMarkdownToEditorState(preserved + "Edit me.\n");
+  const parsed = criticMarkdownToEditorState(`${preserved}Edit me.\n`);
   const last = parsed.doc.content?.at(-1);
   if (last?.content?.[0]) last.content[0].text = "Edited.";
   const output = editorStateToCriticMarkdown(parsed.doc, parsed.comments);
-  expect(output).toBe(preserved + "Edited.\n");
+  expect(output).toBe(`${preserved}Edited.\n`);
   expect(
     parsed.doc.content?.slice(0, 3).map((node) => node.attrs?.level),
   ).toEqual([4, 5, 6]);
@@ -110,7 +110,9 @@ it("keeps reference definitions available after editing a referenced block", () 
   const parsed = criticMarkdownToEditorState(
     "First [link][target].\n\n[target]: https://example.com\n\nSecond [link][target].\n",
   );
-  parsed.doc.content![0]!.content![0]!.text = "Edited ";
+  const text = parsed.doc.content?.[0]?.content?.[0];
+  if (!text) throw new Error("Expected referenced paragraph text");
+  text.text = "Edited ";
   const output = editorStateToCriticMarkdown(parsed.doc, parsed.comments);
   expect(output).toContain("[target]: https://example.com");
   expect(output).toContain("Second [link][target].");

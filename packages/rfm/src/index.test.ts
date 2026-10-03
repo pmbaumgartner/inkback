@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
-  appendInkbackReply,
   appendInkbackDocumentComment,
+  appendInkbackReply,
   extractInkbackReviewIndex,
   markInkbackResolved,
   parseRfmEndmatter,
   updateRfmEndmatter,
   validateInkbackMarkdown,
-} from "./index";
+} from "./index.js";
 
 function codes(markdown: string): string[] {
   return validateInkbackMarkdown(markdown).diagnostics.map(
@@ -721,7 +721,7 @@ it("allocates document comments after IDs stored only in endmatter", () => {
 });
 
 it("allocates IDs from both namespaces and ignores non-numeric labels", async () => {
-  const { allocateReviewId } = await import("./index");
+  const { allocateReviewId } = await import("./index.js");
   expect(allocateReviewId("c", ["c2", "note", "c7", "s9"])).toBe("c8");
   expect(allocateReviewId("s", ["c2", "note", "s7", "s9"])).toBe("s10");
 });

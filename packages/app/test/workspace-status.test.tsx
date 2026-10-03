@@ -16,6 +16,10 @@ import { createBackend } from "./support/backend";
 import { setupDomMocks } from "./support/dom-mocks";
 import { createReactHarness } from "./support/react-harness";
 
+// File actions use the page's Markdown, not the editor. Keep these tests focused
+// on workspace controls; page-card.test.tsx exercises the real editor.
+vi.mock("../src/PageCard", () => ({ PageCard: () => null }));
+
 function createPage(content = "Hello world"): Page {
   return {
     id: "test-doc",
@@ -114,23 +118,18 @@ describe("workspace save status", () => {
           documentEditorViewMode="rich-text"
           onDocumentEditorViewModeChange={() => {}}
           saveController={
-            new DocumentSaveController(
-              "test.md",
-              createPage(documentContent),
-              {
-                ...createBackend({
-                  getReviewWatchStatus: async () => ({
-                    watching: watcherCount > 0,
-                    watcherCount,
-                  }),
+            new DocumentSaveController("test.md", createPage(documentContent), {
+              ...createBackend({
+                getReviewWatchStatus: async () => ({
+                  watching: watcherCount > 0,
+                  watcherCount,
                 }),
-                saveMarkdownFile: async (_path, content) => {
-                  await onSaveDocument("test.md", content);
-                  return undefined;
-                },
+              }),
+              saveMarkdownFile: async (_path, content) => {
+                await onSaveDocument("test.md", content);
+                return undefined;
               },
-              () => {},
-            )
+            })
           }
           documentDiskChangeState={documentDiskChangeState}
           onReloadDocumentFromDisk={() => {}}

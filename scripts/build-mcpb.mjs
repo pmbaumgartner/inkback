@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { smokeMcp } from "./mcp-package-smoke.mjs";
+
 const root = fileURLToPath(new URL("..", import.meta.url));
 const version = JSON.parse(
   fs.readFileSync(path.join(root, "package.json")),

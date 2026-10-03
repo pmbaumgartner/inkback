@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { watchReviewEvents } from "./watch-review-events";
+import { watchReviewEvents } from "./watch-review-events.js";
 
 const target = {
   serverUrl: "http://localhost:7373",
