@@ -1,8 +1,9 @@
 import {
-  MarkdownFileConflictError,
   type BackendInfo,
   type MarkdownFileChangeEvent,
+  MarkdownFileConflictError,
   type Page,
+  type SaveIntent,
   type StorageBackend,
   type StoredAsset,
 } from "./storage";
@@ -117,7 +118,7 @@ export class RemoteBackend implements StorageBackend {
   async saveMarkdownFile(
     _relativePath: string,
     content: string,
-    expectedVersion?: string,
+    intent: SaveIntent,
   ): Promise<Page> {
     const sessionId = this.info.sessionId;
     if (!sessionId) {
@@ -131,7 +132,11 @@ export class RemoteBackend implements StorageBackend {
           "Content-Type": "application/json",
           ...this.authHeaders(),
         },
-        body: JSON.stringify({ content, expectedVersion }),
+        body: JSON.stringify({
+          content,
+          expectedVersion:
+            intent.mode === "conditional" ? intent.expectedVersion : undefined,
+        }),
       },
     );
 

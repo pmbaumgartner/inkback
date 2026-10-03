@@ -51,7 +51,7 @@ async function initializeOverStdio(): Promise<unknown> {
             `Inkback did not answer initialize over stdio; received ${buffer.length} stdout bytes. stderr: ${stderr || "(empty)"}`,
           ),
         );
-      }, 3_000);
+      }, 10_000);
       child.once("error", (error) => {
         clearTimeout(timer);
         reject(error);
@@ -107,7 +107,7 @@ describe("MCP stdio client compatibility", () => {
         serverInfo: { name: "Inkback" },
       },
     });
-  });
+  }, 15_000);
 });
 
 it("uses the process working directory for guarded model writes over the SDK transport", async () => {

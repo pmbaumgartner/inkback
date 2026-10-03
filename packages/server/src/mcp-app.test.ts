@@ -4,6 +4,7 @@ import path from "node:path";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { createInkbackMcpServer } from "./mcp/server";
+
 let directory: string;
 let documentPath: string;
 let client: Client;
@@ -89,12 +90,21 @@ it("opens without duplicating the document and versions saves and model replies"
   ).toBe(true);
   const conflict = await call("inkback_save_file", {
     content: "# Stale",
-    expectedVersion: version,
+    save: { mode: "conditional", expectedVersion: version },
   });
   expect(conflict.structuredContent).toMatchObject({
     status: "conflict",
     current: { content: expect.stringContaining("Reply") },
   });
+  const overwritten = await call("inkback_save_file", {
+    content: "# Explicit overwrite",
+    save: { mode: "overwrite" },
+  });
+  expect(overwritten.structuredContent).toMatchObject({
+    status: "saved",
+    page: { content: "# Explicit overwrite" },
+  });
+  expect(fs.readFileSync(documentPath, "utf8")).toBe("# Explicit overwrite");
   expect(
     (await call("inkback_get_open_documents")).structuredContent,
   ).toMatchObject({
@@ -136,7 +146,7 @@ it("finishes idempotently and supports a read-only overall message", async () =>
         await call("inkback_save_file", {
           documentPath: outside,
           content: "write",
-          expectedVersion: "old",
+          save: { mode: "conditional", expectedVersion: "old" },
         })
       ).isError,
     ).toBe(true);

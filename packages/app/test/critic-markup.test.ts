@@ -1,17 +1,19 @@
 import fs from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
 import { Editor } from "@tiptap/core";
+import { describe, expect, it } from "vitest";
+import {
+  criticMarkdownHasReviewRail,
+  criticMarkdownToEditorState,
+  criticMarkdownToRenderedHtml,
+} from "../src/critic-markup";
 import {
   createCriticChange,
   createNextChangeId,
   createNextCommentId,
-  criticMarkdownHasReviewRail,
-  criticMarkdownToEditorState,
-  criticMarkdownToRenderedHtml,
-  editorStateToCriticMarkdown,
   getCommentDescendantIds,
-} from "../src/critic-markup";
+} from "../src/critic-markup/model";
+import { editorStateToCriticMarkdown } from "../src/critic-markup/writer";
 import { createEditorExtensions } from "../src/editor-extensions";
 
 function readMarkdownFixture(name: string): string {

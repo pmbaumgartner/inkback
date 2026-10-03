@@ -20,7 +20,7 @@ import {
   buildCommentThreads,
   type CriticComment,
   type CriticCommentThread,
-} from "./critic-markup";
+} from "./critic-markup/model";
 import { cn } from "./lib/utils";
 
 interface CommentEditorListProps {

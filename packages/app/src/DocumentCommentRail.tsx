@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { CommentEditorList } from "./CommentEditorList";
-import type { CriticComment } from "./critic-markup";
+import type { CriticComment } from "./critic-markup/model";
 import {
   buildCommentThreadRailItems,
   type CommentGroupAnchor,

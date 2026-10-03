@@ -1,4 +1,10 @@
-import type { BackendInfo, Page, StorageBackend, StoredAsset } from "./storage";
+import type {
+  BackendInfo,
+  Page,
+  SaveIntent,
+  StorageBackend,
+  StoredAsset,
+} from "./storage";
 
 const PAGES_KEY = "inkback:pages";
 const ASSETS_KEY = "inkback:assets";
@@ -107,6 +113,7 @@ export class LocalStorageBackend implements StorageBackend {
   async saveMarkdownFile(
     relativePath: string,
     content: string,
+    _intent: SaveIntent,
   ): Promise<undefined> {
     const id = relativePath.replace(/\.md$/i, "");
     await this.savePage(id, content);

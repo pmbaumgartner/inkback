@@ -46,6 +46,26 @@ export class ReviewSessions {
     return this.sessions.get(reviewId);
   }
 
+  complete(
+    session: ReviewSession,
+    completion: NonNullable<ReviewSession["completion"]>,
+  ): void {
+    if (session.state !== "waiting") return;
+    session.completion = completion;
+    session.state = "queued";
+  }
+
+  acknowledge(session: ReviewSession, sequence: number): boolean {
+    if (
+      session.state === "cancelled" ||
+      !session.completion ||
+      session.completion.event.sequence !== sequence
+    )
+      return false;
+    session.state = "received";
+    return true;
+  }
+
   cancel(session: ReviewSession): void {
     if (session.state === "received") return;
     session.state = "cancelled";

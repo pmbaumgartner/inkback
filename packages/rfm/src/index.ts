@@ -1,3 +1,38 @@
+import {
+  createLineStarts,
+  hydrateMetadataAttrs,
+  locationForOffset,
+  type Metadata,
+  type ParsedComment,
+  type ParsedSuggestion,
+  parseCanonicalMetadata,
+  scanReview,
+  serializeMetadataAttributes,
+} from "./grammar.js";
+
+export {
+  hydrateMetadataAttrs,
+  type Metadata,
+  type ParsedComment,
+  type ParsedSuggestion,
+  parseComment,
+  parseHighlight,
+  parseMetadata,
+  parseSuggestion,
+  serializeMetadataAttributes,
+} from "./grammar.js";
+
+interface ReplyReference {
+  id: string;
+  parentId: string;
+  offset: number;
+}
+interface IdReference {
+  id: string;
+  kind: "comment" | "suggestion";
+  offset: number;
+}
+const CRITICMARKUP_CLOSE_DELIMITER_PATTERN = /<<}|\+\+}|--}|~~}|==}/;
 export type RfmDiagnosticSeverity = "error" | "warning";
 
 export interface RfmDiagnostic {
@@ -81,51 +116,6 @@ export interface MarkInkbackResolvedOptions {
   summary?: string;
 }
 
-interface Metadata {
-  attrs: Map<string, string>;
-  kind: "canonical" | "legacy" | "reference";
-  offset: number;
-  endOffset: number;
-}
-
-const CRITICMARKUP_CLOSE_DELIMITER_PATTERN = /<<}|\+\+}|--}|~~}|==}/;
-
-interface IdReference {
-  id: string;
-  kind: "comment" | "suggestion";
-  offset: number;
-}
-
-interface ReplyReference {
-  id: string;
-  parentId: string;
-  offset: number;
-}
-
-interface FenceState {
-  marker: "`" | "~";
-  length: number;
-}
-
-interface ParsedComment {
-  content: string;
-  metadata: Metadata | null;
-  offset: number;
-  markerEndOffset: number;
-  endOffset: number;
-}
-
-interface ParsedSuggestion {
-  suggestionKind: RfmSuggestionKind;
-  text: string;
-  originalText?: string;
-  replacementText?: string;
-  metadata: Metadata | null;
-  offset: number;
-  markerEndOffset: number;
-  endOffset: number;
-}
-
 export interface RfmEndmatterEntry {
   body?: string;
   by?: string;
@@ -149,12 +139,36 @@ const RFM_VERSION = "0.2" as const;
 const requiredMetadataAttributes = ["id", "by", "at"] as const;
 const dateTimePattern =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
-const attributeNamePattern = /^[A-Za-z][A-Za-z0-9_-]*$/;
 
-export function validateInkbackMarkdown(markdown: string): RfmValidationResult {
+function parseReviewDocument(markdown: string) {
   const lineStarts = createLineStarts(markdown);
   const endmatter = parseRfmEndmatter(markdown);
-  const diagnostics: RfmDiagnostic[] = [];
+  const syntaxDiagnostics: RfmDiagnostic[] = [];
+  const tokens = scanReview(
+    markdown,
+    endmatter.offset ?? markdown.length,
+    (severity, code, message, offset) => {
+      syntaxDiagnostics.push({
+        severity,
+        code,
+        message,
+        offset,
+        ...locationForOffset(lineStarts, offset),
+      });
+    },
+  );
+  return { lineStarts, endmatter, tokens, syntaxDiagnostics };
+}
+export function validateInkbackMarkdown(markdown: string): RfmValidationResult {
+  return validateParsedReview(parseReviewDocument(markdown));
+}
+function validateParsedReview({
+  lineStarts,
+  endmatter,
+  tokens,
+  syntaxDiagnostics,
+}: ReturnType<typeof parseReviewDocument>): RfmValidationResult {
+  const diagnostics: RfmDiagnostic[] = [...syntaxDiagnostics];
   const ids = new Map<string, IdReference>();
   const replies: ReplyReference[] = [];
   const summary: RfmValidationSummary = {
@@ -289,78 +303,10 @@ export function validateInkbackMarkdown(markdown: string): RfmValidationResult {
     }
   };
 
-  let offset = 0;
-  const scanEndOffset = endmatter.offset ?? markdown.length;
-  let fence: FenceState | null = null;
-
-  while (offset < scanEndOffset) {
-    if (isLineStart(markdown, offset)) {
-      const fenceMatch = matchFence(markdown, offset, fence);
-      if (fenceMatch) {
-        fence = fence ? null : fenceMatch.fence;
-        offset = nextLineOffset(markdown, offset);
-        continue;
-      }
-    }
-
-    if (fence) {
-      offset = nextLineOffset(markdown, offset);
-      continue;
-    }
-
-    const codeSpanEnd = matchInlineCodeSpan(markdown, offset);
-    if (codeSpanEnd !== null) {
-      offset = codeSpanEnd;
-      continue;
-    }
-
-    if (markdown.startsWith("{==", offset)) {
-      const end = markdown.indexOf("==}", offset + 3);
-      if (end === -1) {
-        addDiagnostic(
-          "error",
-          "unclosed-highlight",
-          "Highlight marker is missing closing `==}`.",
-          offset,
-        );
-        offset += 3;
-        continue;
-      }
-
-      let nextOffset = end + 3;
-      let anchoredComments = 0;
-      while (markdown.startsWith("{>>", nextOffset)) {
-        const parsed = parseComment(markdown, nextOffset, addDiagnostic);
-        if (!parsed) break;
-        summary.comments += 1;
-        anchoredComments += 1;
-        validateMetadata(parsed.metadata, "comment", nextOffset);
-        nextOffset = parsed.endOffset;
-      }
-
-      offset = anchoredComments > 0 ? nextOffset : end + 3;
-      continue;
-    }
-
-    if (markdown.startsWith("{>>", offset)) {
-      const parsed = parseComment(markdown, offset, addDiagnostic);
-      if (parsed) {
-        summary.comments += 1;
-        validateMetadata(parsed.metadata, "comment", offset);
-        offset = parsed.endOffset;
-        continue;
-      }
-    }
-
-    const parsedSuggestion = parseSuggestion(markdown, offset, addDiagnostic);
-    if (parsedSuggestion) {
-      summary.suggestions += 1;
-      validateMetadata(parsedSuggestion.metadata, "suggestion", offset);
-      offset = parsedSuggestion.endOffset;
-      continue;
-    }
-
-    offset += 1;
+  for (const token of tokens) {
+    if (token.kind === "comment") summary.comments++;
+    else summary.suggestions++;
+    validateMetadata(token.parsed.metadata, token.kind, token.parsed.offset);
   }
 
   for (const [id, entry] of endmatter.comments) {
@@ -447,11 +393,10 @@ export function validateInkbackMarkdown(markdown: string): RfmValidationResult {
 }
 
 export function extractInkbackReviewIndex(markdown: string): RfmReviewIndex {
-  const lineStarts = createLineStarts(markdown);
-  const validation = validateInkbackMarkdown(markdown);
-  const endmatter = parseRfmEndmatter(markdown);
+  const parsed = parseReviewDocument(markdown);
+  const { lineStarts, endmatter, tokens } = parsed;
+  const validation = validateParsedReview(parsed);
   const items: RfmReviewItem[] = [];
-  const noopDiagnostic = () => {};
 
   const addComment = (parsed: ParsedComment, anchorText?: string) => {
     const attrs = hydrateMetadataAttrs(parsed.metadata, endmatter, "comment");
@@ -498,70 +443,9 @@ export function extractInkbackReviewIndex(markdown: string): RfmReviewIndex {
     });
   };
 
-  let offset = 0;
-  const scanEndOffset = endmatter.offset ?? markdown.length;
-  let fence: FenceState | null = null;
-
-  while (offset < scanEndOffset) {
-    if (isLineStart(markdown, offset)) {
-      const fenceMatch = matchFence(markdown, offset, fence);
-      if (fenceMatch) {
-        fence = fence ? null : fenceMatch.fence;
-        offset = nextLineOffset(markdown, offset);
-        continue;
-      }
-    }
-
-    if (fence) {
-      offset = nextLineOffset(markdown, offset);
-      continue;
-    }
-
-    const codeSpanEnd = matchInlineCodeSpan(markdown, offset);
-    if (codeSpanEnd !== null) {
-      offset = codeSpanEnd;
-      continue;
-    }
-
-    if (markdown.startsWith("{==", offset)) {
-      const end = markdown.indexOf("==}", offset + 3);
-      if (end === -1) {
-        offset += 3;
-        continue;
-      }
-
-      const anchorText = markdown.slice(offset + 3, end);
-      let nextOffset = end + 3;
-      let anchoredComments = 0;
-      while (markdown.startsWith("{>>", nextOffset)) {
-        const parsed = parseComment(markdown, nextOffset, noopDiagnostic);
-        if (!parsed) break;
-        addComment(parsed, anchorText);
-        anchoredComments += 1;
-        nextOffset = parsed.endOffset;
-      }
-
-      offset = anchoredComments > 0 ? nextOffset : end + 3;
-      continue;
-    }
-
-    if (markdown.startsWith("{>>", offset)) {
-      const parsed = parseComment(markdown, offset, noopDiagnostic);
-      if (parsed) {
-        addComment(parsed);
-        offset = parsed.endOffset;
-        continue;
-      }
-    }
-
-    const parsedSuggestion = parseSuggestion(markdown, offset, noopDiagnostic);
-    if (parsedSuggestion) {
-      addSuggestion(parsedSuggestion);
-      offset = parsedSuggestion.endOffset;
-      continue;
-    }
-
-    offset += 1;
+  for (const token of tokens) {
+    if (token.kind === "comment") addComment(token.parsed, token.anchorText);
+    else addSuggestion(token.parsed);
   }
 
   for (const [id, entry] of endmatter.comments) {
@@ -710,386 +594,6 @@ export function markInkbackResolved(
   )}${markdown.slice(metadata.endOffset)}`;
 }
 
-function createLineStarts(markdown: string): number[] {
-  const lineStarts = [0];
-
-  for (let index = 0; index < markdown.length; index += 1) {
-    if (markdown[index] === "\n") {
-      lineStarts.push(index + 1);
-    }
-  }
-
-  return lineStarts;
-}
-
-function locationForOffset(
-  lineStarts: readonly number[],
-  offset: number,
-): { line: number; column: number } {
-  let low = 0;
-  let high = lineStarts.length - 1;
-
-  while (low <= high) {
-    const middle = Math.floor((low + high) / 2);
-    const lineStart = lineStarts[middle] ?? 0;
-    const nextLineStart = lineStarts[middle + 1] ?? Number.POSITIVE_INFINITY;
-
-    if (offset < lineStart) {
-      high = middle - 1;
-    } else if (offset >= nextLineStart) {
-      low = middle + 1;
-    } else {
-      return {
-        line: middle + 1,
-        column: offset - lineStart + 1,
-      };
-    }
-  }
-
-  const lastLineStart = lineStarts[lineStarts.length - 1] ?? 0;
-  return {
-    line: lineStarts.length,
-    column: offset - lastLineStart + 1,
-  };
-}
-
-function isLineStart(markdown: string, offset: number): boolean {
-  return offset === 0 || markdown[offset - 1] === "\n";
-}
-
-function nextLineOffset(markdown: string, offset: number): number {
-  const nextNewline = markdown.indexOf("\n", offset);
-  return nextNewline === -1 ? markdown.length : nextNewline + 1;
-}
-
-function matchFence(
-  markdown: string,
-  offset: number,
-  fence: FenceState | null,
-): { fence: FenceState } | null {
-  const lineEnd = nextLineOffset(markdown, offset);
-  const line = markdown.slice(offset, lineEnd).replace(/\r?\n$/, "");
-  const match = line.match(/^[ \t]{0,3}(`{3,}|~{3,})/);
-  if (!match) return null;
-
-  const markerText = match[1] ?? "";
-  const marker = markerText[0] as "`" | "~";
-
-  if (!fence) {
-    return {
-      fence: {
-        marker,
-        length: markerText.length,
-      },
-    };
-  }
-
-  if (fence.marker !== marker || markerText.length < fence.length) {
-    return null;
-  }
-
-  return { fence };
-}
-
-function matchInlineCodeSpan(markdown: string, offset: number): number | null {
-  if (markdown[offset] !== "`") return null;
-
-  let length = 1;
-  while (markdown[offset + length] === "`") {
-    length += 1;
-  }
-
-  const closing = markdown.indexOf("`".repeat(length), offset + length);
-  return closing === -1 ? null : closing + length;
-}
-
-function parseComment(
-  markdown: string,
-  offset: number,
-  addDiagnostic: (
-    severity: RfmDiagnosticSeverity,
-    code: string,
-    message: string,
-    offset: number,
-  ) => void,
-): ParsedComment | null {
-  const close = markdown.indexOf("<<}", offset + 3);
-  if (close === -1) {
-    addDiagnostic(
-      "error",
-      "unclosed-comment",
-      "Comment marker is missing closing `<<}`.",
-      offset,
-    );
-    return null;
-  }
-
-  const metadata = parseMetadata(markdown, close + 3, true, addDiagnostic);
-
-  return {
-    content: markdown.slice(offset + 3, close),
-    metadata,
-    offset,
-    markerEndOffset: close + 3,
-    endOffset: metadata?.endOffset ?? close + 3,
-  };
-}
-
-function parseSuggestion(
-  markdown: string,
-  offset: number,
-  addDiagnostic: (
-    severity: RfmDiagnosticSeverity,
-    code: string,
-    message: string,
-    offset: number,
-  ) => void,
-): ParsedSuggestion | null {
-  const addition = parseWrappedMarker(markdown, offset, "{++", "++}");
-  if (addition) {
-    const metadata = parseMetadata(
-      markdown,
-      addition.endOffset,
-      false,
-      addDiagnostic,
-    );
-    return {
-      suggestionKind: "addition",
-      text: markdown.slice(offset + 3, addition.endOffset - 3),
-      metadata,
-      offset,
-      markerEndOffset: addition.endOffset,
-      endOffset: metadata?.endOffset ?? addition.endOffset,
-    };
-  }
-  if (markdown.startsWith("{++", offset)) {
-    addDiagnostic(
-      "error",
-      "unclosed-addition",
-      "Addition marker is missing closing `++}`.",
-      offset,
-    );
-    return null;
-  }
-
-  const deletion = parseWrappedMarker(markdown, offset, "{--", "--}");
-  if (deletion) {
-    const metadata = parseMetadata(
-      markdown,
-      deletion.endOffset,
-      false,
-      addDiagnostic,
-    );
-    const text = markdown.slice(offset + 3, deletion.endOffset - 3);
-    return {
-      suggestionKind: "deletion",
-      text,
-      originalText: text,
-      metadata,
-      offset,
-      markerEndOffset: deletion.endOffset,
-      endOffset: metadata?.endOffset ?? deletion.endOffset,
-    };
-  }
-  if (markdown.startsWith("{--", offset)) {
-    addDiagnostic(
-      "error",
-      "unclosed-deletion",
-      "Deletion marker is missing closing `--}`.",
-      offset,
-    );
-    return null;
-  }
-
-  if (markdown.startsWith("{~~", offset)) {
-    const separator = markdown.indexOf("~>", offset + 3);
-    const close =
-      separator === -1 ? -1 : markdown.indexOf("~~}", separator + 2);
-
-    if (separator === -1 || close === -1) {
-      addDiagnostic(
-        "error",
-        "unclosed-substitution",
-        "Substitution marker is missing `~>` or closing `~~}`.",
-        offset,
-      );
-      return null;
-    }
-
-    const endOffset = close + 3;
-    const metadata = parseMetadata(markdown, endOffset, false, addDiagnostic);
-    return {
-      suggestionKind: "substitution",
-      text: markdown.slice(separator + 2, close),
-      originalText: markdown.slice(offset + 3, separator),
-      replacementText: markdown.slice(separator + 2, close),
-      metadata,
-      offset,
-      markerEndOffset: endOffset,
-      endOffset: metadata?.endOffset ?? endOffset,
-    };
-  }
-
-  return null;
-}
-
-function parseWrappedMarker(
-  markdown: string,
-  offset: number,
-  open: string,
-  close: string,
-): { endOffset: number } | null {
-  if (!markdown.startsWith(open, offset)) return null;
-
-  const closeOffset = markdown.indexOf(close, offset + open.length);
-  return closeOffset === -1 ? null : { endOffset: closeOffset + close.length };
-}
-
-function parseMetadata(
-  markdown: string,
-  offset: number,
-  allowLegacy: boolean,
-  addDiagnostic: (
-    severity: RfmDiagnosticSeverity,
-    code: string,
-    message: string,
-    offset: number,
-  ) => void,
-): Metadata | null {
-  if (allowLegacy && markdown.startsWith("{@", offset)) {
-    const close = markdown.indexOf("@}", offset + 2);
-    if (close === -1) {
-      addDiagnostic(
-        "error",
-        "invalid-metadata-syntax",
-        "Legacy metadata is missing closing `@}`.",
-        offset,
-      );
-      return null;
-    }
-
-    return {
-      attrs: parseLegacyAttributes(markdown.slice(offset + 2, close)),
-      kind: "legacy",
-      offset,
-      endOffset: close + 2,
-    };
-  }
-
-  if (markdown[offset] !== "{") return null;
-
-  const reference = parseIdReference(markdown, offset);
-  if (reference) {
-    return reference;
-  }
-
-  const parsed = parseCanonicalMetadata(markdown, offset);
-  if (parsed) return parsed;
-
-  if (looksLikeMetadata(markdown, offset)) {
-    addDiagnostic(
-      "error",
-      "invalid-metadata-syntax",
-      "Metadata must use a compact reference such as `{#c1}` backed by final YAML endmatter, or a valid compatibility attribute block.",
-      offset,
-    );
-  }
-
-  return null;
-}
-
-function parseIdReference(markdown: string, offset: number): Metadata | null {
-  const match = markdown.slice(offset).match(/^\{#([A-Za-z][A-Za-z0-9_-]*)\}/);
-  if (!match) return null;
-
-  return {
-    attrs: new Map([["id", match[1] ?? ""]]),
-    kind: "reference",
-    offset,
-    endOffset: offset + match[0].length,
-  };
-}
-
-function parseCanonicalMetadata(
-  markdown: string,
-  offset: number,
-): Metadata | null {
-  let cursor = offset + 1;
-  const attrs = new Map<string, string>();
-  let sawAttribute = false;
-
-  while (cursor < markdown.length) {
-    cursor = skipSpaces(markdown, cursor);
-
-    if (markdown[cursor] === "}") {
-      if (!sawAttribute) return null;
-      return {
-        attrs,
-        kind: "canonical",
-        offset,
-        endOffset: cursor + 1,
-      };
-    }
-
-    const nameStart = cursor;
-    while (
-      cursor < markdown.length &&
-      /[A-Za-z0-9_-]/.test(markdown[cursor] ?? "")
-    ) {
-      cursor += 1;
-    }
-    const name = markdown.slice(nameStart, cursor);
-    if (!attributeNamePattern.test(name) || markdown[cursor] !== "=") {
-      return null;
-    }
-    cursor += 1;
-
-    if (markdown[cursor] !== '"') return null;
-    cursor += 1;
-
-    let value = "";
-    while (cursor < markdown.length) {
-      const character = markdown[cursor];
-      if (character === "\\") {
-        const next = markdown[cursor + 1];
-        if (next === undefined) return null;
-        value += next;
-        cursor += 2;
-        continue;
-      }
-
-      if (character === '"') {
-        cursor += 1;
-        attrs.set(name, value);
-        sawAttribute = true;
-        break;
-      }
-
-      if (character === "\n" || character === "\r") return null;
-      value += character;
-      cursor += 1;
-    }
-
-    if (!attrs.has(name)) return null;
-  }
-
-  return null;
-}
-
-function parseLegacyAttributes(metadata: string): Map<string, string> {
-  const attrs = new Map<string, string>();
-
-  for (const part of metadata.split(";")) {
-    const [rawKey, ...valueParts] = part.split(":");
-    const key = rawKey?.trim();
-    const value = valueParts.join(":").trim();
-    if (!key || !value) continue;
-    attrs.set(key, value);
-  }
-
-  return attrs;
-}
-
 export function parseRfmEndmatter(markdown: string): RfmEndmatter {
   const empty: RfmEndmatter = {
     comments: new Map(),
@@ -1187,30 +691,6 @@ function readEndmatterEntries(value: unknown): Map<string, RfmEndmatterEntry> {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-function hydrateMetadataAttrs(
-  metadata: Metadata | null,
-  endmatter: RfmEndmatter,
-  kind: "comment" | "suggestion",
-): Map<string, string> {
-  const attrs = new Map(metadata?.attrs ?? []);
-  if (metadata?.kind !== "reference") return attrs;
-
-  const id = attrs.get("id");
-  const entry =
-    kind === "comment"
-      ? endmatter.comments.get(id ?? "")
-      : endmatter.suggestions.get(id ?? "");
-  if (!entry) return attrs;
-
-  for (const [key, value] of Object.entries(entry)) {
-    if (typeof value === "string") {
-      attrs.set(key, value);
-    }
-  }
-  if (id) attrs.set("id", id);
-  return attrs;
 }
 
 function validateEndmatterEntry(
@@ -1346,32 +826,6 @@ function isEndmatterBackedItem(markdown: string, item: RfmReviewItem): boolean {
   return markdown.slice(item.offset, item.endOffset).includes(`{#${item.id}}`);
 }
 
-function skipSpaces(markdown: string, offset: number): number {
-  let cursor = offset;
-  while (markdown[cursor] === " " || markdown[cursor] === "\t") {
-    cursor += 1;
-  }
-  return cursor;
-}
-
-function looksLikeMetadata(markdown: string, offset: number): boolean {
-  const close = markdown.indexOf("}", offset + 1);
-  if (close === -1) return false;
-
-  const content = markdown.slice(offset + 1, close);
-  return /\b(?:id|by|at|re)\b/.test(content);
-}
-
-function serializeMetadataAttributes(attrs: Record<string, string>): string {
-  return `{${Object.entries(attrs)
-    .map(([key, value]) => `${key}="${escapeMetadataAttributeValue(value)}"`)
-    .join(" ")}}`;
-}
-
-function escapeMetadataAttributeValue(value: string): string {
-  return value.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
-}
-
 function nextCommentId(items: RfmReviewItem[]): string {
   let maxId = 0;
 
@@ -1412,6 +866,7 @@ function findCanonicalMetadataStart(
 function isValidDateTime(value: string): boolean {
   return dateTimePattern.test(value) && !Number.isNaN(Date.parse(value));
 }
+
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 export { buildReviewHandoffMessage, REVIEW_AUTHORIZATION } from "./handoff.js";

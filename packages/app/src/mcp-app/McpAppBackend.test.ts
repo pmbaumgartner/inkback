@@ -1,6 +1,7 @@
 import { expect, it, vi } from "vitest";
-import { McpAppBackend, type AppClient } from "./McpAppBackend";
 import { MarkdownFileConflictError } from "../storage";
+import { type AppClient, McpAppBackend } from "./McpAppBackend";
+
 function fakeClient() {
   const call = vi.fn<AppClient["callServerTool"]>();
   const send = vi.fn<AppClient["sendMessage"]>().mockResolvedValue({});
@@ -26,7 +27,10 @@ it("maps reads, saves, and conflicts to the shared editor contract", async () =>
     result({ status: "conflict", current: { ...page, version: "v2" } }),
   );
   await expect(
-    backend.saveMarkdownFile("draft.md", "Change", "v1"),
+    backend.saveMarkdownFile("draft.md", "Change", {
+      mode: "conditional",
+      expectedVersion: "v1",
+    }),
   ).rejects.toBeInstanceOf(MarkdownFileConflictError);
   expect(call).toHaveBeenLastCalledWith(
     {
@@ -34,7 +38,29 @@ it("maps reads, saves, and conflicts to the shared editor contract", async () =>
       arguments: {
         documentPath: "/docs/draft.md",
         content: "Change",
-        expectedVersion: "v1",
+        save: { mode: "conditional", expectedVersion: "v1" },
+      },
+    },
+    { signal: undefined },
+  );
+  call.mockResolvedValueOnce(
+    result({
+      status: "saved",
+      page: { ...page, content: "Overwrite", version: "v3" },
+    }),
+  );
+  expect(
+    await backend.saveMarkdownFile("draft.md", "Overwrite", {
+      mode: "overwrite",
+    }),
+  ).toMatchObject({ content: "Overwrite", version: "v3" });
+  expect(call).toHaveBeenLastCalledWith(
+    {
+      name: "inkback_save_file",
+      arguments: {
+        documentPath: "/docs/draft.md",
+        content: "Overwrite",
+        save: { mode: "overwrite" },
       },
     },
     { signal: undefined },

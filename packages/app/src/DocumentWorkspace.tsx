@@ -1,8 +1,6 @@
-import { copyHostText } from "./mcp-app/host-bridge";
 import {
   AlertTriangle,
   Check,
-  CheckCheck,
   ChevronDown,
   CodeXml,
   Copy,
@@ -29,7 +27,6 @@ import {
   SelectItemText,
   SelectTrigger,
 } from "./components/ui/select";
-import { Textarea } from "./components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
@@ -39,13 +36,14 @@ import {
   criticMarkdownHasReviewRail,
   criticMarkdownToRenderedHtml,
 } from "./critic-markup";
-import type { DocumentSaveController } from "./DocumentSaveController";
+import type {
+  DocumentSaveController,
+  DocumentSaveState,
+} from "./DocumentSaveController";
+import type { DocumentInteractionMode } from "./editor-types";
 import { cn } from "./lib/utils";
-import {
-  type DocumentInteractionMode,
-  type DocumentSaveState,
-  PageCard,
-} from "./PageCard";
+import { PageCard } from "./PageCard";
+import { ReviewHandoff } from "./ReviewHandoff";
 import type {
   CompleteReviewOptions,
   CompleteReviewResult,
@@ -55,21 +53,8 @@ import type {
 import { useReviewLayoutShiftAnimation } from "./useReviewLayoutShiftAnimation";
 
 type DiskChangeState = "clean" | "changed" | "conflict" | "paused";
-type ReviewHandoffState =
-  | "idle"
-  | "notifying"
-  | "notified"
-  | "queued"
-  | "received"
-  | "cancelled"
-  | "undelivered"
-  | "error";
 type FileCopyAction = "path" | "filename" | "markdown" | "rich-text";
 const FILE_COPY_PREVIEW_MAX_LENGTH = 34;
-function buildReviewHandoffCopyMessage(documentPath: string) {
-  return `I am done reviewing this file: ${documentPath}`;
-}
-
 const documentInteractionModeOptions = [
   { value: "editing", label: "Editing", Icon: PencilLine },
   { value: "suggesting", label: "Suggesting", Icon: MessageSquarePlus },
@@ -288,42 +273,6 @@ export function DocumentSaveStatusIndicator({
   );
 }
 
-export function isReviewHandoffDisabled({
-  saveState,
-  documentDiskChangeState,
-  reviewHandoffState,
-}: {
-  saveState: DocumentSaveState;
-  documentDiskChangeState: DiskChangeState;
-  reviewHandoffState: ReviewHandoffState;
-}) {
-  // Transient save states ("saving"/"unsaved") intentionally do NOT disable the
-  // button. Disabling on them dims the whole control on every keystroke while
-  // autosave debounces. Instead the button stays enabled and flushes the
-  // pending save on click, so the agent still receives the latest content.
-  return (
-    saveState === "error" ||
-    reviewHandoffState !== "idle" ||
-    documentDiskChangeState !== "clean"
-  );
-}
-
-export function getReviewHandoffButtonLabel({
-  reviewHandoffState,
-}: {
-  reviewHandoffState: ReviewHandoffState;
-}) {
-  return reviewHandoffState === "notifying"
-    ? "Finishing"
-    : ["notified", "undelivered", "queued", "received", "cancelled"].includes(
-          reviewHandoffState,
-        )
-      ? "Finished"
-      : reviewHandoffState === "error"
-        ? "Could not finish"
-        : "Finish review";
-}
-
 interface DocumentWorkspaceProps {
   documentPage: Page | null;
   activeDocumentPath: string | null;
@@ -362,27 +311,11 @@ export function DocumentWorkspace({
   const [documentInteractionMode, setDocumentInteractionMode] =
     useState<DocumentInteractionMode>("suggesting");
   const saveState = saveController?.status ?? "saved";
-  const [reviewHandoffState, setReviewHandoffState] =
-    useState<ReviewHandoffState>("idle");
-  const [reviewWatcherCount, setReviewWatcherCount] = useState(0);
-  const [reviewWatcherSeen, setReviewWatcherSeen] = useState(false);
-  const [reviewHandoffPopoverOpen, setReviewHandoffPopoverOpen] =
-    useState(false);
   const [fileCopyMenuOpen, setFileCopyMenuOpen] = useState(false);
   const [copiedFileAction, setCopiedFileAction] =
     useState<FileCopyAction | null>(null);
-  const [overallComment, setOverallComment] = useState("");
-  const [preparedMessage, setPreparedMessage] = useState<string | null>(null);
-  const [prepareError, setPrepareError] = useState<string | null>(null);
-  const mcpApp = backend?.info.kind === "mcp-app";
   const readOnly = backend?.writable === false;
-  const sawNoWatcherAfterNotifiedRef = useRef(false);
   const copiedFileActionTimeoutRef = useRef<number | null>(null);
-  const documentGenerationRef = useRef<{
-    path: string | null;
-    pageId: string | undefined;
-  } | null>(null);
-
   const [documentHasComments, setDocumentHasComments] = useState(
     () =>
       !!documentPage?.content &&
@@ -397,84 +330,6 @@ export function DocumentWorkspace({
         criticMarkdownHasReviewRail(documentPage.content),
     );
   }, [documentPage?.content]);
-
-  useEffect(() => {
-    documentGenerationRef.current = {
-      path: activeDocumentPath,
-      pageId: documentPage?.id,
-    };
-    setReviewHandoffState("idle");
-    setReviewHandoffPopoverOpen(false);
-    setReviewWatcherCount(0);
-    setReviewWatcherSeen(false);
-    setOverallComment("");
-    sawNoWatcherAfterNotifiedRef.current = false;
-    return () => {
-      documentGenerationRef.current = null;
-    };
-  }, [activeDocumentPath, documentPage?.id]);
-
-  useEffect(() => {
-    if (!backend?.getReviewWatchStatus || !activeDocumentPath) {
-      setReviewWatcherCount(0);
-      return;
-    }
-
-    let cancelled = false;
-    const refreshWatchStatus = async () => {
-      try {
-        const status = await backend.getReviewWatchStatus?.(activeDocumentPath);
-        if (!cancelled) {
-          const watcherCount = status?.watcherCount ?? 0;
-          setReviewWatcherCount(watcherCount);
-          if (watcherCount > 0 || status?.state) setReviewWatcherSeen(true);
-          if (
-            status?.state === "queued" ||
-            status?.state === "received" ||
-            status?.state === "cancelled"
-          )
-            setReviewHandoffState(status.state);
-        }
-      } catch {
-        if (!cancelled) {
-          setReviewWatcherCount(0);
-        }
-      }
-    };
-
-    void refreshWatchStatus();
-    const interval = window.setInterval(refreshWatchStatus, 1500);
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [activeDocumentPath, backend]);
-
-  useEffect(() => {
-    if (
-      !mcpApp &&
-      reviewHandoffState === "undelivered" &&
-      reviewWatcherCount > 0
-    ) {
-      setReviewHandoffState("idle");
-      return;
-    }
-
-    if (reviewHandoffState !== "notified") {
-      sawNoWatcherAfterNotifiedRef.current = false;
-      return;
-    }
-
-    if (reviewWatcherCount === 0) {
-      sawNoWatcherAfterNotifiedRef.current = true;
-      return;
-    }
-
-    if (sawNoWatcherAfterNotifiedRef.current) {
-      sawNoWatcherAfterNotifiedRef.current = false;
-      setReviewHandoffState("idle");
-    }
-  }, [mcpApp, reviewHandoffState, reviewWatcherCount]);
 
   useEffect(() => {
     return () => {
@@ -508,39 +363,6 @@ export function DocumentWorkspace({
       window.removeEventListener("keydown", handleKeyDown, { capture: true });
     };
   }, [documentDiskChangeState, documentPage, saveController]);
-
-  const handleCompleteReview = useCallback(
-    async (options?: CompleteReviewOptions) => {
-      if (!activeDocumentPath || reviewHandoffState === "notifying") return;
-
-      const documentGeneration = documentGenerationRef.current;
-      setReviewHandoffState("notifying");
-      try {
-        // The handler persists pending edits before handing off.
-        const result = await onCompleteReview(options);
-        if (documentGenerationRef.current !== documentGeneration) return;
-        setOverallComment("");
-        if (result.state === "queued" || result.state === "received") {
-          setReviewHandoffState(result.state);
-          setReviewHandoffPopoverOpen(true);
-        } else if (result.delivered) {
-          setReviewWatcherCount(0);
-          setReviewHandoffState("notified");
-          setReviewHandoffPopoverOpen(true);
-        } else {
-          setReviewWatcherCount(0);
-          setReviewHandoffState("undelivered");
-          setReviewHandoffPopoverOpen(true);
-        }
-      } catch (error) {
-        if (documentGenerationRef.current !== documentGeneration) return;
-        console.error("Failed to complete review:", error);
-        setReviewHandoffState("error");
-        setReviewHandoffPopoverOpen(true);
-      }
-    },
-    [activeDocumentPath, onCompleteReview, reviewHandoffState],
-  );
 
   const handleCopyFileMenuAction = useCallback(
     async (action: FileCopyAction) => {
@@ -600,62 +422,6 @@ export function DocumentWorkspace({
     documentDiskChangeState === "clean"
       ? null
       : conflictNoticeCopy[documentDiskChangeState];
-  const showReviewHandoffButton =
-    !!activeDocumentPath &&
-    (reviewWatcherSeen || reviewHandoffState !== "idle");
-  const reviewHandoffButtonLabel = getReviewHandoffButtonLabel({
-    reviewHandoffState,
-  });
-  const ReviewHandoffButtonIcon =
-    reviewHandoffState === "notifying"
-      ? Loader2
-      : reviewHandoffState === "error" || reviewHandoffState === "undelivered"
-        ? AlertTriangle
-        : null;
-  const reviewHandoffStatusTitle =
-    reviewHandoffState === "queued"
-      ? "Waiting for Pi"
-      : reviewHandoffState === "received"
-        ? mcpApp
-          ? "Sent"
-          : "Received by Pi"
-        : reviewHandoffState === "cancelled"
-          ? "Review cancelled"
-          : reviewHandoffState === "notifying"
-            ? "Finishing review"
-            : reviewHandoffState === "undelivered"
-              ? "Review saved"
-              : reviewHandoffState === "error"
-                ? "Could not finish review"
-                : "Review complete";
-  const reviewHandoffStatusBody =
-    reviewHandoffState === "queued"
-      ? "Your review is saved and queued for the Pi session that opened it. Receipt will be confirmed when that session accepts the feedback."
-      : reviewHandoffState === "received"
-        ? mcpApp
-          ? "Sent. You can close this view."
-          : "Your review is saved. The Pi session that opened it has accepted the feedback."
-        : reviewHandoffState === "cancelled"
-          ? "Your edits remain saved. Pi stopped waiting for this review. Start a new review from Pi, or copy the message below."
-          : reviewHandoffState === "notifying"
-            ? "Saving your latest edits and finishing the handoff."
-            : reviewHandoffState === "undelivered"
-              ? "Your review is saved. No agent was connected when you finished. If your agent does not resume, send it the message below."
-              : reviewHandoffState === "error"
-                ? "Inkback could not finish the handoff. Check the save status and that the local server is still running, then try again."
-                : "Your review is saved. An agent was connected when you finished, but receipt has not been confirmed.";
-  const reviewHandoffCopyMessage =
-    backend?.handoffMessage ??
-    buildReviewHandoffCopyMessage(activeDocumentPath ?? documentFilenameLabel);
-  const reviewHandoffDisabled = isReviewHandoffDisabled({
-    saveState,
-    documentDiskChangeState,
-    reviewHandoffState,
-  });
-  const reviewHandoffButtonDisabled =
-    reviewHandoffDisabled &&
-    (reviewHandoffState === "idle" || reviewHandoffState === "notifying");
-  const trimmedOverallComment = overallComment.trim();
 
   return (
     <div
@@ -688,210 +454,16 @@ export function DocumentWorkspace({
         data-document-status-stack="true"
       >
         <div className="flex max-w-full items-center justify-end gap-1.5">
-          {showReviewHandoffButton ? (
-            <Popover
-              open={reviewHandoffPopoverOpen}
-              onOpenChange={setReviewHandoffPopoverOpen}
-            >
-              <div
-                data-testid="review-handoff-split-button"
-                className={cn(
-                  "relative flex items-center overflow-hidden rounded-[7px] shadow-[0_10px_28px_rgba(0,0,0,0.18)] transition-opacity after:pointer-events-none after:absolute after:top-px after:right-8 after:bottom-px after:z-10 after:w-px after:bg-[#4a4038] after:content-[''] dark:after:bg-slate-600",
-                  reviewHandoffDisabled && "opacity-50",
-                )}
-              >
-                <Button
-                  type="button"
-                  data-testid="review-handoff-button"
-                  size="lg"
-                  className="h-9 rounded-r-none rounded-l-[7px] border-0 bg-[#2B2420] px-3 text-sm font-bold text-white hover:bg-[#3a322b] focus-visible:ring-slate-300 disabled:opacity-100 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600 dark:focus-visible:ring-slate-600"
-                  disabled={reviewHandoffButtonDisabled}
-                  aria-disabled={reviewHandoffButtonDisabled || undefined}
-                  onClick={() => {
-                    if (mcpApp || reviewHandoffState !== "idle") {
-                      setReviewHandoffPopoverOpen(true);
-                      return;
-                    }
-
-                    void handleCompleteReview(
-                      trimmedOverallComment
-                        ? { overallComment: trimmedOverallComment }
-                        : undefined,
-                    );
-                  }}
-                >
-                  {ReviewHandoffButtonIcon ? (
-                    <ReviewHandoffButtonIcon
-                      className={cn(
-                        "size-4",
-                        reviewHandoffState === "notifying" && "animate-spin",
-                      )}
-                    />
-                  ) : null}
-                  {reviewHandoffButtonLabel}
-                </Button>
-                <PopoverTrigger
-                  render={
-                    <Button
-                      type="button"
-                      data-testid="review-handoff-comment-trigger"
-                      size="icon-lg"
-                      className="h-9 w-8 rounded-l-none rounded-r-[7px] border-0 bg-[#2B2420] text-white hover:bg-[#3a322b] focus-visible:ring-slate-300 disabled:opacity-100 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600 dark:focus-visible:ring-slate-600"
-                      disabled={reviewHandoffDisabled}
-                      aria-label="Add overall handoff comment"
-                    >
-                      <ChevronDown className="size-4" />
-                    </Button>
-                  }
-                />
-              </div>
-              <PopoverContent
-                className={reviewHandoffState === "idle" ? undefined : "pt-0"}
-                aria-label={
-                  reviewHandoffState === "idle"
-                    ? "Review handoff comment"
-                    : "Review handoff status"
-                }
-                data-testid={
-                  reviewHandoffState === "idle"
-                    ? "review-handoff-comment-popover"
-                    : "review-handoff-status"
-                }
-              >
-                {reviewHandoffState === "idle" ? (
-                  <form
-                    className="space-y-3"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      if (onPrepareReview && !preparedMessage) {
-                        setPrepareError(null);
-                        void onPrepareReview({
-                          overallComment: trimmedOverallComment,
-                        })
-                          .then(setPreparedMessage)
-                          .catch((error) => setPrepareError(String(error)));
-                      } else {
-                        void handleCompleteReview({
-                          overallComment: trimmedOverallComment,
-                        });
-                      }
-                    }}
-                  >
-                    <div>
-                      <Textarea
-                        id="review-handoff-overall-comment"
-                        data-testid="review-handoff-overall-comment"
-                        aria-label="Overall comment"
-                        placeholder="Overall comment"
-                        value={overallComment}
-                        disabled={!!preparedMessage}
-                        onChange={(event) => {
-                          setOverallComment(event.currentTarget.value);
-                          setPreparedMessage(null);
-                        }}
-                        maxLength={4000}
-                        rows={4}
-                        className="min-h-24 resize-none"
-                      />
-                    </div>
-                    {preparedMessage && (
-                      <Textarea
-                        aria-label="Message preview"
-                        readOnly
-                        value={preparedMessage}
-                        rows={10}
-                      />
-                    )}
-                    {prepareError && <p role="alert">{prepareError}</p>}
-                    <Button
-                      type="submit"
-                      data-testid="review-handoff-submit-comment"
-                      size="lg"
-                      className="w-full rounded-[7px] bg-black text-sm font-bold text-white hover:bg-black/85 focus-visible:ring-black/25 dark:bg-white dark:text-black dark:hover:bg-white/90"
-                      disabled={!mcpApp && !trimmedOverallComment}
-                    >
-                      <CheckCheck className="size-4" />
-                      {mcpApp
-                        ? preparedMessage
-                          ? "Send to conversation"
-                          : "Preview message"
-                        : "Submit with comment"}
-                    </Button>
-                  </form>
-                ) : (
-                  <div>
-                    <div className="flex items-start gap-3">
-                      {reviewHandoffState === "notifying" ||
-                      reviewHandoffState === "error" ||
-                      reviewHandoffState === "undelivered" ? (
-                        <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-black text-white dark:bg-white dark:text-black">
-                          {reviewHandoffState === "notifying" ? (
-                            <Loader2 className="size-4 animate-spin" />
-                          ) : (
-                            <AlertTriangle className="size-4" />
-                          )}
-                        </span>
-                      ) : null}
-                      <div>
-                        <div className="text-xl font-semibold leading-6 text-stone-950 dark:text-slate-50">
-                          {reviewHandoffStatusTitle}
-                        </div>
-                        <p className="mt-1 text-sm leading-6 text-stone-600 dark:text-slate-300">
-                          {reviewHandoffStatusBody}
-                        </p>
-                        {reviewHandoffState === "error" ? (
-                          <Button
-                            type="button"
-                            data-testid="review-handoff-retry"
-                            className="mt-4 w-full"
-                            onClick={() =>
-                              void handleCompleteReview(
-                                trimmedOverallComment
-                                  ? { overallComment: trimmedOverallComment }
-                                  : undefined,
-                              )
-                            }
-                          >
-                            Try again
-                          </Button>
-                        ) : reviewHandoffState === "notifying" ? null : (
-                          <div className="mt-3">
-                            <Button
-                              type="button"
-                              data-testid="review-handoff-copy-message"
-                              variant="outline"
-                              className="w-full"
-                              onClick={() =>
-                                void (
-                                  mcpApp
-                                    ? copyHostText
-                                    : writePlainTextToClipboard
-                                )(reviewHandoffCopyMessage)
-                              }
-                            >
-                              Copy message for agent
-                            </Button>
-                            {!mcpApp && (
-                              <Button
-                                type="button"
-                                data-testid="review-handoff-close-window"
-                                size="lg"
-                                variant="outline"
-                                className="mt-4 w-full rounded-[7px] text-sm font-semibold"
-                                onClick={() => window.close()}
-                              >
-                                Close window
-                              </Button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </PopoverContent>
-            </Popover>
-          ) : null}
+          <ReviewHandoff
+            key={activeDocumentPath ?? documentPage?.id}
+            backend={backend}
+            activeDocumentPath={activeDocumentPath}
+            documentFilenameLabel={documentFilenameLabel}
+            saveState={saveState}
+            documentDiskChangeState={documentDiskChangeState}
+            onCompleteReview={onCompleteReview}
+            onPrepareReview={onPrepareReview}
+          />
         </div>
       </div>
       {conflictNotice ? (

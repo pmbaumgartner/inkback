@@ -2,13 +2,13 @@ import type { Editor } from "@tiptap/react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type {
+  DocumentSaveController,
+  ManualSaveResult,
+} from "../src/DocumentSaveController";
 import { DocumentSaveController as SaveController } from "../src/DocumentSaveController";
-import {
-  type DocumentSaveController,
-  type ManualSaveResult,
-  PageCard,
-  shouldDismissCommentThread,
-} from "../src/PageCard";
+import { shouldDismissCommentThread } from "../src/editor-review";
+import { PageCard } from "../src/PageCard";
 import type { Page, StorageBackend } from "../src/storage";
 
 function createDomRect({

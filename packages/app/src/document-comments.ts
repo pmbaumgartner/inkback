@@ -3,7 +3,7 @@ import {
   type CriticComment,
   flattenCommentThreads,
   getCommentDescendantIds,
-} from "./critic-markup";
+} from "./critic-markup/model";
 
 interface CommentAnchorMeasurement {
   commentIds: string[];

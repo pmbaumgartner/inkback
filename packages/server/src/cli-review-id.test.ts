@@ -2,7 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { expect, it, vi } from "vitest";
-import { createCliDependencies, runCli } from "./cli";
+import { runCli } from "./cli";
+import { createCliDependencies } from "./cli/dependencies";
 
 it("requires --no-watch when routing a viewer to an existing review consumer", async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "inkback-viewer-"));

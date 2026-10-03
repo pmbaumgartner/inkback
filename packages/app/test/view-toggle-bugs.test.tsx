@@ -6,20 +6,22 @@ import {
   type DocumentEditorViewMode,
   getDocumentEditorViewModeFromLocation,
 } from "../src/app-navigation";
+import type { DocumentSaveState } from "../src/DocumentSaveController";
 import { DocumentSaveController } from "../src/DocumentSaveController";
 import {
   DocumentSaveStatusIndicator,
   DocumentWorkspace,
-  getReviewHandoffButtonLabel,
-  isReviewHandoffDisabled,
 } from "../src/DocumentWorkspace";
-import type { DocumentSaveState } from "../src/PageCard";
 import type {
   CompleteReviewOptions,
   CompleteReviewResult,
   Page,
   StorageBackend,
 } from "../src/storage";
+import {
+  getReviewHandoffButtonLabel,
+  isReviewHandoffDisabled,
+} from "../src/useReviewHandoff";
 
 function createBackend({
   watcherCount,

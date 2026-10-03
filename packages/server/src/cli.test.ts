@@ -5,13 +5,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateInkbackMarkdown } from "@inkback/rfm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
-  createCliDependencies,
-  createDefaultOpenUrl,
-  ensureServerRunning,
-  getServerStateFilePath,
-  runCli,
-} from "./cli";
+import { runCli } from "./cli";
+import { createDefaultOpenUrl } from "./cli/browser";
+import { createCliDependencies } from "./cli/dependencies";
+import { getServerStateFilePath } from "./cli/paths";
+import { ensureServerRunning } from "./cli/server-lifecycle";
 import { createApp } from "./index";
 import { INKBACK_DEFAULT_PORT } from "./network";
 

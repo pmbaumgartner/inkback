@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { criticMarkdownToRenderedHtml } from "../src/critic-markup";
 import {
   type CriticComment,
-  criticMarkdownToRenderedHtml,
   getCommentDescendantIds,
-} from "../src/critic-markup";
+} from "../src/critic-markup/model";
 import {
   buildCommentThreadRailItems,
   getCommentAnchorMeasurements,

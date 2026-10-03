@@ -298,6 +298,43 @@ describe("createApp", () => {
     }
   });
 
+  it("reports deletion when a watched file disappears after the watcher sampled it", async () => {
+    const filePath = path.join(projectDir, "draft.md");
+    fs.writeFileSync(filePath, "# Draft\n");
+    const stale = fs.statSync(filePath);
+    const { app } = createApp({ homeDir, staticDirPath: projectDir });
+    const watch = vi.spyOn(fs, "watchFile");
+    const server = app.listen(0);
+    const controller = new AbortController();
+    try {
+      const port = (server.address() as AddressInfo).port;
+      const response = await fetch(
+        `http://127.0.0.1:${port}/api/markdown-file/events?${new URLSearchParams({ projectPath: projectDir, path: "draft.md" })}`,
+        { signal: controller.signal },
+      );
+      if (!response.body) throw new Error("Missing event stream");
+      const reader = response.body.getReader();
+      await reader.read();
+      const listener = watch.mock.calls
+        .find(([watched]) => watched === filePath)
+        ?.at(-1);
+      if (typeof listener !== "function")
+        throw new Error("Missing file watcher");
+      fs.unlinkSync(filePath);
+      listener(stale, { ...stale, mtimeMs: 0 });
+      const notification = await reader.read();
+      expect(new TextDecoder().decode(notification.value)).toContain(
+        '"exists":false,"version":null',
+      );
+      expect((await request(app).get("/api/status")).status).toBe(200);
+    } finally {
+      controller.abort();
+      fs.unwatchFile(filePath);
+      watch.mockRestore();
+      server.close();
+    }
+  });
+
   it("accepts review completed events for a markdown file inside the project", async () => {
     fs.writeFileSync(
       path.join(projectDir, "draft.md"),

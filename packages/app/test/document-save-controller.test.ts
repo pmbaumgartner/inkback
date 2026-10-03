@@ -38,7 +38,38 @@ describe("document save queue", () => {
     expect(draft.diskState).toBe("clean");
     draft.edit("second");
     expect(await draft.flushSave()).toEqual({ status: "saved" });
-    expect(save.mock.calls[1]).toEqual(["a.md", "second", "v2"]);
+    expect(save.mock.calls[1]).toEqual([
+      "a.md",
+      "second",
+      { mode: "conditional", expectedVersion: "v2" },
+    ]);
+    draft.dispose();
+  });
+
+  it("ignores delayed autosave notifications when disk already matches the latest save", async () => {
+    let disk = page;
+    const backend = {
+      saveMarkdownFile: vi.fn(
+        async (_path, content) =>
+          (disk = {
+            ...page,
+            content,
+            version: content === "first" ? "v2" : "v3",
+          }),
+      ),
+      getMarkdownFile: vi.fn(async () => disk),
+    } as unknown as StorageBackend;
+    const draft = new DocumentSaveController("a.md", page, backend);
+    draft.edit("first");
+    await draft.flushSave();
+    draft.edit("second");
+    await draft.flushSave();
+    draft.edit("latest typing");
+    await draft.onDiskEvent({ path: "a.md", exists: true, version: "v2" });
+    expect(draft.diskState).toBe("clean");
+    expect(draft.draft).toBe("latest typing");
+    expect(await draft.flushSave()).toEqual({ status: "saved" });
+    expect(disk.content).toBe("latest typing");
     draft.dispose();
   });
 
@@ -164,9 +195,9 @@ describe("document save queue", () => {
     second.resolve({ ...page, content: "latest", version: "v3" });
     await Promise.all([overwrite, nextOverwrite, flush]);
     expect(save.mock.calls).toEqual([
-      ["a.md", "first"],
-      ["a.md", "latest", "v2"],
-      ["a.md", "latest"],
+      ["a.md", "first", { mode: "overwrite" }],
+      ["a.md", "latest", { mode: "conditional", expectedVersion: "v2" }],
+      ["a.md", "latest", { mode: "overwrite" }],
     ]);
     expect(draft.dirty).toBe(false);
     draft.dispose();
@@ -204,8 +235,8 @@ describe("document save queue", () => {
     expect(await handoff).toEqual({ status: "saved" });
     expect(await pending).toEqual({ status: "saved" });
     expect(save.mock.calls).toEqual([
-      ["a.md", "intermediate", "v1"],
-      ["a.md", "final", "v2"],
+      ["a.md", "intermediate", { mode: "conditional", expectedVersion: "v1" }],
+      ["a.md", "final", { mode: "conditional", expectedVersion: "v2" }],
     ]);
     expect(draft.dirty).toBe(false);
     draft.dispose();
@@ -223,8 +254,8 @@ describe("document save queue", () => {
     expect(await draft.flushSave()).toEqual({ status: "blocked" });
     await draft.overwrite();
     expect(save.mock.calls).toEqual([
-      ["a.md", "local", "v1"],
-      ["a.md", "local"],
+      ["a.md", "local", { mode: "conditional", expectedVersion: "v1" }],
+      ["a.md", "local", { mode: "overwrite" }],
     ]);
     expect(draft.dirty).toBe(false);
     draft.dispose();

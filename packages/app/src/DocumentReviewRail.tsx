@@ -7,11 +7,7 @@ import {
   type CommentContentRenderContext,
   CommentEditorList,
 } from "./CommentEditorList";
-import type {
-  CriticChangeAttrs,
-  CriticChangeKind,
-  CriticComment,
-} from "./critic-markup";
+import type { CriticComment } from "./critic-markup/model";
 import {
   buildCommentThreadRailItems,
   type CommentGroupAnchor,
@@ -20,9 +16,10 @@ import {
   getRootThreadIdForCommentId,
   resolveAnchoredRailLayouts,
 } from "./document-comments";
+import type { CriticChangeAttrs, CriticChangeKind } from "./editor-extensions";
 import { SUGGESTED_PARAGRAPH_SENTINEL } from "./editor-extensions";
+import type { DraftSuggestionState } from "./editor-types";
 import { cn } from "./lib/utils";
-import type { DraftSuggestionState } from "./PageCard";
 import { useRailItemHeights } from "./useRailItemHeights";
 
 const SUGGESTION_QUOTE_PREVIEW_LIMIT = 140;

@@ -120,11 +120,10 @@ describe("RemoteBackend", () => {
     global.fetch = fetchMock as unknown as typeof fetch;
 
     const backend = bootstrap();
-    const page = await backend.saveMarkdownFile(
-      "ignored.md",
-      "v2",
-      "version-1",
-    );
+    const page = await backend.saveMarkdownFile("ignored.md", "v2", {
+      mode: "conditional",
+      expectedVersion: "version-1",
+    });
 
     expect(page.version).toBe("version-2");
     expect(page.content).toBe("v2");
@@ -149,7 +148,10 @@ describe("RemoteBackend", () => {
 
     const backend = bootstrap();
     await expect(
-      backend.saveMarkdownFile("ignored.md", "client-content", "stale-version"),
+      backend.saveMarkdownFile("ignored.md", "client-content", {
+        mode: "conditional",
+        expectedVersion: "stale-version",
+      }),
     ).rejects.toBeInstanceOf(MarkdownFileConflictError);
   });
 

@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
-import { toHtml } from "../src/markdown";
 import { criticMarkdownToRenderedHtml } from "../src/critic-markup";
+import { toHtml } from "../src/markdown";
+
 const unsafe =
   '<script>window.__inkbackXss = 1</script>\n\n<img src="x" onerror="window.__inkbackXss = 2">\n\n[click](javascript:window.__inkbackXss=3)\n\n<iframe src="https://example.com"></iframe>';
 it.each([

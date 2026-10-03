@@ -64,6 +64,13 @@ export class DocumentSaveController {
       listener();
     });
   }
+  private canReconcile(generation: number) {
+    return (
+      !this.disposed &&
+      generation === this.generation &&
+      this.diskState !== "paused"
+    );
+  }
   async onDiskEvent(event: {
     path: string;
     exists: boolean;
@@ -71,56 +78,52 @@ export class DocumentSaveController {
   }) {
     if (this.disposed || event.path !== this.path) return;
     const generation = this.generation;
-    const writing = this.writing;
     const wasDirty = this.dirty;
-    if (writing) {
-      try {
-        await writing;
-      } catch {
-        /* the event still needs reconciliation */
+    while (this.canReconcile(generation)) {
+      while (this.writing) {
+        try {
+          await this.writing;
+        } catch {
+          /* reconcile failed writes too */
+        }
       }
-    }
-    if (
-      this.disposed ||
-      generation !== this.generation ||
-      this.diskState === "paused"
-    )
-      return;
-    if (
-      event.exists &&
-      event.version &&
-      event.version === this.accepted.version
-    )
-      return;
-    if (
-      !event.exists ||
-      wasDirty ||
-      this.dirty ||
-      this.writing ||
-      this.status === "saving"
-    ) {
-      this.setDiskState("changed");
-      return;
-    }
-    const accepted = this.accepted;
-    const revision = this.editRevision;
-    try {
-      const page = await this.backend.getMarkdownFile(this.path);
+      if (!this.canReconcile(generation)) return;
       if (
-        this.disposed ||
-        generation !== this.generation ||
-        accepted !== this.accepted ||
-        revision !== this.editRevision ||
-        this.dirty ||
-        this.writing ||
-        this.diskState !== "clean"
+        event.exists &&
+        event.version &&
+        event.version === this.accepted.version
       )
         return;
-      this.accept(page);
-    } catch (error) {
-      console.error("Failed to reload changed markdown file:", error);
+      if (!event.exists) {
+        this.setDiskState("changed");
+        return;
+      }
+      const accepted = this.accepted;
+      const revision = this.editRevision;
+      let current: Page;
+      try {
+        current = await this.backend.getMarkdownFile(this.path);
+      } catch (error) {
+        if (!this.canReconcile(generation)) return;
+        if (wasDirty || this.dirty || this.writing || this.status === "saving")
+          this.setDiskState("changed");
+        else console.error("Failed to reload changed markdown file:", error);
+        return;
+      }
+      if (!this.canReconcile(generation)) return;
+      // A newer save may supersede both the notification and the read.
+      if (this.writing || accepted !== this.accepted) continue;
+      if (current.version && current.version === this.accepted.version) return;
+      if (wasDirty || this.dirty || this.status === "saving") {
+        this.setDiskState("changed");
+        return;
+      }
+      if (revision !== this.editRevision || this.diskState !== "clean") return;
+      this.accept(current);
+      return;
     }
   }
+
   private cancelTimer() {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
@@ -185,11 +188,10 @@ export class DocumentSaveController {
     this.status = "saving";
     this.changed();
     const write = (async () => {
-      const saved = await this.backend.saveMarkdownFile(
-        this.path,
-        content,
-        accepted.version,
-      );
+      const saved = await this.backend.saveMarkdownFile(this.path, content, {
+        mode: "conditional",
+        expectedVersion: accepted.version,
+      });
       if (this.disposed || generation !== this.generation) return;
       const firstLine = content.split("\n")[0] || "";
       this.accepted = saved ?? {
@@ -258,7 +260,9 @@ export class DocumentSaveController {
     this.status = "saving";
     this.changed();
     const write = (async () => {
-      const page = await this.backend.saveMarkdownFile(this.path, content);
+      const page = await this.backend.saveMarkdownFile(this.path, content, {
+        mode: "overwrite",
+      });
       if (this.disposed || generation !== this.generation) return;
       this.accepted = page ?? { ...this.accepted, content };
       this.diskState = "clean";

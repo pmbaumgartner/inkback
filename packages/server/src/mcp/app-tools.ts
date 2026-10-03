@@ -5,8 +5,8 @@ import {
   buildReviewHandoffMessage,
   extractInkbackReviewIndex,
 } from "@inkback/rfm";
-import type { McpServer } from "@modelcontextprotocol/server";
 import { registerAppTool } from "@modelcontextprotocol/ext-apps/server";
+import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import {
   MAX_ASSET_BYTES,
@@ -19,12 +19,13 @@ import {
   writeDocument,
 } from "../document-files.js";
 import {
-  type ToolContext,
   requireWritable,
+  type ToolContext,
   toolError,
   toolResult,
 } from "./context.js";
 import { documentInput, summarySchema } from "./model-tools.js";
+
 const pageSchema = z.object({
   id: z.string(),
   title: z.string(),
@@ -103,7 +104,13 @@ export function registerAppTools(server: McpServer, context: ToolContext) {
     z.object({
       ...documentInput,
       content: z.string(),
-      expectedVersion: z.string(),
+      save: z.discriminatedUnion("mode", [
+        z.object({
+          mode: z.literal("conditional"),
+          expectedVersion: z.string(),
+        }),
+        z.object({ mode: z.literal("overwrite") }),
+      ]),
     }),
     z.object({
       status: z.enum(["saved", "conflict"]),
@@ -115,10 +122,13 @@ export function registerAppTools(server: McpServer, context: ToolContext) {
       const documentPath = String(args.documentPath);
       readDocument(documentPath);
       requireWritable(context, documentPath);
+      const save = args.save as
+        | { mode: "conditional"; expectedVersion: string }
+        | { mode: "overwrite" };
       const result = writeDocument(
         documentPath,
         String(args.content),
-        String(args.expectedVersion),
+        save.mode === "conditional" ? save.expectedVersion : undefined,
       );
       if (result.status === "saved")
         context.documents.open(documentPath, result.page.version, true);

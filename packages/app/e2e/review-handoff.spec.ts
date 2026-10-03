@@ -139,44 +139,62 @@ test.describe("review handoff", () => {
 
   test("keeps review completion available after the watcher disconnects @smoke", async ({
     page,
-    request,
-  }) => {
+  }, testInfo) => {
     const relativePath = "disconnected-handoff.md";
     const filePath = writeProjectFile(
       projectDir,
       relativePath,
       "# Review\n\nSaved feedback.\n",
     );
-    pendingWatch = request.post("/api/review-events/watch", {
-      data: { projectPath: projectDir, path: relativePath, timeoutSeconds: 5 },
-    });
-
-    await openMarkdownFile(page, filePath, "code");
-    await expect(page.getByTestId("review-handoff-button")).toBeVisible();
-    const disconnectedStatus = page.waitForResponse(
-      async (response) =>
-        response.url().includes("/api/review-events/status") &&
-        (await response.json()).watcherCount === 0,
+    const watcher = new AbortController();
+    pendingWatch = fetch(
+      new URL("/api/review-events/watch", testInfo.project.use.baseURL),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectPath: projectDir,
+          path: relativePath,
+          timeoutSeconds: 25,
+        }),
+        signal: watcher.signal,
+      },
     );
-    await pendingWatch;
-    await disconnectedStatus;
+    // Handle cancellation immediately, then disconnect once the UI sees the watcher.
+    void pendingWatch.catch(() => undefined);
+    try {
+      await openMarkdownFile(page, filePath, "code");
+      await expect(page.getByTestId("review-handoff-button")).toBeVisible();
+      const disconnectedStatus = page.waitForResponse(
+        async (response) =>
+          response.url().includes("/api/review-events/status") &&
+          (await response.json()).watcherCount === 0,
+      );
+      watcher.abort();
+      await pendingWatch.catch(() => undefined);
+      pendingWatch = null;
+      await disconnectedStatus;
 
-    await expect(page.getByTestId("review-handoff-button")).toBeVisible();
-    await appendInCodeEditor(page, "\nPending feedback.");
-    await expect(page.getByTestId("review-handoff-button")).toHaveText(
-      "Finish review",
-    );
-    await page.getByTestId("review-handoff-button").click();
+      await expect(page.getByTestId("review-handoff-button")).toBeVisible();
+      await appendInCodeEditor(page, "\nPending feedback.");
+      await expect(page.getByTestId("review-handoff-button")).toHaveText(
+        "Finish review",
+      );
+      await page.getByTestId("review-handoff-button").click();
 
-    const status = page.getByTestId("review-handoff-status");
-    await expect(status).toContainText("Your review is saved");
-    expect(readProjectFile(projectDir, relativePath)).toContain(
-      "Pending feedback.",
-    );
-    await expect(status).toContainText("No agent was connected");
-    await expect(
-      status.getByTestId("review-handoff-copy-message"),
-    ).toBeVisible();
+      const status = page.getByTestId("review-handoff-status");
+      await expect(status).toContainText("Your review is saved");
+      expect(readProjectFile(projectDir, relativePath)).toContain(
+        "Pending feedback.",
+      );
+      await expect(status).toContainText("No agent was connected");
+      await expect(
+        status.getByTestId("review-handoff-copy-message"),
+      ).toBeVisible();
+    } finally {
+      watcher.abort();
+      pendingWatch = null;
+    }
   });
 
   test("reopens the sent handoff status from the muted primary button", async ({

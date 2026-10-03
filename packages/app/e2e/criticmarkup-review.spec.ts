@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import {
   createMarkdownProject,
   openMarkdownFile,
@@ -150,7 +150,10 @@ comments:
     await selectRichText(page, "target text");
     await page.getByTestId("selection-menu-action-comment").waitFor();
 
-    const addSamplesPromise = sampleReviewLayoutAnimation(page);
+    const addSamplesPromise = sampleReviewLayoutAnimation(
+      page,
+      "selection-menu-action-comment",
+    );
     await page.getByTestId("selection-menu-action-comment").click();
     const addSamples = await addSamplesPromise;
 
@@ -161,7 +164,10 @@ comments:
     await page.getByTestId("comment-rail-c1-action-save").click();
 
     await page.getByTestId("comment-rail-c1-action-delete-thread").waitFor();
-    const removeSamplesPromise = sampleReviewLayoutAnimation(page);
+    const removeSamplesPromise = sampleReviewLayoutAnimation(
+      page,
+      "comment-rail-c1-action-delete-thread",
+    );
     await page.getByTestId("comment-rail-c1-action-delete-thread").click();
     const removeSamples = await removeSamplesPromise;
 
@@ -246,8 +252,8 @@ type ReviewLayoutAnimationSample = {
   headerTranslateX: number;
 };
 
-async function sampleReviewLayoutAnimation(page: Page) {
-  return page.evaluate(async () => {
+async function sampleReviewLayoutAnimation(page: Page, actionTestId: string) {
+  return page.evaluate(async (testId) => {
     const readTranslateX = (element: Element | null) => {
       if (!(element instanceof HTMLElement)) return 0;
       const transform = getComputedStyle(element).transform;
@@ -255,9 +261,19 @@ async function sampleReviewLayoutAnimation(page: Page) {
       return new DOMMatrixReadOnly(transform).m41;
     };
     const samples: ReviewLayoutAnimationSample[] = [];
-    const start = performance.now();
-
-    while (performance.now() - start < 500) {
+    let start: number | null = null;
+    const onClick = (event: MouseEvent) => {
+      if (
+        event.target instanceof Element &&
+        event.target.closest(`[data-testid="${testId}"]`)
+      )
+        start = performance.now();
+    };
+    document.addEventListener("click", onClick, true);
+    // Start the observation window at the action, after Playwright has finished
+    // waiting for the button to become actionable.
+    const capture = () => {
+      if (start === null) return;
       const shell = document.querySelector(
         '[data-testid="document-page-shell"]',
       );
@@ -274,11 +290,22 @@ async function sampleReviewLayoutAnimation(page: Page) {
         shellTranslateX: readTranslateX(shell),
         headerTranslateX: readTranslateX(header),
       });
+    };
+    const observer = new MutationObserver(capture);
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["class", "style"],
+      subtree: true,
+    });
+    while (start === null || performance.now() - start < 500) {
+      capture();
       await new Promise((resolve) => requestAnimationFrame(resolve));
     }
 
+    observer.disconnect();
+    document.removeEventListener("click", onClick, true);
     return samples;
-  });
+  }, actionTestId);
 }
 
 function hasAnimatedReviewLayout(samples: ReviewLayoutAnimationSample[]) {

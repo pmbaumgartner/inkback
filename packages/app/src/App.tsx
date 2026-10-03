@@ -3,8 +3,8 @@ import {
   useCallback,
   useEffect,
   useRef,
-  useSyncExternalStore,
   useState,
+  useSyncExternalStore,
 } from "react";
 import {
   buildLocationForDocumentEditorViewMode,
@@ -16,10 +16,10 @@ import {
   joinPath,
   syncRequestedPathInUrl,
 } from "./app-navigation";
+import type { DocumentSaveState } from "./DocumentSaveController";
 import { DocumentSaveController } from "./DocumentSaveController";
 import { DocumentWorkspace } from "./DocumentWorkspace";
 import { detectBackend } from "./detect-backend";
-import type { DocumentSaveState } from "./PageCard";
 import type { CompleteReviewOptions, StorageBackend } from "./storage";
 
 export type DocumentDiskChangeState =

@@ -3,9 +3,10 @@ import {
   type BackendInfo,
   type CompleteReviewOptions,
   type CompleteReviewResult,
-  MarkdownFileConflictError,
   type MarkdownFileChangeEvent,
+  MarkdownFileConflictError,
   type Page,
+  type SaveIntent,
   type StorageBackend,
 } from "../storage";
 import { ImageCache } from "./image-cache";
@@ -13,6 +14,7 @@ export type AppClient = Pick<App, "callServerTool" | "sendMessage">;
 export class McpAppBackend implements StorageBackend {
   info: BackendInfo;
   canManageProjects = false;
+  reviewDelivery = "conversation" as const;
   writable = true;
   notWritableReason: string | null = null;
   handoffMessage: string | null = null;
@@ -66,14 +68,10 @@ export class McpAppBackend implements StorageBackend {
     );
     return page;
   }
-  async saveMarkdownFile(
-    _path: string,
-    content: string,
-    expectedVersion?: string,
-  ) {
+  async saveMarkdownFile(_path: string, content: string, intent: SaveIntent) {
     const result = await this.call<
       { status: "saved"; page: Page } | { status: "conflict"; current: Page }
-    >("inkback_save_file", { content, expectedVersion });
+    >("inkback_save_file", { content, save: intent });
     if (result.status === "conflict")
       throw new MarkdownFileConflictError(result.current);
     this.version = result.page.version ?? null;

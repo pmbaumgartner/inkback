@@ -51,18 +51,23 @@ export interface BackendInfo {
   originPath?: string;
 }
 
+export type SaveIntent =
+  | { mode: "conditional"; expectedVersion?: string }
+  | { mode: "overwrite" };
+
 export interface StorageBackend {
   info: BackendInfo;
   canManageProjects: boolean;
   writable?: boolean;
   notWritableReason?: string | null;
   handoffMessage?: string | null;
+  reviewDelivery?: "terminal" | "conversation";
   prepareReview?(options?: CompleteReviewOptions): Promise<string>;
   getMarkdownFile(relativePath: string): Promise<Page>;
   saveMarkdownFile(
     relativePath: string,
     content: string,
-    expectedVersion?: string,
+    intent: SaveIntent,
   ): Promise<Page | undefined>;
   watchMarkdownFile?(
     relativePath: string,

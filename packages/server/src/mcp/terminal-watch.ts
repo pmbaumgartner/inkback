@@ -1,9 +1,9 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
+import { getServerStateFilePath } from "../cli/paths.js";
 import {
-  watchReviewEvents,
   type ReviewWatchResult,
+  watchReviewEvents,
 } from "../watch-review-events.js";
 
 export function watchTerminalReview(
@@ -48,14 +48,4 @@ function readServerState(
   } catch {}
 
   return null;
-}
-
-function getServerStateFilePath(env: NodeJS.ProcessEnv): string {
-  const explicitFile = env.INKBACK_STATE_FILE?.trim();
-  if (explicitFile) return path.resolve(explicitFile);
-
-  const explicitDir = env.INKBACK_STATE_DIR?.trim();
-  if (explicitDir) return path.join(path.resolve(explicitDir), "server.json");
-
-  return path.join(os.homedir(), ".inkback", "server.json");
 }

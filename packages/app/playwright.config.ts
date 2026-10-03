@@ -11,6 +11,8 @@ export default defineConfig({
     timeout: 7_500,
   },
   fullyParallel: true,
+  // Browser workers share the machine with the API, MCP host, and sandboxes.
+  workers: 2,
   reporter: process.env.CI ? "github" : "list",
   use: {
     baseURL: appUrl,

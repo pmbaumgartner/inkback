@@ -1,9 +1,7 @@
 import { Editor } from "@tiptap/core";
 import { describe, expect, it } from "vitest";
-import {
-  criticMarkdownToEditorState,
-  editorStateToCriticMarkdown,
-} from "../src/critic-markup";
+import { criticMarkdownToEditorState } from "../src/critic-markup";
+import { editorStateToCriticMarkdown } from "../src/critic-markup/writer";
 import { createEditorExtensions } from "../src/editor-extensions";
 
 const timestamp = "2026-04-25T22:14:08.827Z";

@@ -1,32 +1,33 @@
-import {
-  titleFromContent,
-  fileVersionFromFile,
-  normalizeOverallComment,
-  markdownPageFromFile,
-  nextAssetPath,
-  MAX_OVERALL_COMMENT_LENGTH,
-  writeDocument,
-  updateDocument,
-} from "./document-files.js";
-import crypto from "node:crypto";
 import fs from "node:fs";
 import { createServer as createHttpServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { extractInkbackReviewIndex } from "@inkback/rfm";
+import express, { type Express } from "express";
 import {
-  appendInkbackDocumentComment,
-  extractInkbackReviewIndex,
-} from "@inkback/rfm";
-import express, { type Express, type Request, type Response } from "express";
+  fileVersionFromFile,
+  markdownPageFromFile,
+  nextAssetPath,
+  titleFromContent,
+  writeDocument,
+} from "./document-files.js";
+import {
+  ensureProjectPath,
+  isExistingDirectory,
+  markdownPathFromRequest,
+  pageFilePathFromId,
+  projectDirFromRequest,
+} from "./http-document-target.js";
 import {
   hasNonLoopbackHost,
   INKBACK_DEFAULT_PORT,
   INKBACK_PUBLIC_HOST,
   resolveBindHosts,
 } from "./network.js";
-import { ReviewEventQueue } from "./review-events.js";
-import { type ReviewSession, ReviewSessions } from "./review-sessions.js";
+import { registerOpenRequests } from "./open-requests.js";
+import { registerRemoteDocuments } from "./remote-documents.js";
+import { registerReviewRoutes } from "./review-routes.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const staticDir = path.resolve(__dirname, "../../app/dist");
@@ -81,71 +82,6 @@ interface CreateAppResult {
   port: number;
 }
 
-interface OpenRequestClient {
-  id: number;
-  path: string | null;
-  response: Response;
-}
-
-interface OpenRequestPayload {
-  path?: string;
-  url?: string;
-}
-
-interface RemoteSession {
-  id: string;
-  originPath: string;
-  content: string;
-  version: string;
-  saveClient: Response | null;
-  viewers: Set<Response>;
-  disconnectedAt: number | null;
-}
-
-interface RemoteDocumentRegisterPayload {
-  sessionId?: string;
-  originPath?: string;
-  content?: string;
-}
-
-interface RemoteDocumentSavePayload {
-  content?: string;
-  expectedVersion?: string;
-}
-
-const REMOTE_SESSION_TTL_MS = 5 * 60 * 1000;
-const REMOTE_SESSION_SWEEP_INTERVAL_MS = 60 * 1000;
-const REMOTE_SESSION_KEEPALIVE_MS = 15 * 1000;
-
-let nextOpenRequestClientId = 1;
-
-function remoteSessionVersion(content: string): string {
-  const hash = crypto.createHash("sha256").update(content).digest("hex");
-  return `${hash}:${crypto.randomUUID()}`;
-}
-
-function remoteSessionView(session: RemoteSession): {
-  id: string;
-  originPath: string;
-  content: string;
-  version: string;
-} {
-  return {
-    id: session.id,
-    originPath: session.originPath,
-    content: session.content,
-    version: session.version,
-  };
-}
-
-function writeRemoteSessionEvent(
-  response: Response,
-  event: string,
-  data: unknown,
-): void {
-  response.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-}
-
 function listMdFiles(projectDir: string): string[] {
   try {
     return fs
@@ -164,35 +100,8 @@ function nextUntitledId(projectDir: string): string {
   return `untitled-${i}`;
 }
 
-function ensureProjectPath(
-  projectDir: string,
-  relativePath: string,
-): string | null {
-  const normalized = relativePath.replace(/^\.?\//, "");
-  const absolute = path.resolve(projectDir, normalized);
-  const relative = path.relative(projectDir, absolute);
-
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
-    return null;
-  }
-
-  return absolute;
-}
-
-function pageFilePathFromId(projectDir: string, id: string): string | null {
-  return ensureProjectPath(projectDir, `${id}.md`);
-}
-
 function ensureDirectoryExists(dir: string): void {
   fs.mkdirSync(dir, { recursive: true });
-}
-
-function isExistingDirectory(dir: string): boolean {
-  try {
-    return fs.statSync(dir).isDirectory();
-  } catch {
-    return false;
-  }
 }
 
 function listDirectories(dir: string): DirectoryListing {
@@ -332,119 +241,8 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
       ? options.remoteDocumentToken
       : null;
   const app = express();
-  const openRequestClients = new Set<OpenRequestClient>();
-  const reviewEvents = new ReviewEventQueue();
-  const reviewSessions = new ReviewSessions();
-  const remoteSessions = new Map<string, RemoteSession>();
-
-  function isAuthorizedRemoteDocumentRequest(req: Request): boolean {
-    if (!remoteDocumentToken) return true;
-
-    const header =
-      typeof req.headers.authorization === "string"
-        ? req.headers.authorization
-        : "";
-    if (header.startsWith("Bearer ")) {
-      const supplied = header.slice("Bearer ".length).trim();
-      if (supplied === remoteDocumentToken) return true;
-    }
-
-    const acceptsQueryToken =
-      req.method === "GET" &&
-      req.path.startsWith("/api/remote-document/") &&
-      req.path.endsWith("/events");
-    const queryToken =
-      acceptsQueryToken && typeof req.query.token === "string"
-        ? req.query.token
-        : "";
-    return queryToken === remoteDocumentToken;
-  }
-
-  function rejectUnauthorizedRemoteDocumentRequest(res: Response): void {
-    res.status(401).json({
-      error:
-        "Remote document endpoints require a valid token. Set INKBACK_TOKEN on the client; browser event streams may include ?token=... in the URL.",
-    });
-  }
-
-  const remoteSessionSweeper = setInterval(() => {
-    const now = Date.now();
-    for (const [id, session] of remoteSessions) {
-      if (
-        session.disconnectedAt !== null &&
-        now - session.disconnectedAt > REMOTE_SESSION_TTL_MS
-      ) {
-        remoteSessions.delete(id);
-      }
-    }
-  }, REMOTE_SESSION_SWEEP_INTERVAL_MS);
-  remoteSessionSweeper.unref?.();
 
   app.use(express.json({ limit: "50mb" }));
-
-  function requestedProjectPath(req: Request): string | null {
-    const queryPath =
-      typeof req.query.projectPath === "string"
-        ? req.query.projectPath.trim()
-        : "";
-    const bodyPath =
-      typeof req.body?.projectPath === "string"
-        ? req.body.projectPath.trim()
-        : "";
-    const nextPath = queryPath || bodyPath;
-    return nextPath.length > 0 ? nextPath : null;
-  }
-
-  function projectDirFromRequest(
-    req: Request,
-    res: Response,
-    options?: { mustExist?: boolean },
-  ): string | null {
-    const nextProjectPath = requestedProjectPath(req);
-    if (!nextProjectPath) {
-      res.status(400).json({ error: "projectPath is required" });
-      return null;
-    }
-
-    const resolvedProjectDir = path.resolve(nextProjectPath);
-    const mustExist = options?.mustExist ?? true;
-
-    if (mustExist && !isExistingDirectory(resolvedProjectDir)) {
-      res.status(404).json({ error: "Project directory not found" });
-      return null;
-    }
-
-    return resolvedProjectDir;
-  }
-
-  function markdownPathFromRequest(
-    req: Request,
-    res: Response,
-    options?: { queryPathOnly?: boolean },
-  ): { relativePath: string; absolutePath: string; projectDir: string } | null {
-    const projectDir = projectDirFromRequest(req, res);
-    if (!projectDir) return null;
-
-    const relativePath =
-      typeof req.query.path === "string"
-        ? req.query.path
-        : !options?.queryPathOnly && typeof req.body?.path === "string"
-          ? req.body.path
-          : "";
-    const absolutePath = ensureProjectPath(projectDir, relativePath);
-
-    if (!absolutePath?.toLowerCase().endsWith(".md")) {
-      res.status(404).json({ error: "Markdown file not found" });
-      return null;
-    }
-
-    if (!fs.existsSync(absolutePath)) {
-      res.status(404).json({ error: "Markdown file not found" });
-      return null;
-    }
-
-    return { relativePath, absolutePath, projectDir };
-  }
 
   // --- API routes ---
 
@@ -497,12 +295,23 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
     res.write("retry: 1000\n\n");
 
     const sendChange = (stats: fs.Stats) => {
-      const exists = stats.nlink > 0;
+      let exists = stats.nlink > 0;
+      let version: string | null = null;
+      try {
+        if (exists) version = fileVersionFromFile(absolutePath);
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === "ENOENT" || code === "ENOTDIR") exists = false;
+        else {
+          console.error("Failed to read watched Markdown file:", error);
+          return;
+        }
+      }
       res.write(
         `event: change\ndata: ${JSON.stringify({
           path: relativePath,
           exists,
-          version: exists ? fileVersionFromFile(absolutePath) : null,
+          version,
         })}\n\n`,
       );
     };
@@ -540,228 +349,7 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
     });
   });
 
-  function requestedReviewSession(
-    req: Request,
-    res: Response,
-    documentPath: string,
-  ): ReviewSession | undefined | false {
-    const id = req.body?.reviewId ?? req.query.reviewId;
-    if (id === undefined) return undefined;
-    const session = typeof id === "string" ? reviewSessions.get(id) : undefined;
-    if (!session || session.documentPath !== documentPath) {
-      res
-        .status(404)
-        .json({ error: "Review session not found for this document" });
-      return false;
-    }
-    return session;
-  }
-
-  app.post("/api/review-sessions", (req, res) => {
-    const target = markdownPathFromRequest(req, res);
-    if (!target) return;
-    const session = reviewSessions.create(target.absolutePath);
-    if (!session) {
-      res.status(503).json({
-        error: "Too many active reviews; cancel an unused review first",
-      });
-      return;
-    }
-    res.status(201).json({
-      reviewId: session.reviewId,
-      receiptToken: session.receiptToken,
-      state: session.state,
-    });
-  });
-
-  function receiptSession(
-    req: Request,
-    res: Response,
-  ): ReviewSession | undefined {
-    const session = reviewSessions.get(String(req.params.id));
-    if (!session) {
-      res.status(404).json({ error: "Review session not found" });
-      return;
-    }
-    if (req.get("x-inkback-receipt-token") !== session.receiptToken) {
-      res.status(403).json({ error: "Review receipt token required" });
-      return;
-    }
-    return session;
-  }
-
-  app.post("/api/review-sessions/:id/ack", (req, res) => {
-    const session = receiptSession(req, res);
-    if (!session) return;
-    if (
-      session.state === "cancelled" ||
-      !session.completion ||
-      req.body?.sequence !== session.completion.event.sequence
-    ) {
-      res
-        .status(409)
-        .json({ error: "No matching pending review to acknowledge" });
-      return;
-    }
-    session.state = "received";
-    res.json({ reviewId: session.reviewId, state: session.state });
-  });
-
-  app.delete("/api/review-sessions/:id", (req, res) => {
-    const session = receiptSession(req, res);
-    if (!session) return;
-    reviewSessions.cancel(session);
-    res.json({ reviewId: session.reviewId, state: session.state });
-  });
-
-  app.post("/api/review-events", (req, res) => {
-    const target = markdownPathFromRequest(req, res);
-    if (!target) return;
-    const session = requestedReviewSession(req, res, target.absolutePath);
-    if (session === false) return;
-    if (session?.state === "cancelled") {
-      res.status(410).json({
-        error: "This review was cancelled. Reopen from the waiting agent.",
-      });
-      return;
-    }
-    // A browser retry must not append the overall comment or enqueue it twice.
-    if (session?.completion) {
-      res.status(201).json({
-        ...session.completion,
-        reviewId: session.reviewId,
-        state: session.state,
-      });
-      return;
-    }
-
-    const overallComment = normalizeOverallComment(req.body?.overallComment);
-    if (
-      overallComment !== undefined &&
-      overallComment.length > MAX_OVERALL_COMMENT_LENGTH
-    ) {
-      res.status(400).json({
-        error: `overallComment must be ${MAX_OVERALL_COMMENT_LENGTH} characters or fewer`,
-      });
-      return;
-    }
-
-    const markdown = fs.readFileSync(target.absolutePath, "utf-8");
-    const persistedMarkdown = overallComment
-      ? appendInkbackDocumentComment(markdown, {
-          message: overallComment,
-          author: "user",
-        })
-      : markdown;
-    if (persistedMarkdown !== markdown) {
-      updateDocument(
-        target.absolutePath,
-        () => persistedMarkdown,
-        undefined,
-        Infinity,
-      );
-    }
-
-    const index = extractInkbackReviewIndex(persistedMarkdown);
-    const result = reviewEvents.emit({
-      ...(session ? { reviewId: session.reviewId } : {}),
-      documentPath: target.absolutePath,
-      projectPath: target.projectDir,
-      relativePath: target.relativePath,
-      version: fileVersionFromFile(target.absolutePath),
-      summary: index.summary,
-      overallComment,
-    });
-
-    if (session) {
-      session.completion = result;
-      session.state = "queued";
-    }
-    res.status(201).json({
-      ...result,
-      ...(session ? { reviewId: session.reviewId, state: session.state } : {}),
-    });
-  });
-
-  app.post("/api/review-events/watch", async (req, res) => {
-    const target = markdownPathFromRequest(req, res);
-    if (!target) return;
-    const session = requestedReviewSession(req, res, target.absolutePath);
-    if (session === false) return;
-    if (session?.state === "cancelled") {
-      res.status(410).json({ error: "Review cancelled" });
-      return;
-    }
-
-    const fromNow = req.body?.fromNow !== false;
-    const timeoutSeconds =
-      typeof req.body?.timeoutSeconds === "number"
-        ? req.body.timeoutSeconds
-        : undefined;
-    const batchWindowSeconds =
-      typeof req.body?.batchWindowSeconds === "number"
-        ? req.body.batchWindowSeconds
-        : 0.25;
-    const afterSequence =
-      typeof req.body?.afterSequence === "number" ? req.body.afterSequence : 0;
-    const cursor = fromNow ? reviewEvents.latestSequence() : afterSequence;
-    if (session?.completion && session.completion.event.sequence > cursor) {
-      res.json({
-        events: [session.completion.event],
-        timedOut: false,
-        nextSequence: reviewEvents.latestSequence() + 1,
-      });
-      return;
-    }
-
-    const controller = new AbortController();
-    const onClose = () => controller.abort();
-    // The incoming request body has already ended; the response connection
-    // remains open for the long poll and closes when the caller disconnects.
-    res.once("close", onClose);
-    if (res.destroyed) controller.abort();
-    try {
-      const result = await reviewEvents.wait({
-        reviewId: session?.reviewId,
-        documentPath: target.absolutePath,
-        afterSequence: cursor,
-        timeoutMs:
-          timeoutSeconds !== undefined ? timeoutSeconds * 1000 : undefined,
-        batchWindowMs: batchWindowSeconds * 1000,
-        signal: session
-          ? AbortSignal.any([controller.signal, session.controller.signal])
-          : controller.signal,
-      });
-
-      if (!controller.signal.aborted) res.json(result);
-    } catch (error) {
-      if (session?.controller.signal.aborted && !controller.signal.aborted)
-        res.status(410).json({ error: "Review cancelled" });
-      else if (!controller.signal.aborted) throw error;
-    } finally {
-      res.off("close", onClose);
-    }
-  });
-
-  app.get("/api/review-events/status", (req, res) => {
-    const target = markdownPathFromRequest(req, res);
-    if (!target) return;
-    const session = requestedReviewSession(req, res, target.absolutePath);
-    if (session === false) return;
-
-    const watcherCount = reviewEvents.waiterCountForDocument(
-      target.absolutePath,
-      session?.reviewId,
-    );
-    res.json({
-      documentPath: target.absolutePath,
-      projectPath: target.projectDir,
-      relativePath: target.relativePath,
-      watching: watcherCount > 0,
-      watcherCount,
-      ...(session ? { reviewId: session.reviewId, state: session.state } : {}),
-    });
-  });
+  registerReviewRoutes(app);
 
   app.put("/api/pages/:id", (req, res) => {
     const projectDir = projectDirFromRequest(req, res);
@@ -855,272 +443,9 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
     });
   });
 
-  app.get("/api/open-requests", (req, res) => {
-    const requestedPath =
-      typeof req.query.path === "string" && req.query.path.trim().length > 0
-        ? req.query.path.trim()
-        : null;
-    const client: OpenRequestClient = {
-      id: nextOpenRequestClientId,
-      path: requestedPath,
-      response: res,
-    };
-    nextOpenRequestClientId += 1;
+  registerOpenRequests(app);
 
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache, no-transform");
-    res.setHeader("Connection", "keep-alive");
-    res.flushHeaders?.();
-    res.write(
-      `event: connected\ndata: ${JSON.stringify({ id: client.id })}\n\n`,
-    );
-
-    openRequestClients.add(client);
-    const keepAlive = setInterval(() => {
-      res.write(": keep-alive\n\n");
-    }, 15_000);
-
-    req.on("close", () => {
-      clearInterval(keepAlive);
-      openRequestClients.delete(client);
-    });
-  });
-
-  app.post("/api/open-request", (req, res) => {
-    const payload = req.body as OpenRequestPayload;
-    const targetPath =
-      typeof payload.path === "string" && payload.path.trim().length > 0
-        ? payload.path.trim()
-        : null;
-    const targetUrl =
-      typeof payload.url === "string" && payload.url.trim().length > 0
-        ? payload.url.trim()
-        : null;
-
-    if (!targetPath || !targetUrl) {
-      res.status(400).json({ error: "path and url are required" });
-      return;
-    }
-
-    const matchingClient = Array.from(openRequestClients)
-      .reverse()
-      .find((client) => client.path === targetPath);
-
-    if (!matchingClient) {
-      res.json({ delivered: false });
-      return;
-    }
-
-    matchingClient.response.write(
-      `event: open-request\ndata: ${JSON.stringify({
-        path: targetPath,
-        url: targetUrl,
-      })}\n\n`,
-    );
-    res.json({ delivered: true });
-  });
-
-  app.post("/api/remote-document", (req, res) => {
-    if (!isAuthorizedRemoteDocumentRequest(req)) {
-      rejectUnauthorizedRemoteDocumentRequest(res);
-      return;
-    }
-    const payload = req.body as RemoteDocumentRegisterPayload;
-    const sessionId =
-      typeof payload.sessionId === "string" &&
-      payload.sessionId.trim().length > 0
-        ? payload.sessionId.trim()
-        : null;
-    const originPath =
-      typeof payload.originPath === "string" &&
-      payload.originPath.trim().length > 0
-        ? payload.originPath.trim()
-        : null;
-    const content =
-      typeof payload.content === "string" ? payload.content : null;
-
-    if (!sessionId || !originPath || content === null) {
-      res
-        .status(400)
-        .json({ error: "sessionId, originPath, and content are required" });
-      return;
-    }
-
-    if (remoteSessions.has(sessionId)) {
-      res.status(409).json({ error: "session already exists" });
-      return;
-    }
-
-    const session: RemoteSession = {
-      id: sessionId,
-      originPath,
-      content,
-      version: remoteSessionVersion(content),
-      saveClient: null,
-      viewers: new Set<Response>(),
-      disconnectedAt: null,
-    };
-    remoteSessions.set(sessionId, session);
-
-    const host = req.get("host");
-    const viewerUrl =
-      host !== undefined
-        ? `${req.protocol}://${host}/?session=${encodeURIComponent(sessionId)}`
-        : null;
-
-    res.status(201).json({
-      id: session.id,
-      version: session.version,
-      viewerUrl,
-    });
-  });
-
-  app.get("/api/remote-document/:id", (req, res) => {
-    if (!isAuthorizedRemoteDocumentRequest(req)) {
-      rejectUnauthorizedRemoteDocumentRequest(res);
-      return;
-    }
-    const session = remoteSessions.get(req.params.id);
-    if (!session) {
-      res.status(404).json({ error: "Remote document session not found" });
-      return;
-    }
-    res.json(remoteSessionView(session));
-  });
-
-  app.put("/api/remote-document/:id", (req, res) => {
-    if (!isAuthorizedRemoteDocumentRequest(req)) {
-      rejectUnauthorizedRemoteDocumentRequest(res);
-      return;
-    }
-    const session = remoteSessions.get(req.params.id);
-    if (!session) {
-      res.status(404).json({ error: "Remote document session not found" });
-      return;
-    }
-
-    const payload = req.body as RemoteDocumentSavePayload;
-    const content =
-      typeof payload.content === "string" ? payload.content : null;
-
-    if (content === null) {
-      res.status(400).json({ error: "content is required" });
-      return;
-    }
-
-    if (
-      typeof payload.expectedVersion === "string" &&
-      payload.expectedVersion !== session.version
-    ) {
-      res.status(409).json({
-        error: "Remote document changed",
-        current: remoteSessionView(session),
-      });
-      return;
-    }
-
-    session.content = content;
-    session.version = remoteSessionVersion(content);
-
-    let deliveredToClient = true;
-    if (session.saveClient) {
-      try {
-        writeRemoteSessionEvent(session.saveClient, "save", {
-          content: session.content,
-          version: session.version,
-        });
-      } catch {
-        deliveredToClient = false;
-        session.saveClient = null;
-        session.disconnectedAt = Date.now();
-      }
-    } else {
-      deliveredToClient = false;
-    }
-
-    if (!deliveredToClient) {
-      res.status(503).json({
-        error: "No active CLI session; save not delivered to disk.",
-        version: session.version,
-      });
-      return;
-    }
-
-    res.json({ id: session.id, version: session.version });
-  });
-
-  app.get("/api/remote-document/:id/events", (req, res) => {
-    if (!isAuthorizedRemoteDocumentRequest(req)) {
-      rejectUnauthorizedRemoteDocumentRequest(res);
-      return;
-    }
-    const session = remoteSessions.get(req.params.id);
-    if (!session) {
-      res.status(404).json({ error: "Remote document session not found" });
-      return;
-    }
-
-    const role = req.query.role === "viewer" ? "viewer" : "cli";
-
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache, no-transform");
-    res.setHeader("Connection", "keep-alive");
-    res.flushHeaders?.();
-
-    if (role === "cli") {
-      if (session.saveClient) {
-        session.saveClient.end();
-      }
-
-      session.saveClient = res;
-      session.disconnectedAt = null;
-
-      writeRemoteSessionEvent(res, "connected", {
-        id: session.id,
-        role,
-        version: session.version,
-      });
-      for (const viewer of session.viewers) {
-        writeRemoteSessionEvent(viewer, "connected", {
-          id: session.id,
-          role: "viewer",
-          version: session.version,
-        });
-      }
-    } else {
-      session.viewers.add(res);
-      writeRemoteSessionEvent(
-        res,
-        session.saveClient ? "connected" : "disconnected",
-        {
-          id: session.id,
-          role,
-          version: session.version,
-        },
-      );
-    }
-
-    const keepAlive = setInterval(() => {
-      res.write(": keep-alive\n\n");
-    }, REMOTE_SESSION_KEEPALIVE_MS);
-
-    req.on("close", () => {
-      clearInterval(keepAlive);
-      if (role === "cli" && session.saveClient === res) {
-        session.saveClient = null;
-        session.disconnectedAt = Date.now();
-        for (const viewer of session.viewers) {
-          writeRemoteSessionEvent(viewer, "disconnected", {
-            id: session.id,
-            role: "viewer",
-            version: session.version,
-          });
-        }
-      } else if (role === "viewer") {
-        session.viewers.delete(res);
-      }
-    });
-  });
+  registerRemoteDocuments(app, remoteDocumentToken);
 
   app.get("/api/directories", (req, res) => {
     const requestedPath =

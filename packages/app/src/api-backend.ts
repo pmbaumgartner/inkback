@@ -7,6 +7,7 @@ import {
   MarkdownFileConflictError,
   type Page,
   type ReviewWatchStatus,
+  type SaveIntent,
   type StorageBackend,
   type StoredAsset,
 } from "./storage";
@@ -71,7 +72,7 @@ export class ApiBackend implements StorageBackend {
   async saveMarkdownFile(
     relativePath: string,
     content: string,
-    expectedVersion?: string,
+    intent: SaveIntent,
   ): Promise<Page> {
     const res = await fetch(
       this.buildUrl("/api/markdown-file", { path: relativePath }),
@@ -80,7 +81,8 @@ export class ApiBackend implements StorageBackend {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           content,
-          expectedVersion,
+          expectedVersion:
+            intent.mode === "conditional" ? intent.expectedVersion : undefined,
           projectPath: this.info.projectPath,
         }),
       },
