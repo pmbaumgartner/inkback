@@ -362,3 +362,17 @@ The two proposals do not depend on one another. Separating them keeps packaging 
 - [3.31.4 CodeBlock implementation](https://unpkg.com/@tiptap/extension-code-block@3.31.4/src/code-block.ts).
 
 The versioned sources take precedence over changing latest-version documentation. Scratch results are diagnostic evidence, not a tested implementation plan or a production compatibility guarantee.
+
+### Installed release verification (sp3j, 2026-10-03)
+
+Changed paths: `scripts/test-package.mjs` and this outcome document; no
+production runtime code changed. Parent review reran package smoke, the
+injected-failure path, lint, and all 119 server tests. The first full server run
+had an HTTP parse error in the unrelated review-receipt retry test; that test
+passed in a focused rerun and the subsequent full 119-test run passed.
+Existing CLI tests cover full-dev frontend selection with a mocked proxy;
+the new external-install checks exercise preview-web matching, not a real
+development proxy. Cleanup now requires the confirmed owned PID to exit,
+escalating to SIGKILL if necessary, as well as verifying HTTP shutdown.
+
+On macOS (darwin, Node 24), `pnpm test:package` passed against an npm-packed, externally installed release. The harness now checks detached child survival after CLI exit, HTTP status root/PID, HTML and every referenced built JS/CSS asset, same-install reuse, foreign-install status and stop rejection on the same preferred port, installed frontend identity matching/rejection and checkout frontend matching, and owned-process stop in normal and injected-failure paths. Exact CLI/MCP versions, skill/license, and MCP UI checks remain in the installed harness. `pnpm typecheck`, `pnpm lint`, and `pnpm test:smoke` passed (17 Chromium smoke tests). `pnpm build:mcpb` passed manifest validation and MCP smoke; archive inspection confirmed `manifest.json`, `LICENSE`, installed license, both HTML assets, `packages/server/bin/inkback.mjs`, and `packages/server/dist/child.js` inside the MCPB (5.9 MB, 1,684 files). A reversible `INKBACK_TEST_INJECT_FAILURE=after-start pnpm test:package` run failed intentionally and left no child from that run. Checkout foreign-frontend rejection and full-dev proxy/status matching were not exercised (rejecting a foreign frontend through `open` would start another checkout server). No desktop-host manual launch, non-macOS runtime check, or marketplace publication was performed; desktop host transport compatibility remains unverified.
