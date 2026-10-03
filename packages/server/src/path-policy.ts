@@ -56,16 +56,23 @@ export function createPathPolicy(options: PolicyOptions = {}) {
       `Inkback writable directories: ${entries.map((entry) => `${entry.path} (${entry.source})`).join(", ") || "none"}`,
     );
   }
-  function realTarget(target: string) {
+  function realTarget(target: string): string {
     try {
       return fs.realpathSync(target);
     } catch {
-      return path.join(
-        fs.realpathSync(path.dirname(target)),
-        path.basename(target),
-      );
+      // A dangling symlink is not a new path in its parent directory.
+      try {
+        if (fs.lstatSync(target).isSymbolicLink())
+          throw new Error("Dangling symlink");
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+      const parent = path.dirname(target);
+      if (parent === target) throw new Error("Unavailable filesystem root");
+      return path.join(realTarget(parent), path.basename(target));
     }
   }
+
   function isWritable(target: string): boolean {
     try {
       return entries.some((entry) => isInside(entry.path, realTarget(target)));

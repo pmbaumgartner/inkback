@@ -12,7 +12,11 @@ describe("review session receipts", () => {
   beforeEach(() => {
     projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "inkback-receipts-"));
     fs.writeFileSync(path.join(projectDir, "draft.md"), "# Draft\n");
-    app = createApp({ homeDir: projectDir, staticDirPath: projectDir }).app;
+    app = createApp({
+      projectDir,
+      homeDir: projectDir,
+      staticDirPath: projectDir,
+    }).app;
   });
 
   afterEach(() => {

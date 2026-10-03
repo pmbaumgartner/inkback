@@ -1,7 +1,19 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Request, Response } from "express";
+import type { PathPolicy } from "./path-policy.js";
+export function authorizePath(
+  req: Request,
+  res: Response,
+  target: string,
+): boolean {
+  if ((req.app.locals.pathPolicy as PathPolicy).isWritable(target)) return true;
+  res.status(403).json({ error: "Path is outside the allowed directories" });
+  return false;
+}
 export function ensureProjectPath(
+  req: Request,
+  res: Response,
   projectDir: string,
   relativePath: string,
 ): string | null {
@@ -10,17 +22,20 @@ export function ensureProjectPath(
   const relative = path.relative(projectDir, absolute);
 
   if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    res.status(404).json({ error: "Invalid project path" });
     return null;
   }
 
-  return absolute;
+  return authorizePath(req, res, absolute) ? absolute : null;
 }
 
 export function pageFilePathFromId(
+  req: Request,
+  res: Response,
   projectDir: string,
   id: string,
 ): string | null {
-  return ensureProjectPath(projectDir, `${id}.md`);
+  return ensureProjectPath(req, res, projectDir, `${id}.md`);
 }
 
 export function isExistingDirectory(dir: string): boolean {
@@ -56,6 +71,7 @@ export function projectDirFromRequest(
   }
 
   const resolvedProjectDir = path.resolve(nextProjectPath);
+  if (!authorizePath(req, res, resolvedProjectDir)) return null;
   const mustExist = options?.mustExist ?? true;
 
   if (mustExist && !isExistingDirectory(resolvedProjectDir)) {
@@ -80,8 +96,9 @@ export function markdownPathFromRequest(
       : !options?.queryPathOnly && typeof req.body?.path === "string"
         ? req.body.path
         : "";
-  const absolutePath = ensureProjectPath(projectDir, relativePath);
+  const absolutePath = ensureProjectPath(req, res, projectDir, relativePath);
 
+  if (res.headersSent) return null;
   if (!absolutePath?.toLowerCase().endsWith(".md")) {
     res.status(404).json({ error: "Markdown file not found" });
     return null;

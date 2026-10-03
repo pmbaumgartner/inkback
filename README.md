@@ -22,6 +22,8 @@ node packages/server/bin/inkback.mjs open /absolute/path/to/document.md
 
 The open command waits for Finish review. Use `--no-watch` to open without waiting for a review handoff. Run `help` for other CLI commands.
 
+The browser server listens on loopback addresses and accepts local Host and Origin hostnames. Filesystem access is limited to the initial project directory and `INKBACK_ALLOWED_DIRS` (separated by the platform path delimiter); without either, it uses the working directory. Restart the server with the required allowed directories when opening files elsewhere. The project picker can list directories without granting access to their files.
+
 ## Verify
 
 ```bash

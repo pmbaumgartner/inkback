@@ -34,7 +34,7 @@ Overall notes from Finish review are document-level comments in endmatter for wr
 
 ## Markup format
 
-Markers: comment `{>>text<<}`, insertion `{++text++}`, deletion `{--text--}`, substitution `{~~old~>new~~}`, highlight `{==text==}`. Ignore markers inside code spans and fenced code; they are literal examples.
+Markers: comment `{>>text<<}`, insertion `{++text++}`, deletion `{--text--}`, substitution `{~~old~>new~~}`, highlight `{==text==}`. Markers inside inline code spans are literal examples. Review markup inside fenced code is included in feedback.
 
 Prefer compact references with final YAML endmatter. Anchored comments and suggestions keep their text inline with an ID like `{#c1}`; metadata lives under `comments:` or `suggestions:`. Replies and document-level comments have no inline anchor and store their text in `body`. A reply has `re` pointing to its parent comment or suggestion; a document-level comment has no `re`.
 

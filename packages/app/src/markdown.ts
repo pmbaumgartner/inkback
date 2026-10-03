@@ -1,6 +1,6 @@
-import DOMPurify from "dompurify";
 import { parseRfmEndmatter } from "@inkback/rfm";
 import { tables, taskListItems } from "@joplin/turndown-plugin-gfm";
+import DOMPurify from "dompurify";
 import { marked } from "marked";
 import TurndownService from "turndown";
 
@@ -57,67 +57,32 @@ function createRawMarkdownBlock(markdown: string): string {
   )}"></div>\n`;
 }
 
-function protectRawHtmlBlocks(markdown: string): string {
-  return markdown
-    .replace(
-      /^[ \t]*<details\b[\s\S]*?<\/details>[ \t]*(?:\r?\n|$)/gim,
-      (raw) => createRawMarkdownBlock(raw),
-    )
-    .replace(/^[ \t]*<!--[\s\S]*?-->[ \t]*(?:\r?\n|$)/gm, (raw) =>
-      createRawMarkdownBlock(raw),
-    );
-}
-
-function protectIndentedCodeAfterLists(markdown: string): string {
-  return markdown.replace(
-    /^(?:[-*+]|\d+[.)]) [^\r\n]*(?:\r?\n)[ \t]*(?:\r?\n)(?:(?: {4}|\t)[^\r\n]*(?:\r?\n|$))+/gm,
-    (raw) => createRawMarkdownBlock(raw),
-  );
-}
-
-function codeSpanContainsPipe(value: string): boolean {
-  return /`[^`\n]*\|[^`\n]*`/.test(value);
-}
-
-function protectPipeSensitiveTables(markdown: string): string {
-  const lines = markdown.match(/[^\r\n]*(?:\r?\n|$)/g) ?? [];
-  const output: string[] = [];
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index] ?? "";
-    const nextLine = lines[index + 1] ?? "";
-
-    if (
-      !line.includes("|") ||
-      !/^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(nextLine)
-    ) {
-      output.push(line);
-      continue;
-    }
-
-    const tableLines = [line, nextLine];
-    index += 2;
-
-    while (index < lines.length) {
-      const row = lines[index] ?? "";
-      if (!row.trim() || !row.includes("|")) break;
-      tableLines.push(row);
-      index += 1;
-    }
-
-    const raw = tableLines.join("");
-    const needsProtection = raw.includes("\\|") || codeSpanContainsPipe(raw);
-    output.push(needsProtection ? createRawMarkdownBlock(raw) : raw);
-    index -= 1;
-  }
-
-  return output.join("");
-}
-
 export function protectRichTextRoundTripMarkdown(markdown: string): string {
-  return protectPipeSensitiveTables(
-    protectIndentedCodeAfterLists(protectRawHtmlBlocks(markdown)),
-  );
+  const supported = new Set([
+    "paragraph",
+    "heading",
+    "list",
+    "blockquote",
+    "code",
+    "hr",
+    "table",
+    "space",
+  ]);
+  let cursor = 0;
+  let output = "";
+  for (const token of marked.lexer(markdown, { gfm: true })) {
+    const start = markdown.indexOf(token.raw, cursor);
+    if (start < 0) continue;
+    output += markdown.slice(cursor, start);
+    const unsupported =
+      !supported.has(token.type) ||
+      (token.type === "table" &&
+        (token.raw.includes("\\|") || /`[^`\n]*\|[^`\n]*`/.test(token.raw))) ||
+      (token.type === "list" && /\n[ \t]*\n(?: {4}|\t)/.test(token.raw));
+    output += unsupported ? createRawMarkdownBlock(token.raw) : token.raw;
+    cursor = start + token.raw.length;
+  }
+  return output + markdown.slice(cursor);
 }
 
 function normalizeMarkdownPath(path: string): string {
@@ -396,9 +361,6 @@ export function createTurndownService(): TurndownService {
       return `\n\n${caption}${lines.join("\n")}\n\n`;
     },
   });
-
-  // We own the markdown parser and want stable round-trips without doubled escapes.
-  service.escape = (value: string) => value;
 
   service.addRule("markdownAwareLinks", {
     filter: "a",

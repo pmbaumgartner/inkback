@@ -66,15 +66,18 @@ export function buildTargetUrl(baseUrl: string, openPath: string): string {
 export async function sendOpenRequestToExistingWindow(
   deps: CliDependencies,
   baseUrl: string,
-  targetUrl: string,
   openPath: string,
+  reviewId?: string,
 ): Promise<boolean> {
   try {
     const requestUrl = new URL("/api/open-request", baseUrl);
     const response = await deps.fetchImpl(requestUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: openPath, url: targetUrl }),
+      body: JSON.stringify({
+        path: openPath,
+        reviewId,
+      }),
       signal: AbortSignal.timeout(STATUS_TIMEOUT_MS),
     });
 

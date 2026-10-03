@@ -1,34 +1,32 @@
+import { createInkbackMcpServer } from "./mcp/server";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { createInkbackMcpServer } from "./mcp/server";
+import { createMcpHarness } from "../test-support/mcp-harness";
 
 let directory: string;
 let documentPath: string;
 let client: Client;
-let instance: ReturnType<typeof createInkbackMcpServer>;
+let harness: Awaited<ReturnType<typeof createMcpHarness>>;
+let instance: typeof harness.instance;
 beforeEach(async () => {
   directory = fs.mkdtempSync(path.join(os.tmpdir(), "inkback-app-tools-"));
   documentPath = path.join(directory, "draft.md");
   fs.writeFileSync(documentPath, "# Draft\n\n{>>Question<<}{#c1}\n");
   const htmlPath = path.join(directory, "ui.html");
   fs.writeFileSync(htmlPath, "<!doctype html><h1>Inkback</h1>");
-  instance = createInkbackMcpServer({
+  harness = await createMcpHarness({
     directories: [directory],
     env: {},
     htmlPath,
     log: () => {},
   });
-  client = new Client({ name: "test", version: "1" });
-  const [local, remote] = InMemoryTransport.createLinkedPair();
-  await instance.server.connect(remote);
-  await client.connect(local);
+  ({ client, instance } = harness);
 });
 afterEach(async () => {
-  await client.close();
-  await instance.server.close();
+  await harness.close();
   fs.rmSync(directory, { recursive: true, force: true });
 });
 async function call(name: string, args: Record<string, unknown> = {}) {

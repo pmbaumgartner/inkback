@@ -1,12 +1,9 @@
-import { openExternalLink } from "./mcp-app/host-bridge";
 import type { Editor } from "@tiptap/react";
 import { useEditorState } from "@tiptap/react";
-import type { ReactNode } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Bold,
-  Code2,
   Check,
+  Code2,
   ExternalLink,
   Italic,
   Link2,
@@ -17,6 +14,8 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import type { ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getAddCommentShortcutLabel,
   matchesAddCommentShortcut,
@@ -27,10 +26,12 @@ import {
   TooltipTrigger,
 } from "./components/ui/tooltip";
 import { toHtml } from "./markdown";
+import { openExternalLink } from "./mcp-app/host-bridge";
 import type { StorageBackend } from "./storage";
 
 interface EditorContextMenuProps {
   editor: Editor | null;
+  readOnly?: boolean;
   backend: StorageBackend;
   resolveLinkUrl?: (path: string) => string | null;
   onAddComment?: () => void;
@@ -206,6 +207,7 @@ function SelectionMenuButton({
 
 export function EditorContextMenu({
   editor,
+  readOnly = false,
   backend,
   resolveLinkUrl,
   onAddComment,
@@ -667,7 +669,7 @@ export function EditorContextMenu({
       }}
     >
       {children}
-      {renderedSelectionMenu ? (
+      {!readOnly && renderedSelectionMenu ? (
         <div
           className="absolute z-30 -translate-x-1/2 -translate-y-full"
           style={{
@@ -810,7 +812,7 @@ export function EditorContextMenu({
           </div>
         </div>
       ) : null}
-      {linkPopoverState ? (
+      {!readOnly && linkPopoverState ? (
         <div
           ref={linkPopoverRef}
           data-testid="link-popover"
@@ -900,7 +902,7 @@ export function EditorContextMenu({
           </button>
         </div>
       ) : null}
-      {position ? (
+      {!readOnly && position ? (
         <div
           ref={menuRef}
           data-testid="editor-context-menu"

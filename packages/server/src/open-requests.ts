@@ -8,7 +8,7 @@ interface OpenRequestClient {
 
 interface OpenRequestPayload {
   path?: string;
-  url?: string;
+  reviewId?: string;
 }
 
 export function registerOpenRequests(app: Express) {
@@ -51,15 +51,12 @@ export function registerOpenRequests(app: Express) {
       typeof payload.path === "string" && payload.path.trim().length > 0
         ? payload.path.trim()
         : null;
-    const targetUrl =
-      typeof payload.url === "string" && payload.url.trim().length > 0
-        ? payload.url.trim()
-        : null;
-
-    if (!targetPath || !targetUrl) {
-      res.status(400).json({ error: "path and url are required" });
+    if (!targetPath) {
+      res.status(400).json({ error: "path is required" });
       return;
     }
+    const reviewId =
+      typeof payload.reviewId === "string" ? payload.reviewId : undefined;
 
     const matchingClient = Array.from(openRequestClients)
       .reverse()
@@ -73,7 +70,7 @@ export function registerOpenRequests(app: Express) {
     matchingClient.response.write(
       `event: open-request\ndata: ${JSON.stringify({
         path: targetPath,
-        url: targetUrl,
+        reviewId,
       })}\n\n`,
     );
     res.json({ delivered: true });

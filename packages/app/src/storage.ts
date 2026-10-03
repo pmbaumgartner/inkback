@@ -43,11 +43,10 @@ export interface ReviewWatchStatus {
 }
 
 export interface BackendInfo {
-  kind: "local-files" | "local-storage" | "remote" | "mcp-app";
+  kind: "local-files" | "local-storage" | "mcp-app";
   label: string;
   detail: string;
   projectPath?: string;
-  sessionId?: string;
   originPath?: string;
 }
 

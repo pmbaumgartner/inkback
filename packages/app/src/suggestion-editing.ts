@@ -21,7 +21,7 @@ declare module "@tiptap/core" {
 }
 
 export function documentChangeIds(doc: Node) {
-  const ids = new Set<string>();
+  const ids = new Set<string>(doc.attrs.reviewIds ?? []);
   doc.descendants((node) => {
     for (const mark of node.marks) {
       if (

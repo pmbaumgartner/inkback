@@ -136,11 +136,15 @@ export function App({
     const handleOpenRequest = (event: Event) => {
       try {
         const payload = JSON.parse((event as MessageEvent<string>).data) as {
-          url?: unknown;
+          path?: unknown;
+          reviewId?: unknown;
         };
-        if (typeof payload.url !== "string" || !payload.url.trim()) return;
+        if (typeof payload.path !== "string" || !payload.path.trim()) return;
 
-        const nextUrl = new URL(payload.url, window.location.origin);
+        const nextUrl = new URL("/", window.location.origin);
+        nextUrl.searchParams.set("path", payload.path);
+        if (typeof payload.reviewId === "string")
+          nextUrl.searchParams.set("reviewId", payload.reviewId);
         window.focus();
         if (nextUrl.href !== window.location.href) {
           window.location.assign(nextUrl.href);
@@ -171,8 +175,8 @@ export function App({
 
         setBackend(detectedBackend);
 
-        if (bootstrap || detectedBackend.info.kind === "remote") {
-          const documentPath = detectedBackend.info.detail || "remote.md";
+        if (bootstrap) {
+          const documentPath = detectedBackend.info.detail;
           await loadDocument(detectedBackend, documentPath, () => cancelled);
           if (cancelled) return;
           setLoading(false);

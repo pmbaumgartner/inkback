@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DocumentEditorViewMode } from "./app-navigation";
-import { RemoteSessionBanner } from "./components/RemoteSessionBanner";
 import { Button } from "./components/ui/button";
 import {
   Popover,
@@ -430,7 +429,6 @@ export function DocumentWorkspace({
         conflictNotice ? "pt-40 sm:pt-28" : "pt-10",
       )}
     >
-      <RemoteSessionBanner backend={backend} />
       {documentPage ? (
         <div
           className={cn(

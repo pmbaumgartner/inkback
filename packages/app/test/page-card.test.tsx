@@ -1,6 +1,5 @@
 import type { Editor } from "@tiptap/react";
 import { act } from "react";
-import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   DocumentSaveController,
@@ -10,6 +9,8 @@ import { DocumentSaveController as SaveController } from "../src/DocumentSaveCon
 import { shouldDismissCommentThread } from "../src/editor-review";
 import { PageCard } from "../src/PageCard";
 import type { Page, StorageBackend } from "../src/storage";
+import { createBackend } from "./support/backend";
+import { createReactHarness } from "./support/react-harness";
 
 function createDomRect({
   left = 0,
@@ -35,65 +36,6 @@ function createDomRect({
       return this;
     },
   } as DOMRect;
-}
-
-function createBackend(): StorageBackend {
-  return {
-    info: {
-      kind: "local-storage",
-      label: "Test backend",
-      detail: "In-memory",
-    },
-    canManageProjects: false,
-    async listPages() {
-      return [];
-    },
-    async getPage(id) {
-      return { id, title: id, content: "" };
-    },
-    async getMarkdownFile(relativePath) {
-      return { id: relativePath, title: relativePath, content: "" };
-    },
-    async savePage() {},
-    async saveMarkdownFile() {
-      return undefined;
-    },
-    async createPage(title = "Untitled", content = "") {
-      return { id: title, title, content };
-    },
-    async deletePage() {},
-    async saveAsset(file) {
-      return {
-        markdownPath: file.name,
-        previewUrl: `file://${file.name}`,
-        mimeType: file.type || "application/octet-stream",
-      };
-    },
-    resolveFileUrl(path) {
-      return `file://${path}`;
-    },
-    async listDirectories(path = ".") {
-      return {
-        path,
-        parentPath: null,
-        directories: [],
-      };
-    },
-    async listFileSystem(path = ".") {
-      return {
-        path,
-        displayPath: path,
-        parentPath: null,
-        directories: [],
-        files: [],
-      };
-    },
-    async listProjectTree() {
-      return { paths: [] };
-    },
-    async openProject() {},
-    async createProject() {},
-  };
 }
 
 function findTextRange(editor: Editor, text: string) {
@@ -124,9 +66,11 @@ async function flushReact() {
 
 async function flushAnimationFrame() {
   await act(async () => {
-    await new Promise<void>((resolve) => {
-      requestAnimationFrame(() => resolve());
-    });
+    if (vi.isFakeTimers()) vi.advanceTimersToNextFrame();
+    else
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve());
+      });
   });
 }
 
@@ -143,6 +87,7 @@ async function selectText(editor: Editor, text: string) {
   });
 
   await flushReact();
+  await flushAnimationFrame();
 }
 
 async function addCommentWithShortcut() {
@@ -295,9 +240,7 @@ const cleanups: Array<() => Promise<void>> = [];
 async function renderPageCard(
   options: PageCardTestOptions = {},
 ): Promise<RenderedPageCard> {
-  const container = document.createElement("div");
-  document.body.appendChild(container);
-  const root = createRoot(container);
+  const { container, root } = createReactHarness();
   const backend = options.backend ?? createBackend();
   const onSave = vi.fn().mockResolvedValue(undefined);
   const onSaveStateChange = vi.fn();
@@ -1310,7 +1253,7 @@ describe("PageCard editor integration", () => {
     ).not.toBeNull();
   });
 
-  it("document code mode does not keep rail space for fenced CriticMarkup examples", async () => {
+  it("document code mode keeps review controls for fenced CriticMarkup", async () => {
     const rendered = await renderPageCard({
       page: {
         id: "doc-code-examples",
@@ -1332,10 +1275,10 @@ describe("PageCard editor integration", () => {
       rendered.container
         .querySelector('[data-testid="document-page-shell"]')
         ?.classList.contains("document-page-shell-no-comments"),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       queryByTestId(rendered.container, "document-review-rail"),
-    ).toBeNull();
+    ).not.toBeNull();
   });
 
   it("document code mode shows line numbers without the default dotted focus outline", async () => {
@@ -1485,8 +1428,7 @@ describe("PageCard editor integration", () => {
 
     await selectText(editor, "alpha");
     expect(
-      queryByTestId(rendered.container, "document-comment-fallback")
-        ?.textContent,
+      queryByTestId(rendered.container, "document-review-rail")?.textContent,
     ).toContain("Comment body");
 
     await act(async () => {
@@ -1502,8 +1444,7 @@ describe("PageCard editor integration", () => {
     });
 
     expect(
-      queryByTestId(rendered.container, "document-comment-fallback")
-        ?.textContent,
+      queryByTestId(rendered.container, "document-review-rail")?.textContent,
     ).toContain("Comment body");
   });
 
@@ -1553,7 +1494,7 @@ describe("PageCard editor integration", () => {
     expect(rendered.getEditor().getText()).toContain("Start updated");
   });
 
-  it("comment selection still updates fallback UI", async () => {
+  it("comment selection expands the review thread", async () => {
     const rendered = await renderPageCard({
       page: {
         id: "doc-5",
@@ -1566,8 +1507,7 @@ describe("PageCard editor integration", () => {
     await selectText(rendered.getEditor(), "alpha");
 
     expect(
-      queryByTestId(rendered.container, "document-comment-fallback")
-        ?.textContent,
+      queryByTestId(rendered.container, "document-review-rail")?.textContent,
     ).toContain("Comment body");
     expect(rendered.container.textContent).toContain("Me");
   });
@@ -1585,11 +1525,12 @@ describe("PageCard editor integration", () => {
     await selectText(rendered.getEditor(), "target");
     await addCommentWithShortcut();
 
+    await flushAnimationFrame();
     vi.useFakeTimers();
 
     const commentEditor = queryByTestId<HTMLTextAreaElement>(
       rendered.container,
-      "comment-banner-c1-editor",
+      "comment-rail-c1-editor",
     );
     expect(commentEditor).not.toBeNull();
 
@@ -1612,7 +1553,7 @@ describe("PageCard editor integration", () => {
 
     const saveButton = queryByTestId<HTMLButtonElement>(
       rendered.container,
-      "comment-banner-c1-action-save",
+      "comment-rail-c1-action-save",
     );
     expect(saveButton).not.toBeNull();
     expect(saveButton?.className).toContain("rounded-xl");
@@ -1623,7 +1564,7 @@ describe("PageCard editor integration", () => {
     expect(
       queryByTestId<HTMLButtonElement>(
         rendered.container,
-        "comment-banner-c1-action-cancel",
+        "comment-rail-c1-action-cancel",
       ),
     ).toBeNull();
 
@@ -1659,7 +1600,7 @@ describe("PageCard editor integration", () => {
 
     const nestedEditButton = getByTestId<HTMLButtonElement>(
       rendered.container,
-      "comment-banner-child-action-edit",
+      "comment-rail-child-action-edit",
     );
 
     vi.useFakeTimers();
@@ -1678,7 +1619,7 @@ describe("PageCard editor integration", () => {
 
     const replyEditor = queryByTestId<HTMLTextAreaElement>(
       rendered.container,
-      "comment-banner-c1-editor",
+      "comment-rail-c1-editor",
     );
     expect(replyEditor).not.toBeNull();
 
@@ -1711,7 +1652,7 @@ comments:
     await selectText(rendered.getEditor(), "alpha");
     const replyButton = getByTestId<HTMLButtonElement>(
       rendered.container,
-      "comment-banner-child-action-reply",
+      "comment-rail-child-action-reply",
     );
     await act(async () => {
       replyButton.click();
@@ -1719,8 +1660,63 @@ comments:
     await flushReact();
 
     expect(
-      queryByTestId(rendered.container, "comment-banner-c1-editor"),
+      queryByTestId(rendered.container, "comment-rail-c1-editor"),
     ).not.toBeNull();
+  });
+
+  it("undo restores the deleted comment record and anchor", async () => {
+    const rendered = await renderPageCard({
+      page: {
+        id: "undo",
+        title: "Undo",
+        content:
+          '{==alpha==}{>>Keep this comment<<}{id="c1" by="user" at="2026-04-25T23:56:00Z"}\n',
+      },
+    });
+    await selectText(rendered.getEditor(), "alpha");
+    const button = queryByTestId<HTMLButtonElement>(
+      rendered.container,
+      "comment-rail-c1-action-delete-thread",
+    );
+    expect(button).not.toBeNull();
+    await act(async () => {
+      button!.click();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await rendered.getSaveController().flushSave();
+    });
+    await act(async () => {
+      rendered.getEditor().commands.undo();
+      await Promise.resolve();
+    });
+    await rendered.getSaveController().flushSave();
+    expect(rendered.onSave.mock.calls.at(-1)?.[1]).toContain(
+      "Keep this comment",
+    );
+  });
+
+  it("viewing mode rejects document mutations and still accepts external reloads", async () => {
+    const rendered = await renderPageCard({
+      interactionMode: "viewing",
+      page: {
+        id: "view",
+        title: "View",
+        content:
+          'Text {++suggestion++}{id="s1" by="AI" at="2026-04-25T23:56:00Z"}\n',
+      },
+    });
+    const editor = rendered.getEditor();
+    const before = editor.getJSON();
+    await act(async () => {
+      editor.chain().acceptCriticChange("s1").insertContent("changed").run();
+    });
+    expect(editor.getJSON()).toEqual(before);
+    expect(rendered.onSave).not.toHaveBeenCalled();
+    await rendered.rerender({
+      page: { id: "view", title: "View", content: "Reloaded\n" },
+    });
+    expect(rendered.getEditor().getText()).toBe("Reloaded");
   });
 
   it("deletes a whole root comment thread from the thread action", async () => {
@@ -1738,7 +1734,7 @@ comments:
 
     const deleteThreadButton = queryByTestId<HTMLButtonElement>(
       rendered.container,
-      "comment-banner-root-action-delete-thread",
+      "comment-rail-root-action-delete-thread",
     );
     expect(deleteThreadButton).not.toBeNull();
 

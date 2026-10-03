@@ -1,22 +1,17 @@
-import type { StorageBackend } from "./storage";
 import { ApiBackend } from "./api-backend";
 import { LocalStorageBackend } from "./local-storage-backend";
-import { RemoteBackend } from "./remote-backend";
+import type { StorageBackend } from "./storage";
 
 interface StatusPayload {
   backend?: string;
   projectDir?: string;
   stateless?: boolean;
-  capabilities?: { remoteDocuments?: boolean };
 }
 
 export async function detectBackend(): Promise<StorageBackend> {
   if (import.meta.env.VITE_PREVIEW_WEB === "1") {
     return new LocalStorageBackend();
   }
-
-  const sessionId = readSessionIdFromUrl();
-  const token = readTokenFromUrl();
 
   let statusPayload: StatusPayload | null = null;
 
@@ -30,15 +25,6 @@ export async function detectBackend(): Promise<StorageBackend> {
   }
 
   if (statusPayload) {
-    if (sessionId && statusPayload.capabilities?.remoteDocuments) {
-      try {
-        return await RemoteBackend.create(sessionId, token);
-      } catch (error) {
-        console.error("Could not initialize remote backend:", error);
-        throw error;
-      }
-    }
-
     if (statusPayload.backend === "local-files") {
       return new ApiBackend({
         kind: "local-files",
@@ -52,17 +38,4 @@ export async function detectBackend(): Promise<StorageBackend> {
   }
 
   return new LocalStorageBackend();
-}
-
-function readSessionIdFromUrl(): string | null {
-  if (typeof window === "undefined") return null;
-  const params = new URLSearchParams(window.location.search);
-  const session = params.get("session")?.trim();
-  return session && session.length > 0 ? session : null;
-}
-
-function readTokenFromUrl(): string {
-  if (typeof window === "undefined") return "";
-  const params = new URLSearchParams(window.location.search);
-  return params.get("token")?.trim() ?? "";
 }

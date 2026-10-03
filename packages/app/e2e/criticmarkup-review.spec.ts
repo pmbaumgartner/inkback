@@ -1,26 +1,16 @@
-import { expect, type Page, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import {
-  createMarkdownProject,
   openMarkdownFile,
   readProjectFile,
-  removeMarkdownProject,
   selectRichText,
   writeProjectFile,
 } from "./helpers";
 
 test.describe("CriticMarkup review flows", () => {
-  let projectDir: string;
-
-  test.beforeEach(() => {
-    projectDir = createMarkdownProject("criticmarkup");
-  });
-
-  test.afterEach(() => {
-    removeMarkdownProject(projectDir);
-  });
-
   test("renders a comment thread and saves a reply @smoke", async ({
     page,
+    projectDir,
   }) => {
     const filePath = writeProjectFile(
       projectDir,
@@ -38,19 +28,12 @@ test.describe("CriticMarkup review flows", () => {
       "Needs detail",
     );
 
-    await page
-      .getByTestId("comment-rail-c1-action-reply")
-      .evaluate((element) => {
-        (element as HTMLButtonElement).click();
-      });
+    await page.getByTestId("comment-thread-c1").click();
+    await page.getByTestId("comment-rail-c1-action-reply").click();
     await page
       .getByTestId("comment-rail-c2-editor")
       .fill("Added context looks good.");
-    await page
-      .getByTestId("comment-rail-c2-action-save")
-      .evaluate((element) => {
-        (element as HTMLButtonElement).click();
-      });
+    await page.getByTestId("comment-rail-c2-action-save").click();
 
     await expect
       .poll(() => readProjectFile(projectDir, "comment.md"))
@@ -60,6 +43,7 @@ test.describe("CriticMarkup review flows", () => {
 
   test("reloads endmatter replies and saves a nested reply @smoke", async ({
     page,
+    projectDir,
   }) => {
     const filePath = writeProjectFile(
       projectDir,
@@ -105,6 +89,7 @@ comments:
 
   test("creates a new root comment and saves it to disk @smoke", async ({
     page,
+    projectDir,
   }) => {
     const filePath = writeProjectFile(
       projectDir,
@@ -134,6 +119,7 @@ comments:
 
   test("animates the document layout when the review rail appears and disappears @smoke", async ({
     page,
+    projectDir,
   }) => {
     const filePath = writeProjectFile(
       projectDir,
@@ -176,6 +162,7 @@ comments:
 
   test("shows tooltips for selection menu formatting actions", async ({
     page,
+    projectDir,
   }) => {
     const filePath = writeProjectFile(
       projectDir,
@@ -212,8 +199,39 @@ comments:
     );
   });
 
+  test("composes and resolves suggestions on a narrow screen", async ({
+    page,
+    projectDir,
+  }) => {
+    await page.setViewportSize({ width: 800, height: 900 });
+    const filePath = writeProjectFile(
+      projectDir,
+      "narrow.md",
+      'Text {++suggestion++}{id="s1" by="AI" at="2026-04-23T18:00:00Z"}.\n',
+    );
+    await openMarkdownFile(page, filePath);
+    await expect(page.getByTestId("document-review-rail")).toBeVisible();
+    await page.getByTestId("comment-rail-s1-action-accept").click();
+    await expect
+      .poll(() => readProjectFile(projectDir, "narrow.md"))
+      .toContain("Text suggestion.");
+    await page.getByTestId("rich-text-editor").click({ button: "right" });
+    await page
+      .getByTestId("editor-context-menu-action-suggest-insertion")
+      .click();
+    await expect(page.getByTestId("draft-suggestion-editor")).toBeVisible();
+    await page
+      .getByTestId("draft-suggestion-editor")
+      .fill("Narrow screen insertion");
+    await page.getByTestId("draft-suggestion-action-apply").click();
+    await expect
+      .poll(() => readProjectFile(projectDir, "narrow.md"))
+      .toContain("Narrow screen insertion");
+  });
+
   test("accepts and rejects suggested changes on disk @smoke", async ({
     page,
+    projectDir,
   }) => {
     const filePath = writeProjectFile(
       projectDir,

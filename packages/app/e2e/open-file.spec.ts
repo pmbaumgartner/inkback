@@ -4,6 +4,7 @@ import {
   createMarkdownProject,
   openMarkdownFile,
   removeMarkdownProject,
+  richTextEditor,
   writeProjectFile,
 } from "./helpers";
 
@@ -87,16 +88,12 @@ test.describe("opening local markdown files", () => {
     await openMarkdownFile(page, filePath, "code");
     await expect(codeEditor(page)).toContainText("Existing window body.");
 
-    const targetUrl = `/?${new URLSearchParams({
-      path: filePath,
-      editor: "code",
-    }).toString()}`;
     const response = await page.request.post("/api/open-request", {
-      data: { path: filePath, url: targetUrl },
+      data: { path: filePath },
     });
 
     expect(response.ok()).toBe(true);
     await expect(response.json()).resolves.toEqual({ delivered: true });
-    await expect(codeEditor(page)).toContainText("Existing window body.");
+    await expect(richTextEditor(page)).toContainText("Existing window body.");
   });
 });

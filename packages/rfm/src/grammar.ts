@@ -489,6 +489,7 @@ export function scanReview(
   markdown: string,
   endOffset: number,
   diagnostic: DiagnosticSink,
+  options: { code?: boolean } = {},
 ): ReviewToken[] {
   const tokens: ReviewToken[] = [];
   let offset = 0;
@@ -502,11 +503,8 @@ export function scanReview(
         continue;
       }
     }
-    if (fence) {
-      offset = nextLineOffset(markdown, offset);
-      continue;
-    }
-    const codeEnd = matchInlineCodeSpan(markdown, offset);
+    const codeEnd =
+      fence || options.code ? null : matchInlineCodeSpan(markdown, offset);
     if (codeEnd !== null) {
       offset = codeEnd;
       continue;
@@ -522,6 +520,24 @@ export function scanReview(
         );
         offset += 3;
         continue;
+      }
+      const innerStart = offset + 3;
+      for (const inner of scanReview(
+        highlight.text,
+        highlight.text.length,
+        (severity, code, message, position) =>
+          diagnostic(severity, code, message, innerStart + position),
+        options,
+      )) {
+        tokens.push({
+          ...inner,
+          parsed: {
+            ...inner.parsed,
+            offset: inner.parsed.offset + innerStart,
+            markerEndOffset: inner.parsed.markerEndOffset + innerStart,
+            endOffset: inner.parsed.endOffset + innerStart,
+          },
+        } as ReviewToken);
       }
       const anchorText = highlight.text;
       offset = highlight.endOffset;

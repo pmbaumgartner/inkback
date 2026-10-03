@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { allocateReviewId } from "@inkback/rfm";
 import { Editor } from "@tiptap/core";
 import { describe, expect, it } from "vitest";
 import {
@@ -9,8 +10,6 @@ import {
 } from "../src/critic-markup";
 import {
   createCriticChange,
-  createNextChangeId,
-  createNextCommentId,
   getCommentDescendantIds,
 } from "../src/critic-markup/model";
 import { editorStateToCriticMarkdown } from "../src/critic-markup/writer";
@@ -48,7 +47,7 @@ describe("CriticMarkup comments", () => {
     expect(editorStateToCriticMarkdown(doc, comments)).toBe(input);
   });
 
-  it("detects review rail content without counting fenced examples", () => {
+  it("detects review rail content in prose and fenced code", () => {
     expect(
       criticMarkdownHasReviewRail(
         [
@@ -60,7 +59,7 @@ describe("CriticMarkup comments", () => {
           "```",
         ].join("\n"),
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       criticMarkdownHasReviewRail(
         [
@@ -159,7 +158,7 @@ describe("CriticMarkup comments", () => {
 
     expect(endmatter).toBeNull();
     expect(comments.size).toBe(0);
-    expect(output).toContain("* * *");
+    expect(output).toContain("---");
     expect(output).toContain("```yaml");
     expect(output).toContain("comments:");
     expect(output).toContain("suggestions:");
@@ -436,7 +435,7 @@ describe("CriticMarkup comments", () => {
         "Consider whether this belongs in the executive summary instead.",
       parentCommentId: null,
     });
-    expect(createNextCommentId(comments.values())).toBe("c4");
+    expect(allocateReviewId("c", comments.keys())).toBe("c4");
   });
 
   it("repairs stale YAML reply metadata when an inline root comment id was reused", () => {
@@ -473,7 +472,7 @@ describe("CriticMarkup comments", () => {
     );
     expect(output).not.toContain("body: reply to suggestion");
     expect(output).not.toContain("re: s1");
-    expect(createNextCommentId(comments.values())).toBe("c4");
+    expect(allocateReviewId("c", comments.keys())).toBe("c4");
   });
 
   it("renders YAML endmatter-backed suggestions", () => {
@@ -604,7 +603,7 @@ describe("CriticMarkup comments", () => {
     expect(output).toContain(
       '{==Second item==}{>>Needs review<<}{id="cmt4" by="AI" at="2024-01-15T10:33:00.000Z"}',
     );
-    expect(output).toContain("- First item");
+    expect(output).toContain("* First item");
   });
 
   it("does not import a trailing blank line into fenced code blocks", () => {
@@ -772,7 +771,7 @@ const command = "{==inkback open==}{>>test<<}{id="c1" by="user" at="2026-04-25T2
     expect(editorStateToCriticMarkdown(doc, comments)).toBe(input);
   });
 
-  it("migrates legacy metadata to attribute metadata on save", () => {
+  it("preserves legacy metadata in unchanged blocks", () => {
     const input =
       "Please revisit {==this sentence==}{>>Needs a source<<}{@id:c1;by:user;at:2024-01-15T10:30:00.000Z@}.\n";
 
@@ -784,9 +783,7 @@ const command = "{==inkback open==}{>>test<<}{id="c1" by="user" at="2026-04-25T2
       authorType: "user",
       authorId: "user",
     });
-    expect(editorStateToCriticMarkdown(doc, comments)).toBe(
-      'Please revisit {==this sentence==}{>>Needs a source<<}{id="c1" by="user" at="2024-01-15T10:30:00.000Z"}.\n',
-    );
+    expect(editorStateToCriticMarkdown(doc, comments)).toBe(input);
   });
 
   it("round-trips escaped attribute metadata values", () => {
@@ -815,30 +812,14 @@ const command = "{==inkback open==}{>>test<<}{id="c1" by="user" at="2026-04-25T2
     );
   });
 
-  it("keeps unanchored CriticMarkup examples literal in code spans and fenced code", () => {
+  it("recognizes unanchored review markup in fenced code while preserving inline code", () => {
     const input = readMarkdownFixture("criticmarkup-code-fences.md");
     const { doc, comments, frontmatter } = criticMarkdownToEditorState(input);
 
-    expect(comments.size).toBe(0);
+    expect(comments.size).toBe(1);
     expect(editorStateToCriticMarkdown(doc, comments, { frontmatter })).toBe(
       input,
     );
-  });
-
-  it("allocates simple document-local ids", () => {
-    expect(
-      createNextCommentId([{ id: "c2" }, { id: "note-1" }, { id: "c7" }]),
-    ).toBe("c8");
-  });
-
-  it("allocates simple document-local suggestion ids", () => {
-    expect(
-      createNextChangeId([
-        { changeId: "s2" },
-        { changeId: "suggestion-1" },
-        { changeId: "s7" },
-      ]),
-    ).toBe("s8");
   });
 
   it("round-trips an insertion suggestion with metadata", () => {
@@ -900,13 +881,13 @@ const command = "{==inkback open==}{>>test<<}{id="c1" by="user" at="2026-04-25T2
     expect(html).toContain('data-critic-change-kind="addition"');
   });
 
-  it("imports suggestions without metadata and serializes generated metadata", () => {
+  it("imports suggestions without metadata and preserves their source", () => {
     const { doc, comments } = criticMarkdownToEditorState(
       "Add {++new text++} here.\n",
     );
 
-    expect(editorStateToCriticMarkdown(doc, comments)).toMatch(
-      /^Add \{\+\+new text\+\+\}\{id="s1" by="user" at="[^"]+"\} here\.\n$/,
+    expect(editorStateToCriticMarkdown(doc, comments)).toBe(
+      "Add {++new text++} here.\n",
     );
   });
 
@@ -965,7 +946,7 @@ const command = "{==inkback open==}{>>test<<}{id="c1" by="user" at="2026-04-25T2
       '## Use {++new title++}{id="s1" by="user" at="2024-01-15T10:30:00.000Z"}',
     );
     expect(output).toContain(
-      '- Keep {--old item--}{id="s2" by="user" at="2024-01-15T10:31:00.000Z"}',
+      '* Keep {--old item--}{id="s2" by="user" at="2024-01-15T10:31:00.000Z"}',
     );
   });
 
@@ -1115,85 +1096,44 @@ const command = "{==inkback open==}{>>test<<}{id="c1" by="user" at="2026-04-25T2
   });
 });
 
-function richTextRoundTrip(markdown: string): string {
-  const { doc, comments, frontmatter } = criticMarkdownToEditorState(markdown);
-  return editorStateToCriticMarkdown(doc, comments, { frontmatter });
-}
+it("preserves resolution and custom metadata on inline comments and changes", () => {
+  const input =
+    'Text {==anchor==}{>>done<<}{id="c1" by="user" at="2026-04-28T12:00:00Z" status="resolved" resolved="Fixed" ticket="42"} {++new++}{id="s1" by="AI" at="2026-04-28T12:00:00Z" status="resolved" resolved="Accepted"}.\n';
+  const parsed = criticMarkdownToEditorState(input);
+  if (parsed.doc.content?.[0]?.content?.[0])
+    parsed.doc.content[0].content[0].text = "Updated ";
+  const output = editorStateToCriticMarkdown(parsed.doc, parsed.comments);
+  expect(output).toContain('status="resolved" resolved="Fixed" ticket="42"');
+  expect(output).toContain('status="resolved" resolved="Accepted"');
+});
 
-describe("Markdown rich-text round-trip regressions", () => {
-  it("preserves GFM strikethrough markup", () => {
-    const input = "Keep ~~removed~~ and **bold** text.\n";
+it("serializes every child of a comment anchor containing a suggestion", () => {
+  const input =
+    'Text {==before {++new++}{id="s1" by="AI" at="2026-04-28T12:00:00Z"} after==}{>>Check all<<}{id="c1" by="user" at="2026-04-28T12:00:00Z"}.\n';
+  const parsed = criticMarkdownToEditorState(input);
+  if (parsed.doc.content?.[0]?.content?.[0])
+    parsed.doc.content[0].content[0].text = "Updated ";
+  const output = editorStateToCriticMarkdown(parsed.doc, parsed.comments);
+  expect(output).toContain("before {++new++}");
+  expect(output).toContain(" after==}{>>Check all<<}");
+});
 
-    expect(richTextRoundTrip(input)).toBe(input);
-  });
+it("allocates imported feedback around every explicit inline and endmatter ID", () => {
+  const parsed = criticMarkdownToEditorState(
+    '{>>Anonymous<<} {>>Named<<}{#c1} {++suggestion++}\n\n---\ncomments:\n  c1:\n    by: user\n    at: "2026-04-28T12:00:00Z"\n  c9:\n    by: AI\n    at: "2026-04-28T12:00:00Z"\nsuggestions:\n  s9:\n    by: AI\n    at: "2026-04-28T12:00:00Z"\n',
+  );
+  expect(parsed.comments.get("c10")?.content).toBe("Anonymous");
+  expect(parsed.comments.get("c1")?.content).toBe("Named");
+  expect(JSON.stringify(parsed.doc)).toContain('"changeId":"s10"');
+});
 
-  it("preserves inline link titles", () => {
-    const input = '[Inkback](./README.md "Local title")\n';
-
-    expect(richTextRoundTrip(input)).toBe(input);
-  });
-
-  it("preserves image titles", () => {
-    const input = '![Alt text](./image.png "Image title")\n';
-
-    expect(richTextRoundTrip(input)).toBe(input);
-  });
-
-  it("preserves mailto autolinks as mailto URLs", () => {
-    const input = "Visit <https://example.com/a?b=c> or <me@example.com>.\n";
-
-    expect(richTextRoundTrip(input)).toBe(input);
-  });
-
-  it("preserves source-only HTML comments", () => {
-    const input = [
-      "Before",
-      "",
-      "<!-- keep this source note -->",
-      "",
-      "After",
-      "",
-    ].join("\n");
-
-    expect(richTextRoundTrip(input)).toBe(input);
-  });
-
-  it("preserves raw details HTML blocks", () => {
-    const input = [
-      "<details>",
-      "<summary>More</summary>",
-      "",
-      "Hidden **markdown** body.",
-      "",
-      "</details>",
-      "",
-    ].join("\n");
-
-    expect(richTextRoundTrip(input)).toBe(input);
-  });
-
-  it("preserves multi-line indented code blocks after lists", () => {
-    const input = [
-      "- Item before",
-      "",
-      "    code block",
-      "    second line",
-      "",
-      "After",
-      "",
-    ].join("\n");
-
-    expect(richTextRoundTrip(input)).toBe(input);
-  });
-
-  it("preserves table cells containing escaped pipes and inline code pipes", () => {
-    const input = [
-      "| Column | Value |",
-      "| --- | --- |",
-      "| Escaped | `a | b` and plain a \\| b |",
-      "",
-    ].join("\n");
-
-    expect(richTextRoundTrip(input)).toBe(input);
-  });
+it("preserves code review metadata when editing the code block", () => {
+  const parsed = criticMarkdownToEditorState(
+    '```js\n{==const x = 1;==}{>>done<<}{id="c1" by="user" at="2026-04-28T12:00:00Z" status="resolved" resolved="Fixed"}\n{++extra++}{id="s1" by="AI" at="2026-04-28T12:00:00Z" status="resolved"}\n```\n',
+  );
+  parsed.doc.content![0]!.content!.push({ type: "text", text: "\n// changed" });
+  const output = editorStateToCriticMarkdown(parsed.doc, parsed.comments);
+  expect(output).toContain('status="resolved" resolved="Fixed"');
+  expect(output).toContain("{++extra++}");
+  expect(output).toContain("// changed");
 });

@@ -70,21 +70,7 @@ export function printCommandHelp(
     log("  --state-dir <dir>    Directory containing server.json");
     log("");
     log("Environment variables:");
-    log("  INKBACK_HOST       Route open through a hosted Inkback instance");
-    log("                        (remote mode). The CLI registers a session,");
-    log("                        opens an SSE channel, and writes save events");
-    log("                        back to disk.");
-    log("  INKBACK_TOKEN      Bearer token sent on remote-document requests.");
-    log("                        Required when the hosted server binds to a");
-    log("                        non-loopback host. Must match the value the");
-    log("                        hosted server was started with.");
     log("  INKBACK_NO_OPEN    Set to 1 to suppress browser launch.");
-    log("  INKBACK_BIND_HOST  Comma-separated bind hosts for the hosted");
-    log(
-      "                        server (default: loopback). Set to 0.0.0.0 or",
-    );
-    log("                        a Tailscale interface to expose remotely.");
-    log("                        Requires INKBACK_TOKEN.");
     return;
   }
 
@@ -249,7 +235,5 @@ export function printCriticMarkupHelp(log: (message: string) => void) {
   );
   log("");
   log("Code blocks:");
-  log(
-    "  Treat CriticMarkup inside fenced code blocks as literal example text.",
-  );
+  log("  Review markup in fenced code blocks is included in review feedback.");
 }

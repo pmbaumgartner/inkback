@@ -1,7 +1,6 @@
 import { USAGE_ERROR } from "./options.js";
 import { emitJson } from "./output.js";
 import { getServerStateFilePath } from "./paths.js";
-import { runRemoteOpen } from "./remote-open.js";
 import {
   buildPublicBaseUrl,
   buildServerStatusJson,
@@ -148,20 +147,6 @@ export async function runOpen(
 
   const { projectDir, openPath } = resolvedTarget;
 
-  const remoteHost =
-    typeof deps.env.INKBACK_HOST === "string"
-      ? deps.env.INKBACK_HOST.trim()
-      : "";
-  if (remoteHost.length > 0) {
-    return runRemoteOpen(deps, {
-      host: remoteHost,
-      openPath,
-      noOpen: options.noOpen,
-      printUrl: options.printUrl,
-      json,
-    });
-  }
-
   const liveDevFrontend = await resolveLiveDevFrontendBaseUrl(deps);
   let result: EnsureRunningResult | null = null;
   let baseUrl: string;
@@ -181,8 +166,8 @@ export async function runOpen(
     openMode = (await sendOpenRequestToExistingWindow(
       deps,
       baseUrl,
-      targetUrl,
       openPath,
+      options.reviewId,
     ))
       ? "existing-window"
       : deps.openUrl(targetUrl);

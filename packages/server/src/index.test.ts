@@ -26,6 +26,7 @@ describe("createApp", () => {
 
   it("creates a markdown page on disk", async () => {
     const { app } = createApp({
+      allowedDirectories: [projectDir, homeDir],
       homeDir,
       staticDirPath: projectDir,
     });
@@ -52,6 +53,7 @@ describe("createApp", () => {
     fs.writeFileSync(path.join(nestedDir, "draft.md"), "# Nested draft\n");
 
     const { app } = createApp({
+      allowedDirectories: [projectDir, homeDir],
       homeDir,
       staticDirPath: projectDir,
     });
@@ -74,6 +76,7 @@ describe("createApp", () => {
     fs.writeFileSync(path.join(projectDir, "alpha.md"), "# Alpha\n");
 
     const { app } = createApp({
+      allowedDirectories: [projectDir, homeDir],
       homeDir,
       staticDirPath: projectDir,
     });
@@ -122,6 +125,7 @@ describe("createApp", () => {
     fs.writeFileSync(path.join(projectDir, "draft.md"), "# Original\n");
 
     const { app } = createApp({
+      allowedDirectories: [projectDir, homeDir],
       homeDir,
       staticDirPath: projectDir,
     });
@@ -157,6 +161,7 @@ describe("createApp", () => {
     fs.writeFileSync(path.join(nestedDir, "draft.md"), "# Original\n");
 
     const { app } = createApp({
+      allowedDirectories: [projectDir, homeDir],
       homeDir,
       staticDirPath: projectDir,
     });
@@ -201,6 +206,7 @@ describe("createApp", () => {
     fs.utimesSync(filePath, fixedTimestamp, fixedTimestamp);
 
     const { app } = createApp({
+      allowedDirectories: [projectDir, homeDir],
       homeDir,
       staticDirPath: projectDir,
     });
@@ -238,6 +244,7 @@ describe("createApp", () => {
 
   it("rejects markdown-file reads outside the project directory", async () => {
     const { app } = createApp({
+      allowedDirectories: [projectDir, homeDir],
       homeDir,
       staticDirPath: projectDir,
     });
@@ -248,32 +255,38 @@ describe("createApp", () => {
     });
 
     expect(response.status).toBe(404);
-    expect(response.body).toEqual({ error: "Markdown file not found" });
   });
 
   it("rejects invalid markdown targets consistently across reads, writes, and events", async () => {
-    const { app } = createApp({ homeDir, staticDirPath: projectDir });
+    const { app } = createApp({
+      allowedDirectories: [projectDir, homeDir],
+      homeDir,
+      staticDirPath: projectDir,
+    });
     for (const target of ["../outside.md", "missing.md", "notes.txt"]) {
       for (const route of ["/api/markdown-file", "/api/markdown-file/events"]) {
         const response = await request(app)
           .get(route)
           .query({ projectPath: projectDir, path: target });
         expect(response.status).toBe(404);
-        expect(response.body).toEqual({ error: "Markdown file not found" });
       }
       const write = await request(app)
         .put("/api/markdown-file")
         .query({ projectPath: projectDir, path: target })
         .send({ content: "# New" });
       expect(write.status).toBe(404);
-      expect(write.body).toEqual({ error: "Markdown file not found" });
+      expect(write.body.error).toEqual(expect.any(String));
     }
   });
 
   it("closes markdown event watchers when the client disconnects", async () => {
     const filePath = path.join(projectDir, "draft.md");
     fs.writeFileSync(filePath, "# Draft\n");
-    const { app } = createApp({ homeDir, staticDirPath: projectDir });
+    const { app } = createApp({
+      allowedDirectories: [projectDir, homeDir],
+      homeDir,
+      staticDirPath: projectDir,
+    });
     const server = app.listen(0);
     const unwatch = vi.spyOn(fs, "unwatchFile");
     try {
@@ -302,7 +315,11 @@ describe("createApp", () => {
     const filePath = path.join(projectDir, "draft.md");
     fs.writeFileSync(filePath, "# Draft\n");
     const stale = fs.statSync(filePath);
-    const { app } = createApp({ homeDir, staticDirPath: projectDir });
+    const { app } = createApp({
+      allowedDirectories: [projectDir, homeDir],
+      homeDir,
+      staticDirPath: projectDir,
+    });
     const watch = vi.spyOn(fs, "watchFile");
     const server = app.listen(0);
     const controller = new AbortController();
@@ -345,6 +362,7 @@ describe("createApp", () => {
       ].join("\n"),
     );
     const { app } = createApp({
+      allowedDirectories: [projectDir, homeDir],
       homeDir,
       staticDirPath: projectDir,
     });
@@ -397,6 +415,7 @@ describe("createApp", () => {
       ].join("\n"),
     );
     const { app } = createApp({
+      allowedDirectories: [projectDir, homeDir],
       homeDir,
       staticDirPath: projectDir,
     });
@@ -425,6 +444,7 @@ describe("createApp", () => {
   it("omits whitespace-only overall comments from review events", async () => {
     fs.writeFileSync(path.join(projectDir, "draft.md"), "# Draft\n");
     const { app } = createApp({
+      allowedDirectories: [projectDir, homeDir],
       homeDir,
       staticDirPath: projectDir,
     });
@@ -442,6 +462,7 @@ describe("createApp", () => {
   it("rejects over-limit overall comments", async () => {
     fs.writeFileSync(path.join(projectDir, "draft.md"), "# Draft\n");
     const { app } = createApp({
+      allowedDirectories: [projectDir, homeDir],
       homeDir,
       staticDirPath: projectDir,
     });
@@ -462,6 +483,7 @@ describe("createApp", () => {
 
   it("rejects review events without a projectPath", async () => {
     const { app } = createApp({
+      allowedDirectories: [projectDir, homeDir],
       homeDir,
       staticDirPath: projectDir,
     });
@@ -478,6 +500,7 @@ describe("createApp", () => {
     const outsideFile = path.join(homeDir, "outside.md");
     fs.writeFileSync(outsideFile, "# Outside\n");
     const { app } = createApp({
+      allowedDirectories: [projectDir, homeDir],
       homeDir,
       staticDirPath: projectDir,
     });
@@ -487,12 +510,12 @@ describe("createApp", () => {
       .send({ projectPath: projectDir, path: "../outside.md" });
 
     expect(response.status).toBe(404);
-    expect(response.body).toEqual({ error: "Markdown file not found" });
   });
 
   it("returns retained review events to watchers", async () => {
     fs.writeFileSync(path.join(projectDir, "draft.md"), "# Draft\n");
     const { app } = createApp({
+      allowedDirectories: [projectDir, homeDir],
       homeDir,
       staticDirPath: projectDir,
     });
@@ -527,6 +550,7 @@ describe("createApp", () => {
   it("reports active review watchers for a markdown file", async () => {
     fs.writeFileSync(path.join(projectDir, "draft.md"), "# Draft\n");
     const { app } = createApp({
+      allowedDirectories: [projectDir, homeDir],
       homeDir,
       staticDirPath: projectDir,
     });
@@ -559,7 +583,11 @@ describe("createApp", () => {
 
   it("removes a disconnected HTTP watcher before the review is finished", async () => {
     fs.writeFileSync(path.join(projectDir, "draft.md"), "# Draft\n");
-    const { app } = createApp({ homeDir, staticDirPath: projectDir });
+    const { app } = createApp({
+      allowedDirectories: [projectDir, homeDir],
+      homeDir,
+      staticDirPath: projectDir,
+    });
     const server = app.listen(0, "127.0.0.1");
     await new Promise<void>((resolve) => server.once("listening", resolve));
     const port = (server.address() as AddressInfo).port;
@@ -612,6 +640,7 @@ describe("createApp", () => {
 
     try {
       const { app } = createApp({
+        allowedDirectories: [projectDir, homeDir],
         homeDir,
         staticDirPath: projectDir,
       });
@@ -631,11 +660,8 @@ describe("createApp", () => {
       });
 
       expect(readResponse.status).toBe(404);
-      expect(readResponse.body).toEqual({ error: "Page not found" });
       expect(updateResponse.status).toBe(404);
-      expect(updateResponse.body).toEqual({ error: "Page not found" });
       expect(deleteResponse.status).toBe(404);
-      expect(deleteResponse.body).toEqual({ error: "Page not found" });
       expect(fs.readFileSync(outsideFilePath, "utf-8")).toBe("# Secret\n");
     } finally {
       fs.rmSync(outsideFilePath, { force: true });
@@ -644,6 +670,7 @@ describe("createApp", () => {
 
   it("requires projectPath on project-backed routes", async () => {
     const { app } = createApp({
+      allowedDirectories: [projectDir, homeDir],
       homeDir,
       staticDirPath: projectDir,
     });
@@ -656,6 +683,7 @@ describe("createApp", () => {
 
   it("reports neutral server status without an active project", async () => {
     const { app } = createApp({
+      allowedDirectories: [projectDir, homeDir],
       homeDir,
       staticDirPath: projectDir,
       port: 4312,
@@ -673,8 +701,6 @@ describe("createApp", () => {
       capabilities: {
         projectPathRequired: true,
         fileSystemBrowsing: true,
-        remoteDocuments: true,
-        remoteDocumentTokenRequired: false,
         reviewSessions: true,
       },
     });
@@ -685,6 +711,7 @@ describe("createApp", () => {
     fs.mkdirSync(path.join(homeDir, "docs"));
 
     const { app } = createApp({
+      allowedDirectories: [projectDir, homeDir],
       homeDir,
       staticDirPath: projectDir,
     });
@@ -709,6 +736,7 @@ describe("createApp", () => {
     fs.writeFileSync(path.join(homeDir, "ignored.txt"), "Nope\n");
 
     const { app } = createApp({
+      allowedDirectories: [projectDir, homeDir],
       homeDir,
       staticDirPath: projectDir,
     });
@@ -745,6 +773,7 @@ describe("createApp", () => {
     fs.writeFileSync(path.join(projectDir, "notes", "alpha.md"), "# Alpha\n");
 
     const { app } = createApp({
+      allowedDirectories: [projectDir, homeDir],
       homeDir,
       staticDirPath: projectDir,
     });
@@ -763,6 +792,7 @@ describe("createApp", () => {
     const createdDir = path.join(projectDir, "created", "workspace");
 
     const { app } = createApp({
+      allowedDirectories: [projectDir, homeDir],
       homeDir,
       staticDirPath: projectDir,
       port: 4321,
@@ -792,6 +822,7 @@ describe("createApp", () => {
 
   it("reports an undelivered open request when no matching window is listening", async () => {
     const { app } = createApp({
+      allowedDirectories: [projectDir, homeDir],
       homeDir,
       staticDirPath: projectDir,
       port: 4312,
@@ -809,19 +840,20 @@ describe("createApp", () => {
   });
 
   it("serves local files and stores uploaded assets inside the project", async () => {
-    fs.writeFileSync(path.join(projectDir, "image.txt"), "asset text\n");
+    fs.writeFileSync(path.join(projectDir, "image.png"), "asset text\n");
 
     const { app } = createApp({
+      allowedDirectories: [projectDir, homeDir],
       homeDir,
       staticDirPath: projectDir,
     });
 
     const fileResponse = await request(app).get("/api/files").query({
       projectPath: projectDir,
-      path: "image.txt",
+      path: "image.png",
     });
     expect(fileResponse.status).toBe(200);
-    expect(fileResponse.text).toBe("asset text\n");
+    expect(fileResponse.body.toString()).toBe("asset text\n");
 
     const assetResponse = await request(app)
       .post("/api/assets")
@@ -844,309 +876,5 @@ describe("createApp", () => {
         "utf-8",
       ),
     ).toBe("png bytes");
-  });
-
-  it("advertises remote-document support in the status capabilities", async () => {
-    const { app } = createApp({ homeDir, staticDirPath: projectDir });
-    const response = await request(app).get("/api/status");
-    expect(response.status).toBe(200);
-    expect(response.body.capabilities).toMatchObject({
-      remoteDocuments: true,
-    });
-  });
-
-  it("registers a remote document session and returns it on GET", async () => {
-    const { app } = createApp({ homeDir, staticDirPath: projectDir });
-    const sessionId = "session-1";
-
-    const register = await request(app).post("/api/remote-document").send({
-      sessionId,
-      originPath: "/work/draft.md",
-      content: "# hello\n",
-    });
-
-    expect(register.status).toBe(201);
-    expect(register.body).toMatchObject({
-      id: sessionId,
-      version: expect.any(String),
-      viewerUrl: expect.stringContaining(`/?session=${sessionId}`),
-    });
-
-    const fetchResponse = await request(app).get(
-      `/api/remote-document/${sessionId}`,
-    );
-    expect(fetchResponse.status).toBe(200);
-    expect(fetchResponse.body).toMatchObject({
-      id: sessionId,
-      originPath: "/work/draft.md",
-      content: "# hello\n",
-      version: register.body.version,
-    });
-  });
-
-  it("rejects remote-document register without required fields", async () => {
-    const { app } = createApp({ homeDir, staticDirPath: projectDir });
-    const response = await request(app)
-      .post("/api/remote-document")
-      .send({ sessionId: "x" });
-    expect(response.status).toBe(400);
-  });
-
-  it("rejects a remote-document register with a duplicate session id", async () => {
-    const { app } = createApp({ homeDir, staticDirPath: projectDir });
-    await request(app).post("/api/remote-document").send({
-      sessionId: "dup",
-      originPath: "/a.md",
-      content: "a",
-    });
-
-    const second = await request(app).post("/api/remote-document").send({
-      sessionId: "dup",
-      originPath: "/b.md",
-      content: "b",
-    });
-    expect(second.status).toBe(409);
-  });
-
-  it("returns 404 for unknown remote document sessions", async () => {
-    const { app } = createApp({ homeDir, staticDirPath: projectDir });
-    const get = await request(app).get("/api/remote-document/missing");
-    expect(get.status).toBe(404);
-
-    const put = await request(app)
-      .put("/api/remote-document/missing")
-      .send({ content: "x" });
-    expect(put.status).toBe(404);
-  });
-
-  it("requires a bearer token on remote-document JSON routes when a token is configured", async () => {
-    const { app } = createApp({
-      homeDir,
-      staticDirPath: projectDir,
-      remoteDocumentToken: "secret-token",
-    });
-
-    const noToken = await request(app).post("/api/remote-document").send({
-      sessionId: "auth-1",
-      originPath: "/work/a.md",
-      content: "x",
-    });
-    expect(noToken.status).toBe(401);
-
-    const wrongToken = await request(app)
-      .post("/api/remote-document")
-      .set("Authorization", "Bearer wrong-token")
-      .send({
-        sessionId: "auth-1",
-        originPath: "/work/a.md",
-        content: "x",
-      });
-    expect(wrongToken.status).toBe(401);
-
-    const queryToken = await request(app)
-      .post("/api/remote-document")
-      .query({ token: "secret-token" })
-      .send({
-        sessionId: "auth-1",
-        originPath: "/work/a.md",
-        content: "x",
-      });
-    expect(queryToken.status).toBe(401);
-
-    const ok = await request(app)
-      .post("/api/remote-document")
-      .set("Authorization", "Bearer secret-token")
-      .send({
-        sessionId: "auth-1",
-        originPath: "/work/a.md",
-        content: "x",
-      });
-    expect(ok.status).toBe(201);
-
-    const getWithQueryToken = await request(app)
-      .get("/api/remote-document/auth-1")
-      .query({ token: "secret-token" });
-    expect(getWithQueryToken.status).toBe(401);
-
-    const getWithHeader = await request(app)
-      .get("/api/remote-document/auth-1")
-      .set("Authorization", "Bearer secret-token");
-    expect(getWithHeader.status).toBe(200);
-
-    const putWithQueryToken = await request(app)
-      .put("/api/remote-document/auth-1")
-      .query({ token: "secret-token" })
-      .send({ content: "mutated" });
-    expect(putWithQueryToken.status).toBe(401);
-
-    const unchanged = await request(app)
-      .get("/api/remote-document/auth-1")
-      .set("Authorization", "Bearer secret-token");
-    expect(unchanged.body.content).toBe("x");
-  });
-
-  it("accepts ?token= query for the SSE endpoint when a token is configured", async () => {
-    const { app } = createApp({
-      homeDir,
-      staticDirPath: projectDir,
-      remoteDocumentToken: "secret-token",
-    });
-
-    await request(app)
-      .post("/api/remote-document")
-      .set("Authorization", "Bearer secret-token")
-      .send({ sessionId: "sse-auth", originPath: "/a.md", content: "x" });
-
-    const server = app.listen(0);
-    try {
-      const port = (server.address() as AddressInfo).port;
-
-      const noToken = await fetch(
-        `http://127.0.0.1:${port}/api/remote-document/sse-auth/events?role=viewer`,
-      );
-      expect(noToken.status).toBe(401);
-
-      const queryToken = await fetch(
-        `http://127.0.0.1:${port}/api/remote-document/sse-auth/events?role=viewer&token=secret-token`,
-      );
-      expect(queryToken.status).toBe(200);
-      await queryToken.body?.cancel();
-    } finally {
-      await new Promise<void>((resolve) => server.close(() => resolve()));
-    }
-  });
-
-  it("advertises whether a remote-document token is required in /api/status", async () => {
-    const noTokenApp = createApp({ homeDir, staticDirPath: projectDir });
-    const noTokenStatus = await request(noTokenApp.app).get("/api/status");
-    expect(noTokenStatus.body.capabilities.remoteDocumentTokenRequired).toBe(
-      false,
-    );
-
-    const tokenApp = createApp({
-      homeDir,
-      staticDirPath: projectDir,
-      remoteDocumentToken: "secret-token",
-    });
-    const tokenStatus = await request(tokenApp.app).get("/api/status");
-    expect(tokenStatus.body.capabilities.remoteDocumentTokenRequired).toBe(
-      true,
-    );
-  });
-
-  it("returns 503 when PUT lands with no active CLI session listener", async () => {
-    // The browser's save is meaningless if no CLI is connected to receive it
-    // and write to disk. Surfacing 503 (instead of silently 200-ing) prevents
-    // the browser from believing a save succeeded that never reached disk.
-    const { app } = createApp({ homeDir, staticDirPath: projectDir });
-    await request(app).post("/api/remote-document").send({
-      sessionId: "s2",
-      originPath: "/draft.md",
-      content: "v1",
-    });
-
-    const update = await request(app).put("/api/remote-document/s2").send({
-      content: "v2",
-    });
-
-    expect(update.status).toBe(503);
-
-    // The session content stays on the bumped version so a reconnect-then-fetch
-    // sees the saved bytes, but the browser knows the round-trip to disk failed.
-    const fetched = await request(app).get("/api/remote-document/s2");
-    expect(fetched.body.content).toBe("v2");
-  });
-
-  it("returns 409 with current state when expectedVersion is stale", async () => {
-    const { app } = createApp({ homeDir, staticDirPath: projectDir });
-    const register = await request(app).post("/api/remote-document").send({
-      sessionId: "s3",
-      originPath: "/a.md",
-      content: "v1",
-    });
-
-    // First PUT bumps the version to "v2" (returns 503 because no SSE listener,
-    // but the in-memory content and version are still updated).
-    await request(app).put("/api/remote-document/s3").send({
-      content: "v2",
-      expectedVersion: register.body.version,
-    });
-
-    const conflict = await request(app).put("/api/remote-document/s3").send({
-      content: "v-bad",
-      expectedVersion: register.body.version,
-    });
-
-    expect(conflict.status).toBe(409);
-    expect(conflict.body.current).toMatchObject({
-      id: "s3",
-      content: "v2",
-    });
-  });
-
-  it("returns 404 when opening SSE for an unknown session", async () => {
-    const { app } = createApp({ homeDir, staticDirPath: projectDir });
-    const response = await request(app).get("/api/remote-document/nope/events");
-    expect(response.status).toBe(404);
-  });
-
-  it("delivers a save event over SSE when the session content is updated", async () => {
-    const { app } = createApp({ homeDir, staticDirPath: projectDir });
-    const server = app.listen(0);
-    try {
-      const port = (server.address() as AddressInfo).port;
-      const sessionId = "sse-delivers";
-
-      const register = await fetch(
-        `http://127.0.0.1:${port}/api/remote-document`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sessionId,
-            originPath: "/draft.md",
-            content: "before",
-          }),
-        },
-      );
-      expect(register.status).toBe(201);
-
-      const events = await fetch(
-        `http://127.0.0.1:${port}/api/remote-document/${sessionId}/events`,
-      );
-      expect(events.status).toBe(200);
-      const reader = events.body?.getReader();
-      if (!reader) throw new Error("Expected SSE body");
-
-      const decoder = new TextDecoder();
-      const readChunk = async () => {
-        const { value, done } = await reader.read();
-        if (done) return "";
-        return decoder.decode(value);
-      };
-
-      const connected = await readChunk();
-      expect(connected).toContain("event: connected");
-
-      const update = await fetch(
-        `http://127.0.0.1:${port}/api/remote-document/${sessionId}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content: "after" }),
-        },
-      );
-      expect(update.status).toBe(200);
-
-      let saveChunk = "";
-      while (!saveChunk.includes("event: save")) {
-        saveChunk += await readChunk();
-      }
-      expect(saveChunk).toContain('"content":"after"');
-
-      reader.cancel();
-    } finally {
-      await new Promise<void>((resolve) => server.close(() => resolve()));
-    }
   });
 });

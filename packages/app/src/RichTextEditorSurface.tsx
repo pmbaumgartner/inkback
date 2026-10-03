@@ -9,7 +9,6 @@ import {
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { buildLocationForLinkedMarkdownDocument } from "./app-navigation";
-import { CommentEditorList } from "./CommentEditorList";
 import { criticMarkdownToEditorState } from "./critic-markup";
 import {
   type CriticComment,
@@ -21,17 +20,14 @@ import {
   type CriticChangeRailItem,
   DocumentReviewRail,
 } from "./DocumentReviewRail";
-import {
-  collectAnchoredThreadComments,
-  getPreferredCommentId,
-  parseCommentIds,
-} from "./document-comments";
+import { getPreferredCommentId, parseCommentIds } from "./document-comments";
 import { EditorContextMenu } from "./EditorContextMenu";
 import { insertEditorFiles } from "./editor-assets";
 import {
   commentHighlightPluginKey,
   createEditorExtensions,
   criticChangeHighlightPluginKey,
+  externalContentSync,
 } from "./editor-extensions";
 import {
   addCommentIdsToAnchor,
@@ -69,6 +65,17 @@ export const RichTextEditorSurface = memo(function RichTextEditorSurface({
   onEditorReady,
   onCommentRailPresenceChange,
 }: RichTextEditorSurfaceProps) {
+  const [wideReviewRail, setWideReviewRail] = useState(
+    () => window.matchMedia?.("(min-width: 1100px)").matches ?? false,
+  );
+  useEffect(() => {
+    const media = window.matchMedia?.("(min-width: 1100px)");
+    if (!media) return;
+    const update = () => setWideReviewRail(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
   const editorRef = useRef<Editor | null>(null);
   const criticChangeFrameRef = useRef<number | null>(null);
   const interactionModeRef = useRef<DocumentInteractionMode>(interactionMode);
@@ -129,12 +136,6 @@ export const RichTextEditorSurface = memo(function RichTextEditorSurface({
   useEffect(() => {
     interactionModeRef.current = interactionMode;
   }, [interactionMode]);
-
-  useEffect(() => {
-    onCommentRailPresenceChange?.(
-      comments.size > 0 || criticChanges.length > 0,
-    );
-  }, [comments.size, criticChanges.length, onCommentRailPresenceChange]);
 
   const emitMarkdownChange = useCallback(
     (doc?: JSONContent, nextComments?: Map<string, CriticComment>) => {
@@ -202,6 +203,7 @@ export const RichTextEditorSurface = memo(function RichTextEditorSurface({
         }),
       ],
       content: parsedContent.doc,
+      editable: interactionMode !== "viewing",
       immediatelyRender: false,
       shouldRerenderOnTransaction: false,
       editorProps: {
@@ -298,7 +300,14 @@ export const RichTextEditorSurface = memo(function RichTextEditorSurface({
 
     const nextDoc = parsedContent.doc;
     if (JSON.stringify(editor.getJSON()) !== JSON.stringify(nextDoc)) {
-      editor.commands.setContent(nextDoc, { emitUpdate: false });
+      editor
+        .chain()
+        .command(({ tr }) => {
+          tr.setMeta(externalContentSync, true);
+          return true;
+        })
+        .setContent(nextDoc, { emitUpdate: false })
+        .run();
     }
 
     refreshCriticChanges();
@@ -480,7 +489,12 @@ export const RichTextEditorSurface = memo(function RichTextEditorSurface({
 
     const existingIds = getSelectionCommentIds(currentEditor);
     const comment = createCriticComment(undefined, {
-      existingComments: commentsRef.current.values(),
+      existingComments: [
+        ...commentsRef.current.values(),
+        ...(editorRef.current?.state.doc.attrs.reviewIds ?? []).map(
+          (id: string) => ({ id }),
+        ),
+      ],
     });
     const nextComments = new Map(commentsRef.current);
     nextComments.set(comment.id, comment);
@@ -581,7 +595,7 @@ export const RichTextEditorSurface = memo(function RichTextEditorSurface({
   const updateComment = useCallback(
     (commentId: string, updater: (comment: CriticComment) => CriticComment) => {
       const existingComment = commentsRef.current.get(commentId);
-      if (!existingComment) return;
+      if (!editorRef.current?.isEditable || !existingComment) return;
 
       const nextComments = new Map(commentsRef.current);
       nextComments.set(commentId, updater(existingComment));
@@ -612,7 +626,12 @@ export const RichTextEditorSurface = memo(function RichTextEditorSurface({
           parentCommentId: commentId,
         },
         {
-          existingComments: commentsRef.current.values(),
+          existingComments: [
+            ...commentsRef.current.values(),
+            ...(editorRef.current?.state.doc.attrs.reviewIds ?? []).map(
+              (id: string) => ({ id }),
+            ),
+          ],
         },
       );
       suppressNextMarkdownUpdateRef.current = true;
@@ -654,20 +673,13 @@ export const RichTextEditorSurface = memo(function RichTextEditorSurface({
 
       if (commentIdsToDelete.length === 0) return commentsRef.current;
 
-      const nextComments = new Map(commentsRef.current);
-      for (const id of commentIdsToDelete) {
-        nextComments.delete(id);
-      }
-
       const chain = currentEditor.chain().focus();
       for (const id of commentIdsToDelete) {
         chain.removeCommentId(id);
       }
       chain.run();
 
-      commentsRef.current = nextComments;
-      setComments(nextComments);
-      return nextComments;
+      return commentsRef.current;
     },
     [],
   );
@@ -678,10 +690,10 @@ export const RichTextEditorSurface = memo(function RichTextEditorSurface({
       if (!currentEditor) return;
 
       currentEditor.chain().focus().acceptCriticChange(changeId).run();
-      const nextComments = removeSuggestionComments(changeId, currentEditor);
+      removeSuggestionComments(changeId, currentEditor);
       setSelectedChangeId((current) => (current === changeId ? null : current));
       setHoveredChangeId((current) => (current === changeId ? null : current));
-      emitMarkdownChange(currentEditor.getJSON(), nextComments);
+      emitMarkdownChange(currentEditor.getJSON(), commentsRef.current);
       refreshCriticChanges();
     },
     [emitMarkdownChange, refreshCriticChanges, removeSuggestionComments],
@@ -693,10 +705,10 @@ export const RichTextEditorSurface = memo(function RichTextEditorSurface({
       if (!currentEditor) return;
 
       currentEditor.chain().focus().rejectCriticChange(changeId).run();
-      const nextComments = removeSuggestionComments(changeId, currentEditor);
+      removeSuggestionComments(changeId, currentEditor);
       setSelectedChangeId((current) => (current === changeId ? null : current));
       setHoveredChangeId((current) => (current === changeId ? null : current));
-      emitMarkdownChange(currentEditor.getJSON(), nextComments);
+      emitMarkdownChange(currentEditor.getJSON(), commentsRef.current);
       refreshCriticChanges();
     },
     [emitMarkdownChange, refreshCriticChanges, removeSuggestionComments],
@@ -712,7 +724,12 @@ export const RichTextEditorSurface = memo(function RichTextEditorSurface({
           parentCommentId: changeId,
         },
         {
-          existingComments: commentsRef.current.values(),
+          existingComments: [
+            ...commentsRef.current.values(),
+            ...(editorRef.current?.state.doc.attrs.reviewIds ?? []).map(
+              (id: string) => ({ id }),
+            ),
+          ],
         },
       );
       suppressNextMarkdownUpdateRef.current = true;
@@ -755,13 +772,6 @@ export const RichTextEditorSurface = memo(function RichTextEditorSurface({
       );
       const commentIdsToDelete = [commentId, ...descendantIds];
       const deletedIds = new Set(commentIdsToDelete);
-      const nextComments = new Map(commentsRef.current);
-      for (const id of commentIdsToDelete) {
-        nextComments.delete(id);
-      }
-      commentsRef.current = nextComments;
-      setComments(nextComments);
-
       const chain = currentEditor.chain().focus();
       for (const id of commentIdsToDelete) {
         chain.removeCommentId(id);
@@ -779,7 +789,7 @@ export const RichTextEditorSurface = memo(function RichTextEditorSurface({
       setNewCommentDraftIds((current) =>
         current.filter((commentId) => !deletedIds.has(commentId)),
       );
-      emitMarkdownChange(currentEditor.getJSON(), nextComments);
+      emitMarkdownChange(currentEditor.getJSON(), commentsRef.current);
       requestAnimationFrame(() => {
         measureLayout();
       });
@@ -836,13 +846,30 @@ export const RichTextEditorSurface = memo(function RichTextEditorSurface({
     );
   }, []);
 
-  const hasReviewRail = comments.size > 0 || criticChanges.length > 0;
+  const documentCommentIds =
+    useEditorState({
+      editor,
+      selector: ({ editor: currentEditor }) => {
+        const ids = new Set<string>();
+        currentEditor?.state.doc.descendants((node) => {
+          for (const mark of node.marks)
+            if (mark.type.name === "commentRef")
+              for (const id of mark.attrs.commentIds ?? []) ids.add(id);
+        });
+        return [...ids];
+      },
+      equalityFn: areCommentIdListsEqual,
+    }) ?? [];
+  const hasReviewRail =
+    documentCommentIds.some((id) => comments.has(id)) ||
+    criticChanges.length > 0 ||
+    !!draftSuggestion;
+  useEffect(() => {
+    onCommentRailPresenceChange?.(hasReviewRail);
+  }, [hasReviewRail, onCommentRailPresenceChange]);
+
   const documentShellRef =
     useReviewLayoutShiftAnimation<HTMLDivElement>(hasReviewRail);
-  const activeComments = collectAnchoredThreadComments(
-    activeCommentIds,
-    comments,
-  );
   const contentCardClass =
     "rounded-[0.75rem] border border-[#E9E9E8] dark:border-slate-800 bg-white dark:bg-card shadow-[0_18px_44px_rgba(57,47,38,0.08)] dark:shadow-[0_18px_44px_rgba(0,0,0,0.35)]";
   const documentShellClass = cn(
@@ -853,9 +880,7 @@ export const RichTextEditorSurface = memo(function RichTextEditorSurface({
   const documentMainClass =
     "document-page-main w-full min-w-0 review-layout-main max-w-[46.5rem]";
   const contentInsetClass = "pb-24";
-  const fallbackClass = "document-comment-fallback mb-4 min-[1100px]:hidden";
-  const reviewRailClass =
-    "document-comment-rail review-layout-rail hidden min-[1100px]:block";
+  const reviewRailClass = "document-comment-rail review-layout-rail";
 
   return (
     <div
@@ -868,32 +893,6 @@ export const RichTextEditorSurface = memo(function RichTextEditorSurface({
         className={documentShellClass}
       >
         <div className={documentMainClass}>
-          {activeComments.length > 0 ? (
-            <CommentEditorList
-              comments={activeComments}
-              className={fallbackClass}
-              testId="document-comment-fallback"
-              selectedCommentId={selectedCommentId}
-              hoveredCommentId={hoveredCommentId}
-              onDeleteComment={deleteComment}
-              onUpdateComment={(commentId, nextContent) => {
-                updateComment(commentId, (current) => ({
-                  ...current,
-                  content: nextContent,
-                }));
-              }}
-              onReplyComment={replyToComment}
-              onSelectComment={selectComment}
-              onHoverComment={setHoveredCommentId}
-              pendingFocusCommentId={pendingFocusCommentId}
-              newCommentDraftIds={newCommentDraftIds}
-              onAutoFocusComment={(commentId) => {
-                setPendingFocusCommentId((current) =>
-                  current === commentId ? null : current,
-                );
-              }}
-            />
-          ) : null}
           <div className={contentInsetClass}>
             <div
               data-testid="document-content-card"
@@ -901,6 +900,7 @@ export const RichTextEditorSurface = memo(function RichTextEditorSurface({
             >
               <EditorContextMenu
                 editor={editor}
+                readOnly={interactionMode === "viewing"}
                 backend={backend}
                 resolveLinkUrl={resolveLinkUrl}
                 onAddComment={
@@ -935,7 +935,7 @@ export const RichTextEditorSurface = memo(function RichTextEditorSurface({
         >
           <DocumentReviewRail
             className={reviewRailClass}
-            layout="anchored"
+            layout={wideReviewRail ? "anchored" : "flow"}
             testId="document-review-rail"
             commentGroups={commentGroups}
             comments={comments}

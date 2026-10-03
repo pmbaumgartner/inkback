@@ -2,9 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
-import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createInkbackMcpServer } from "./mcp/server";
+import { createMcpHarness } from "../test-support/mcp-harness";
 import { startMcpServer } from "./mcp/stdio";
 
 async function callTool(
@@ -13,17 +12,13 @@ async function callTool(
   env: NodeJS.ProcessEnv,
   fetchImpl: typeof fetch = fetch,
 ) {
-  const { server } = createInkbackMcpServer({
+  const harness = await createMcpHarness({
     env,
     fetchImpl,
     directories: [path.dirname(String(args.documentPath))],
     log: () => {},
   });
-  const [clientTransport, serverTransport] =
-    InMemoryTransport.createLinkedPair();
-  const client = new Client({ name: "test", version: "1" });
-  await server.connect(serverTransport);
-  await client.connect(clientTransport);
+  const { client } = harness;
   try {
     const result = await client.callTool({ name, arguments: args });
     if (result.isError)
@@ -34,8 +29,7 @@ async function callTool(
       );
     return result.structuredContent;
   } finally {
-    await client.close();
-    await server.close();
+    await harness.close();
   }
 }
 

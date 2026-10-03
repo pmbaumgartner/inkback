@@ -1,13 +1,14 @@
 import {
+  collectReviewIds,
   hydrateMetadataAttrs,
   type Metadata,
-  parseComment,
   parseHighlight,
-  parseSuggestion,
+  scanReview,
 } from "@inkback/rfm";
 import { generateJSON, type JSONContent } from "@tiptap/core";
 import {
   Marked,
+  marked,
   type RendererThis,
   type Token,
   type TokenizerAndRendererExtension,
@@ -26,7 +27,6 @@ import {
   sanitizeMarkdownHtml,
   splitYamlDocumentMetadata,
 } from "../markdown";
-
 import {
   type CriticComment,
   createChangeWithContext,
@@ -35,6 +35,7 @@ import {
   parseReviewEndmatter,
   unanchoredCommentSentinel,
 } from "./model";
+import { blockCommentSnapshot, blockSnapshot } from "./source-blocks";
 
 interface CriticCommentToken {
   type: "criticCommentAnchor";
@@ -77,6 +78,11 @@ function commentPartialFromEndmatterEntry(
 
   return {
     id,
+    metadata: Object.fromEntries(
+      Object.entries(entry ?? {}).filter(
+        (pair): pair is [string, string] => typeof pair[1] === "string",
+      ),
+    ),
     createdAt:
       typeof entry?.at === "string" ? entry.at : new Date().toISOString(),
     authorType: author.toUpperCase() === "AI" ? "ai" : "user",
@@ -100,6 +106,7 @@ function commentMetadata(
   const author = fields.get("by") ?? "user";
   return {
     id: fields.get("id"),
+    metadata: Object.fromEntries(fields),
     createdAt: fields.get("at") ?? new Date().toISOString(),
     authorType:
       author.toUpperCase() === "AI" ? ("ai" as const) : ("user" as const),
@@ -184,18 +191,33 @@ function tokenizeCriticCommentBlocks(
   const parsedComments: CriticComment[] = [];
 
   while (nextOffset < src.length) {
-    const parsed = parseComment(src, nextOffset, ignoreDiagnostic);
+    const recognized = scanReview(
+      src.slice(nextOffset),
+      src.length - nextOffset,
+      ignoreDiagnostic,
+    )[0];
+    const parsed =
+      recognized?.kind === "comment" && recognized.parsed.offset === 0
+        ? recognized.parsed
+        : null;
     if (!parsed) break;
     const comment = createCommentWithContext(
       {
         ...commentMetadata(parsed.metadata, endmatter, "comment"),
         content: parsed.content,
       },
-      [...existingComments, ...parsedComments],
+      [
+        ...existingComments,
+        ...parsedComments,
+        ...[
+          ...(endmatter?.comments.keys() ?? []),
+          ...(endmatter?.suggestions.keys() ?? []),
+        ].map((id) => ({ id })),
+      ],
     );
     parsedComments.push(comment);
-    raw += src.slice(nextOffset, parsed.endOffset);
-    nextOffset = parsed.endOffset;
+    raw += src.slice(nextOffset, nextOffset + parsed.endOffset);
+    nextOffset += parsed.endOffset;
   }
 
   return {
@@ -245,7 +267,11 @@ function tokenizeCriticChange(
       comments: CriticComment[];
     }
   | undefined {
-  const parsed = parseSuggestion(src, 0, ignoreDiagnostic);
+  const recognized = scanReview(src, src.length, ignoreDiagnostic)[0];
+  const parsed =
+    recognized?.kind === "suggestion" && recognized.parsed.offset === 0
+      ? recognized.parsed
+      : null;
   if (
     !parsed ||
     (parsed.suggestionKind !== "substitution" && !parsed.text) ||
@@ -266,11 +292,18 @@ function tokenizeCriticChange(
       : parsed.suggestionKind,
     {
       changeId: metadata.id,
+      metadata: metadata.metadata,
       createdAt: metadata.createdAt,
       authorType: metadata.authorType,
       authorId: metadata.authorId,
     },
-    existingChanges,
+    [
+      ...existingChanges,
+      ...[
+        ...(endmatter?.suggestions.keys() ?? []),
+        ...(endmatter?.comments.keys() ?? []),
+      ].map((changeId) => ({ changeId })),
+    ],
   );
   return {
     token: {
@@ -300,7 +333,7 @@ function renderCriticChangeSpan(
     change.changeId,
   )}" data-critic-change-by="${escapeHtml(by)}" data-critic-change-at="${escapeHtml(
     change.createdAt,
-  )}">${content}</span>`;
+  )}" data-critic-change-metadata="${escapeHtml(JSON.stringify(change.metadata ?? {}))}">${content}</span>`;
 
   if (commentIds.length === 0) {
     return changeSpan;
@@ -314,60 +347,118 @@ function renderCriticChangeSpan(
 function renderCriticCodeText(
   text: string,
   comments: Map<string, CriticComment>,
+  changes: Map<string, CriticChangeAttrs>,
   endmatter?: ParsedEndmatter,
+  reservedIds: string[] = [],
 ) {
+  const startOf = (token: ReturnType<typeof scanReview>[number]) =>
+    token.kind === "comment" && token.anchorText !== undefined
+      ? text.lastIndexOf("{==", token.parsed.offset)
+      : token.parsed.offset;
+  const tokens = scanReview(text, text.length, ignoreDiagnostic, {
+    code: true,
+  }).sort((left, right) => startOf(left) - startOf(right));
   let result = "";
-  let offset = 0;
-
-  while (offset < text.length) {
-    const highlight = parseHighlight(text, offset);
-
-    if (!highlight?.text) {
-      result += escapeHtml(text[offset] ?? "");
-      offset += 1;
-      continue;
+  let cursor = 0;
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index]!;
+    const parsed = token.parsed;
+    if (parsed.offset < cursor) continue;
+    if (token.kind === "comment") {
+      const anchorStart =
+        token.anchorText !== undefined
+          ? text.lastIndexOf("{==", parsed.offset)
+          : parsed.offset;
+      result += escapeHtml(text.slice(cursor, anchorStart));
+      const grouped = [token];
+      while (
+        tokens[index + 1]?.kind === "comment" &&
+        tokens[index + 1]!.parsed.offset === grouped.at(-1)!.parsed.endOffset
+      )
+        grouped.push(tokens[++index]! as typeof token);
+      const ids: string[] = [];
+      for (const commentToken of grouped) {
+        const comment = createCommentWithContext(
+          {
+            ...commentMetadata(
+              commentToken.parsed.metadata,
+              endmatter,
+              "comment",
+            ),
+            content: commentToken.parsed.content,
+          },
+          [
+            ...comments.values(),
+            ...reservedIds.map((id) => ({ id })),
+            ...[
+              ...(endmatter?.comments.keys() ?? []),
+              ...(endmatter?.suggestions.keys() ?? []),
+            ].map((id) => ({ id })),
+          ],
+        );
+        comments.set(comment.id, comment);
+        ids.push(comment.id);
+      }
+      result += `<span data-comment-ids="${escapeHtml(JSON.stringify(ids))}">${token.anchorText !== undefined ? renderCriticCodeText(token.anchorText, comments, changes, endmatter, reservedIds) : unanchoredCommentSentinel}</span>`;
+      cursor = grouped.at(-1)!.parsed.endOffset;
+    } else {
+      result += escapeHtml(text.slice(cursor, parsed.offset));
+      const metadata = commentMetadata(
+        parsed.metadata,
+        endmatter,
+        "suggestion",
+      );
+      const change = createChangeWithContext(
+        token.parsed.suggestionKind === "substitution"
+          ? "substitution-old"
+          : token.parsed.suggestionKind,
+        { changeId: metadata.id, ...metadata },
+        [
+          ...changes.values(),
+          ...reservedIds.map((changeId) => ({ changeId })),
+          ...[...(endmatter?.suggestions.keys() ?? [])].map((changeId) => ({
+            changeId,
+          })),
+        ],
+      );
+      changes.set(change.changeId, change);
+      result +=
+        token.parsed.suggestionKind === "substitution"
+          ? renderCriticChangeSpan(
+              change,
+              escapeHtml(token.parsed.originalText ?? ""),
+              "substitution-old",
+            ) +
+            renderCriticChangeSpan(
+              change,
+              escapeHtml(token.parsed.replacementText ?? ""),
+              "substitution-new",
+            )
+          : renderCriticChangeSpan(change, escapeHtml(token.parsed.text));
+      cursor = parsed.endOffset;
     }
-
-    const anchor = highlight.text;
-    let nextOffset = highlight.endOffset;
-    const parsed = tokenizeCriticCommentBlocks(
-      text,
-      nextOffset,
-      comments.values(),
-      endmatter,
-    );
-    const parsedComments = parsed.comments;
-    nextOffset += parsed.raw.length;
-
-    if (parsedComments.length === 0) {
-      result += escapeHtml(text.slice(offset, highlight.endOffset));
-      offset = highlight.endOffset;
-      continue;
-    }
-
-    for (const comment of parsedComments) {
-      comments.set(comment.id, comment);
-    }
-
-    result += `<span data-comment-ids="${escapeHtml(
-      JSON.stringify(parsedComments.map((comment) => comment.id)),
-    )}">${escapeHtml(anchor)}</span>`;
-    offset = nextOffset;
   }
-
-  return result;
+  return result + escapeHtml(text.slice(cursor));
 }
 
 function renderCriticCodeBlock(
   token: Tokens.Code,
   comments: Map<string, CriticComment>,
+  changes: Map<string, CriticChangeAttrs>,
   endmatter?: ParsedEndmatter,
+  reservedIds: string[] = [],
 ) {
   const language = (token.lang || "").match(/\S+/)?.[0];
   const classAttr = language ? ` class="language-${escapeHtml(language)}"` : "";
   const content = token.escaped
     ? token.text
-    : renderCriticCodeText(token.text, comments, endmatter);
+    : renderCriticCodeText(
+        token.text,
+        comments,
+        changes,
+        endmatter,
+        reservedIds,
+      );
 
   return `<pre><code${classAttr}>${content}</code></pre>\n`;
 }
@@ -375,11 +466,13 @@ function renderCriticCodeBlock(
 function createCriticMarked(
   markdownOptions?: MarkdownOptions,
   endmatter?: ParsedEndmatter,
+  reservedIds: string[] = [],
 ) {
   const comments = new Map<string, CriticComment>();
   const changes = new Map<string, CriticChangeAttrs>();
   const renderer = createMarkedRenderer(markdownOptions);
-  renderer.code = (token) => renderCriticCodeBlock(token, comments, endmatter);
+  renderer.code = (token) =>
+    renderCriticCodeBlock(token, comments, changes, endmatter, reservedIds);
   const parser = new Marked({
     gfm: true,
     async: false,
@@ -398,7 +491,7 @@ function createCriticMarked(
           const result = tokenizeCriticCommentAnchor(
             this.lexer,
             src,
-            comments.values(),
+            [...comments.values(), ...reservedIds.map((id) => ({ id }))],
             endmatter,
           );
           if (!result) return undefined;
@@ -425,7 +518,7 @@ function createCriticMarked(
         tokenizer(src: string) {
           const result = tokenizeCriticStandaloneComment(
             src,
-            comments.values(),
+            [...comments.values(), ...reservedIds.map((id) => ({ id }))],
             endmatter,
           );
           if (!result) return undefined;
@@ -456,8 +549,11 @@ function createCriticMarked(
           const result = tokenizeCriticChange(
             this.lexer,
             src,
-            changes.values(),
-            comments.values(),
+            [
+              ...changes.values(),
+              ...reservedIds.map((changeId) => ({ changeId })),
+            ],
+            [...comments.values(), ...reservedIds.map((id) => ({ id }))],
             endmatter,
           );
           if (!result) return undefined;
@@ -521,6 +617,7 @@ export function criticMarkdownHasReviewRail(
   const { parser, comments, changes } = createCriticMarked(
     options,
     parsedEndmatter,
+    collectReviewIds(markdown),
   );
   parser.parse(protectRichTextRoundTripMarkdown(body));
   addEndmatterFeedback(comments, parsedEndmatter);
@@ -542,6 +639,7 @@ export function criticMarkdownToRenderedHtml(
   const { parser, comments, changes } = createCriticMarked(
     options,
     parsedEndmatter,
+    collectReviewIds(markdown),
   );
   const html = sanitizeMarkdownHtml(
     parser.parse(protectRichTextRoundTripMarkdown(body)) as string,
@@ -562,15 +660,76 @@ export function criticMarkdownToEditorState(
 } {
   const { frontmatter, body, endmatter } = splitYamlDocumentMetadata(markdown);
   const parsedEndmatter = parseReviewEndmatter(endmatter);
-  const { parser, comments } = createCriticMarked(options, parsedEndmatter);
-  const html = sanitizeMarkdownHtml(
-    parser.parse(protectRichTextRoundTripMarkdown(body)) as string,
+  const { parser, comments } = createCriticMarked(
+    options,
+    parsedEndmatter,
+    collectReviewIds(markdown),
   );
-  const doc = generateJSON(html, extensions) as JSONContent & {
-    yamlFrontmatter?: string;
-    yamlEndmatter?: string;
-  };
+  const tokens = marked.lexer(body, { gfm: true });
+  const blocks: JSONContent[] = [];
+  let cursor = 0;
+  const materialTokens = tokens.filter((token) => token.type !== "space");
+  for (let index = 0; index < materialTokens.length; index++) {
+    const token = materialTokens[index]!;
+    const start = body.indexOf(token.raw, cursor);
+    const next = materialTokens[index + 1];
+    const end = next
+      ? body.indexOf(next.raw, start + token.raw.length)
+      : body.length;
+    const tokenEnd = start + token.raw.length;
+    const gap = body.slice(tokenEnd, end);
+    const source = body.slice(cursor, /\S/.test(gap) ? tokenEnd : end);
+    const blockTokens = parser.lexer(
+      protectRichTextRoundTripMarkdown(token.raw),
+    );
+    blockTokens.links = tokens.links;
+    const html = sanitizeMarkdownHtml(parser.parser(blockTokens));
+    const nodes = generateJSON(html, extensions).content ?? [];
+    for (const node of nodes) {
+      node.attrs = {
+        ...node.attrs,
+        originalSource: source,
+        sourceGroup: `block-${index}`,
+      };
+      blocks.push(node);
+    }
+    if (/\S/.test(gap)) {
+      const preserved = generateJSON(
+        `<div data-markdown-raw-block="${escapeHtml(encodeURIComponent(gap))}"></div>`,
+        extensions,
+      ).content![0]!;
+      preserved.attrs = {
+        ...preserved.attrs,
+        originalSource: gap,
+        sourceGroup: `gap-${index}`,
+      };
+      blocks.push(preserved);
+    }
+    cursor = end;
+  }
+  const doc = {
+    type: "doc",
+    attrs: { reviewIds: collectReviewIds(markdown) },
+    content: blocks,
+  } as JSONContent & { yamlFrontmatter?: string; yamlEndmatter?: string };
   addEndmatterFeedback(comments, parsedEndmatter);
+  for (let index = 0; index < blocks.length; ) {
+    const group: JSONContent[] = [blocks[index++]!];
+    while (
+      index < blocks.length &&
+      blocks[index]?.attrs?.sourceGroup === group[0]?.attrs?.sourceGroup
+    )
+      group.push(blocks[index++]!);
+    const grouped = { type: "doc", content: group };
+    const snapshot = blockSnapshot(grouped);
+    const commentSnapshot = blockCommentSnapshot(grouped, comments);
+    for (const node of group)
+      node.attrs = {
+        ...node.attrs,
+        sourceSnapshot: snapshot,
+        sourceComments: commentSnapshot,
+      };
+  }
   if (frontmatter) {
     doc.yamlFrontmatter = frontmatter;
   }

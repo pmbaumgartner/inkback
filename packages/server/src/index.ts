@@ -8,8 +8,9 @@ import express, { type Express } from "express";
 import {
   fileVersionFromFile,
   markdownPageFromFile,
-  nextAssetPath,
+  readAsset,
   titleFromContent,
+  writeAsset,
   writeDocument,
 } from "./document-files.js";
 import {
@@ -20,13 +21,12 @@ import {
   projectDirFromRequest,
 } from "./http-document-target.js";
 import {
-  hasNonLoopbackHost,
   INKBACK_DEFAULT_PORT,
+  INKBACK_LOOPBACK_HOSTS,
   INKBACK_PUBLIC_HOST,
-  resolveBindHosts,
 } from "./network.js";
 import { registerOpenRequests } from "./open-requests.js";
-import { registerRemoteDocuments } from "./remote-documents.js";
+import { createPathPolicy } from "./path-policy.js";
 import { registerReviewRoutes } from "./review-routes.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -74,7 +74,7 @@ interface CreateAppOptions {
   serverRoot?: string;
   homeDir?: string;
   staticDirPath?: string;
-  remoteDocumentToken?: string;
+  allowedDirectories?: string[];
 }
 
 interface CreateAppResult {
@@ -235,12 +235,38 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
   const homeDir = options.homeDir ?? os.homedir();
   const serverRoot = path.resolve(options.serverRoot ?? defaultServerRoot);
   const staticDirPath = options.staticDirPath ?? staticDir;
-  const remoteDocumentToken =
-    typeof options.remoteDocumentToken === "string" &&
-    options.remoteDocumentToken.length > 0
-      ? options.remoteDocumentToken
-      : null;
   const app = express();
+  const policy = createPathPolicy({
+    directories:
+      options.allowedDirectories ??
+      (options.projectDir ? [options.projectDir] : []),
+  });
+  app.locals.pathPolicy = policy;
+  app.use("/api", (req, res, next) => {
+    const loopback = (value: string, isHost = false) => {
+      try {
+        const url = new URL(isHost ? `http://${value}` : value);
+        return (
+          ["http:", "https:"].includes(url.protocol) &&
+          ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) &&
+          !url.username &&
+          !url.password &&
+          (isHost ? url.pathname === "/" && !url.search && !url.hash : true)
+        );
+      } catch {
+        return false;
+      }
+    };
+    const origin = req.get("Origin");
+    if (
+      !loopback(req.get("Host") ?? "", true) ||
+      (origin !== undefined && !loopback(origin))
+    ) {
+      res.status(403).json({ error: "Local requests only" });
+      return;
+    }
+    next();
+  });
 
   app.use(express.json({ limit: "50mb" }));
 
@@ -250,7 +276,9 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
     const projectDir = projectDirFromRequest(req, res);
     if (!projectDir) return;
 
-    const ids = listMdFiles(projectDir);
+    const ids = listMdFiles(projectDir).filter((id) =>
+      policy.isWritable(path.join(projectDir, `${id}.md`)),
+    );
     const pages = ids.map((id) => {
       const content = fs.readFileSync(
         path.join(projectDir, `${id}.md`),
@@ -266,8 +294,9 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
     if (!projectDir) return;
 
     const id = req.params.id;
-    const filePath = pageFilePathFromId(projectDir, id);
-    if (!filePath || !fs.existsSync(filePath)) {
+    const filePath = pageFilePathFromId(req, res, projectDir, id);
+    if (!filePath) return;
+    if (!fs.existsSync(filePath)) {
       res.status(404).json({ error: "Page not found" });
       return;
     }
@@ -356,8 +385,9 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
     if (!projectDir) return;
 
     const id = req.params.id;
-    const filePath = pageFilePathFromId(projectDir, id);
-    if (!filePath || !fs.existsSync(filePath)) {
+    const filePath = pageFilePathFromId(req, res, projectDir, id);
+    if (!filePath) return;
+    if (!fs.existsSync(filePath)) {
       res.status(404).json({ error: "Page not found" });
       return;
     }
@@ -402,7 +432,8 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
     };
     const id = nextUntitledId(projectDir);
     const content = bodyContent || `# ${title || "Untitled"}\n`;
-    const filePath = path.join(projectDir, `${id}.md`);
+    const filePath = pageFilePathFromId(req, res, projectDir, id);
+    if (!filePath) return;
     fs.writeFileSync(filePath, content);
 
     res.status(201).json(markdownPageFromFile(`${id}.md`, filePath));
@@ -413,8 +444,9 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
     if (!projectDir) return;
 
     const id = req.params.id;
-    const filePath = pageFilePathFromId(projectDir, id);
-    if (!filePath || !fs.existsSync(filePath)) {
+    const filePath = pageFilePathFromId(req, res, projectDir, id);
+    if (!filePath) return;
+    if (!fs.existsSync(filePath)) {
       res.status(404).json({ error: "Page not found" });
       return;
     }
@@ -436,16 +468,12 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
       capabilities: {
         projectPathRequired: true,
         fileSystemBrowsing: true,
-        remoteDocuments: true,
-        remoteDocumentTokenRequired: remoteDocumentToken !== null,
         reviewSessions: true,
       },
     });
   });
 
   registerOpenRequests(app);
-
-  registerRemoteDocuments(app, remoteDocumentToken);
 
   app.get("/api/directories", (req, res) => {
     const requestedPath =
@@ -509,6 +537,12 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
       return;
     }
 
+    if (!policy.isWritable(absolutePath)) {
+      res
+        .status(403)
+        .json({ error: "Path is outside the allowed directories" });
+      return;
+    }
     res.json({
       backend: "local-files",
       projectDir: absolutePath,
@@ -525,6 +559,12 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
     }
 
     const absolutePath = path.resolve(requestedPath);
+    if (!policy.isWritable(absolutePath)) {
+      res
+        .status(403)
+        .json({ error: "Path is outside the allowed directories" });
+      return;
+    }
     ensureDirectoryExists(absolutePath);
 
     res.status(201).json({
@@ -540,13 +580,22 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
 
     const relativePath =
       typeof req.query.path === "string" ? req.query.path : "";
-    const absolutePath = ensureProjectPath(projectDir, relativePath);
+    const absolutePath = ensureProjectPath(req, res, projectDir, relativePath);
 
-    if (!absolutePath || !fs.existsSync(absolutePath)) {
+    if (!absolutePath) return;
+    if (!fs.existsSync(absolutePath)) {
       res.status(404).json({ error: "File not found" });
       return;
     }
 
+    try {
+      readAsset(absolutePath);
+    } catch (error) {
+      res.status(400).json({ error: (error as Error).message });
+      return;
+    }
+    res.setHeader("Content-Security-Policy", "sandbox");
+    res.setHeader("X-Content-Type-Options", "nosniff");
     res.sendFile(absolutePath);
   });
 
@@ -560,21 +609,26 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
       return;
     }
 
-    const relativePath = nextAssetPath(projectDir, payload.filename);
-    const absolutePath = ensureProjectPath(projectDir, relativePath);
-    if (!absolutePath) {
-      res.status(400).json({ error: "Invalid asset path" });
+    let relativePath: string;
+    let mimeType: string;
+    try {
+      const result = writeAsset(
+        projectDir,
+        payload.filename,
+        payload.dataBase64,
+        policy,
+      );
+      relativePath = result.markdownPath;
+      mimeType = result.mimeType;
+    } catch (error) {
+      res.status(400).json({ error: (error as Error).message });
       return;
     }
-
-    const buffer = Buffer.from(payload.dataBase64, "base64");
-    fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
-    fs.writeFileSync(absolutePath, buffer);
 
     res.status(201).json({
       markdownPath: `./${relativePath}`,
       previewUrl: `/api/files?projectPath=${encodeURIComponent(projectDir)}&path=${encodeURIComponent(relativePath)}`,
-      mimeType: payload.mimeType || "application/octet-stream",
+      mimeType,
     });
   });
 
@@ -589,33 +643,12 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
   return { app, port };
 }
 
-export const INKBACK_TOKEN_ENV = "INKBACK_TOKEN";
-
 export async function createServer(
   port = INKBACK_DEFAULT_PORT,
   projectDir?: string,
 ): Promise<void> {
-  const bindHosts = resolveBindHosts();
-  const remoteDocumentToken = process.env[INKBACK_TOKEN_ENV] ?? "";
-
-  if (hasNonLoopbackHost(bindHosts) && remoteDocumentToken.length === 0) {
-    throw new Error(
-      [
-        `Inkback refuses to bind ${bindHosts.join(", ")} without a token.`,
-        "Non-loopback bindings expose the remote-document endpoints, which can",
-        "rewrite files on every connected CLI machine. Set INKBACK_TOKEN to",
-        "a strong secret and pass the same value to your CLI before retrying,",
-        "or remove INKBACK_BIND_HOST to keep loopback-only.",
-      ].join(" "),
-    );
-  }
-
-  const { app } = createApp({
-    port,
-    projectDir,
-    remoteDocumentToken:
-      remoteDocumentToken.length > 0 ? remoteDocumentToken : undefined,
-  });
+  const bindHosts = INKBACK_LOOPBACK_HOSTS;
+  const { app } = createApp({ port, projectDir });
   const listeningHosts: string[] = [];
 
   await Promise.all(

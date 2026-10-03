@@ -267,15 +267,11 @@ export function registerAppTools(server: McpServer, context: ToolContext) {
       readDocument(documentPath);
       requireWritable(context, documentPath);
       const directory = path.dirname(fs.realpathSync(documentPath));
-      const assets = path.join(directory, ".inkback-assets");
-      if (fs.existsSync(assets) && !context.policy.isWritable(assets))
-        throw new Error("Asset directory is outside the allowed directories.");
-      if (!/\.(png|jpe?g|gif|webp|svg)$/i.test(String(args.filename)))
-        throw new Error("Only image filenames are supported.");
       return writeAsset(
         directory,
         String(args.filename),
         String(args.dataBase64),
+        context.policy,
       );
     },
     false,

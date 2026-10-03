@@ -19,6 +19,7 @@ export {
   parseHighlight,
   parseMetadata,
   parseSuggestion,
+  scanReview,
   serializeMetadataAttributes,
 } from "./grammar.js";
 
@@ -485,9 +486,9 @@ export function appendInkbackDocumentComment(
 ): string {
   assertSafeCommentBodyText(options.message);
 
-  const index = extractInkbackReviewIndex(markdown);
   const endmatter = parseRfmEndmatter(markdown);
-  const commentId = options.id ?? nextCommentId(index.items);
+  const commentId =
+    options.id ?? allocateReviewId("c", collectReviewIds(markdown));
   const comments = new Map(endmatter.comments);
   comments.set(commentId, {
     body: options.message,
@@ -512,7 +513,8 @@ export function appendInkbackReply(
 
   const endmatter = parseRfmEndmatter(markdown);
   if (isEndmatterBackedItem(markdown, parent)) {
-    const replyId = options.id ?? nextCommentId(index.items);
+    const replyId =
+      options.id ?? allocateReviewId("c", collectReviewIds(markdown));
     const comments = new Map(endmatter.comments);
     comments.set(replyId, {
       body: options.message,
@@ -524,7 +526,7 @@ export function appendInkbackReply(
   }
 
   const reply = `{>>${options.message}<<}${serializeMetadataAttributes({
-    id: options.id ?? nextCommentId(index.items),
+    id: options.id ?? allocateReviewId("c", collectReviewIds(markdown)),
     by: options.author ?? "AI",
     at: options.at ?? new Date().toISOString(),
     re: options.parentId,
@@ -826,18 +828,30 @@ function isEndmatterBackedItem(markdown: string, item: RfmReviewItem): boolean {
   return markdown.slice(item.offset, item.endOffset).includes(`{#${item.id}}`);
 }
 
-function nextCommentId(items: RfmReviewItem[]): string {
-  let maxId = 0;
-
-  for (const item of items) {
-    const match = item.id.match(/^c(\d+)$/);
-    if (!match) continue;
-
-    const parsed = Number.parseInt(match[1] ?? "0", 10);
-    maxId = Math.max(maxId, parsed);
+export function allocateReviewId(
+  prefix: "c" | "s",
+  existingIds: Iterable<string>,
+): string {
+  let maximum = 0;
+  for (const id of existingIds) {
+    const match = id.match(new RegExp(`^${prefix}(\\d+)$`));
+    if (match) maximum = Math.max(maximum, Number(match[1]));
   }
+  return `${prefix}${maximum + 1}`;
+}
 
-  return `c${maxId + 1}`;
+export function collectReviewIds(markdown: string): string[] {
+  const { tokens, endmatter } = parseReviewDocument(markdown);
+  return [
+    ...new Set([
+      ...endmatter.comments.keys(),
+      ...endmatter.suggestions.keys(),
+      ...tokens.flatMap((token) => {
+        const id = token.parsed.metadata?.attrs.get("id");
+        return id ? [id] : [];
+      }),
+    ]),
+  ];
 }
 
 function findCanonicalMetadataStart(

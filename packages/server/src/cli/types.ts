@@ -150,14 +150,6 @@ export interface ParsedSseChunk {
   remainder: string;
 }
 
-export interface RemoteOpenOptions {
-  host: string;
-  openPath: string;
-  noOpen: boolean;
-  printUrl: boolean;
-  json: boolean;
-}
-
 export type StopOutcome =
   | { kind: "not-running" }
   | { kind: "failed"; pid: number }

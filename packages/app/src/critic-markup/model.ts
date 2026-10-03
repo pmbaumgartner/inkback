@@ -1,4 +1,8 @@
-import { parseRfmEndmatter, type RfmEndmatter } from "@inkback/rfm";
+import {
+  allocateReviewId,
+  parseRfmEndmatter,
+  type RfmEndmatter,
+} from "@inkback/rfm";
 
 import type { CriticChangeAttrs, CriticChangeKind } from "../editor-extensions";
 
@@ -10,6 +14,7 @@ export interface CriticComment {
   authorId?: string | null;
   parentCommentId?: string | null;
   scope?: "document";
+  metadata?: Record<string, string>;
 }
 
 export interface CriticCommentThread {
@@ -27,42 +32,6 @@ export function parseReviewEndmatter(
   return parseRfmEndmatter(endmatter ? `{#rfm}\n${endmatter}` : "");
 }
 
-export function createNextCommentId(
-  existingComments: Iterable<Pick<CriticComment, "id">>,
-): string {
-  let maxId = 0;
-
-  for (const comment of existingComments) {
-    const match = comment.id.match(/^c(\d+)$/);
-    if (!match) continue;
-
-    const parsed = Number.parseInt(match[1] || "0", 10);
-    if (parsed > maxId) {
-      maxId = parsed;
-    }
-  }
-
-  return `c${maxId + 1}`;
-}
-
-export function createNextChangeId(
-  existingChanges: Iterable<Pick<CriticChangeAttrs, "changeId">>,
-): string {
-  let maxId = 0;
-
-  for (const change of existingChanges) {
-    const match = change.changeId.match(/^s(\d+)$/);
-    if (!match) continue;
-
-    const parsed = Number.parseInt(match[1] || "0", 10);
-    if (parsed > maxId) {
-      maxId = parsed;
-    }
-  }
-
-  return `s${maxId + 1}`;
-}
-
 export function createCommentWithContext(
   partial?: Partial<CriticComment>,
   existingComments: Iterable<Pick<CriticComment, "id">> = [],
@@ -70,13 +39,19 @@ export function createCommentWithContext(
   const authorType = partial?.authorType ?? "user";
 
   return {
-    id: partial?.id ?? createNextCommentId(existingComments),
+    id:
+      partial?.id ??
+      allocateReviewId(
+        "c",
+        [...existingComments].map((comment) => comment.id),
+      ),
     content: partial?.content ?? "",
     createdAt: partial?.createdAt ?? new Date().toISOString(),
     authorType,
     authorId: partial?.authorId ?? (authorType === "ai" ? null : "user"),
     parentCommentId: partial?.parentCommentId ?? null,
     scope: partial?.scope,
+    metadata: partial?.metadata,
   };
 }
 
@@ -89,7 +64,13 @@ export function createChangeWithContext(
 
   return {
     kind,
-    changeId: partial?.changeId ?? createNextChangeId(existingChanges),
+    metadata: partial?.metadata,
+    changeId:
+      partial?.changeId ??
+      allocateReviewId(
+        "s",
+        [...existingChanges].map((change) => change.changeId),
+      ),
     createdAt: partial?.createdAt ?? new Date().toISOString(),
     authorType,
     authorId: partial?.authorId ?? (authorType === "ai" ? null : "user"),

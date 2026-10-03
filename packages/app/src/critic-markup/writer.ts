@@ -14,7 +14,6 @@ import {
   normalizeBlockSpacing,
   prependYamlFrontmatter,
 } from "../markdown";
-
 import {
   buildCommentThreads,
   type CriticComment,
@@ -22,9 +21,11 @@ import {
   parseReviewEndmatter,
   unanchoredCommentSentinel,
 } from "./model";
+import { blockCommentSnapshot, blockSnapshot } from "./source-blocks";
 
 function serializeMetadata(comment: CriticComment): string {
   const fields = [
+    ...Object.entries(comment.metadata ?? {}),
     ["id", comment.id],
     ["by", comment.authorType === "ai" ? "AI" : comment.authorId || "user"],
     ["at", comment.createdAt || new Date().toISOString()],
@@ -44,6 +45,7 @@ function serializeChangeMetadata(change: CriticChangeAttrs): string {
     createdAt: change.createdAt,
     authorType: change.authorType,
     authorId: change.authorId,
+    metadata: change.metadata,
   });
 }
 
@@ -192,8 +194,21 @@ function serializeCriticCommentElement(
   useEndmatter: boolean,
 ) {
   const commentIds = getElementCommentIds(element);
-  const changeElement = element.querySelector("span[data-critic-change-kind]");
-  if (changeElement instanceof HTMLElement) {
+  const children = [...element.childNodes];
+  const changeElement = children[0];
+  const onlyChange =
+    changeElement instanceof HTMLElement &&
+    changeElement.hasAttribute("data-critic-change-kind") &&
+    (children.length === 1 ||
+      (children.length === 2 &&
+        isPairedSubstitutionElement(
+          children[1] instanceof Element ? children[1] : null,
+          "substitution-new",
+          changeElement.getAttribute("data-critic-change-id") ?? "",
+        ) &&
+        changeElement.getAttribute("data-critic-change-kind") ===
+          "substitution-old"));
+  if (onlyChange && changeElement instanceof HTMLElement) {
     return serializeCriticChangeElement(
       serializeContent,
       changeElement,
@@ -321,6 +336,9 @@ function getElementChangeAttrs(element: HTMLElement): CriticChangeAttrs | null {
     createdAt,
     authorType,
     authorId: authorType === "ai" ? null : rawBy,
+    metadata: JSON.parse(
+      element.getAttribute("data-critic-change-metadata") || "{}",
+    ),
   };
 }
 
@@ -478,6 +496,7 @@ function collectCriticChangesFromDoc(
           createdAt: attrs.createdAt,
           authorType: attrs.authorType,
           authorId: attrs.authorId ?? null,
+          metadata: attrs.metadata,
         });
       }
     }
@@ -496,7 +515,6 @@ export function editorStateToCriticMarkdown(
   comments: Map<string, CriticComment>,
   options?: { frontmatter?: string | null; endmatter?: string | null },
 ): string {
-  const html = generateHTML(doc, extensions);
   const service = createTurndownService();
   const frontmatter =
     options?.frontmatter ??
@@ -507,6 +525,30 @@ export function editorStateToCriticMarkdown(
     (doc as JSONContent & { yamlEndmatter?: string }).yamlEndmatter ??
     null;
   const changes = collectCriticChangesFromDoc(doc);
+  const presentIds = new Set<string>(changes.keys());
+  const visit = (node: JSONContent) => {
+    for (const mark of node.marks ?? [])
+      if (mark.type === "commentRef")
+        for (const id of mark.attrs?.commentIds ?? []) presentIds.add(id);
+    node.content?.forEach(visit);
+  };
+  visit(doc);
+  for (const comment of comments.values())
+    if (comment.scope === "document") presentIds.add(comment.id);
+  let added = true;
+  while (added) {
+    added = false;
+    for (const comment of comments.values())
+      if (
+        comment.parentCommentId &&
+        presentIds.has(comment.parentCommentId) &&
+        !presentIds.has(comment.id)
+      ) {
+        presentIds.add(comment.id);
+        added = true;
+      }
+  }
+  comments = new Map([...comments].filter(([id]) => presentIds.has(id)));
   const useEndmatter = Boolean(sourceEndmatter);
   addCriticCommentRule(service, comments, useEndmatter);
   addCriticChangeRule(service, comments, useEndmatter);
@@ -516,11 +558,50 @@ export function editorStateToCriticMarkdown(
     comments,
     changes,
   );
+  const blocks = [...(doc.content ?? [])];
+  if (
+    blocks.length > 1 &&
+    blocks.at(-1)?.type === "paragraph" &&
+    !blocks.at(-1)?.content?.length
+  )
+    blocks.pop();
+  let body = "";
+  for (let index = 0; index < blocks.length; ) {
+    const previous = blocks[index - 1];
+    const block = blocks[index++]!;
+    const group = [block];
+    if (block.attrs?.sourceGroup)
+      while (
+        index < blocks.length &&
+        blocks[index]?.attrs?.sourceGroup === block.attrs.sourceGroup
+      )
+        group.push(blocks[index++]!);
+    const grouped = { type: "doc", content: group };
+    const source = block.attrs?.originalSource;
+    if (
+      typeof source === "string" &&
+      block.attrs?.sourceSnapshot === blockSnapshot(grouped) &&
+      block.attrs?.sourceComments === blockCommentSnapshot(grouped, comments)
+    ) {
+      body += source;
+    } else {
+      const html = generateHTML(grouped, extensions);
+      const markdown = normalizeBlockSpacing(service.turndown(html).trim());
+      if (body && !body.endsWith("\n")) body += "\n\n";
+      else if (
+        body &&
+        typeof source !== "string" &&
+        previous?.type !== "heading" &&
+        !body.endsWith("\n\n")
+      )
+        body += "\n";
+      const separator =
+        typeof source === "string" ? source.match(/\s*$/)?.[0] : null;
+      body += markdown + (separator || (index < blocks.length ? "\n\n" : "\n"));
+    }
+  }
   return appendYamlEndmatter(
-    prependYamlFrontmatter(
-      normalizeBlockSpacing(`${service.turndown(html).trimEnd()}\n`),
-      frontmatter,
-    ),
+    prependYamlFrontmatter(body, frontmatter),
     endmatter,
   );
 }

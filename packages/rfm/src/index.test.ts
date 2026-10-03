@@ -121,15 +121,9 @@ describe("validateInkbackMarkdown", () => {
     expect(result.summary).toMatchObject({ comments: 2 });
   });
 
-  it("ignores review markers inside fenced code blocks and inline code spans", () => {
+  it("ignores review markers inside inline code spans", () => {
     const result = validateInkbackMarkdown(
-      [
-        "```md",
-        "This is {>>not a comment<<}.",
-        "This is {++not a suggestion++}.",
-        "```",
-        "Literal `{>>not a comment<<}` text.",
-      ].join("\n"),
+      ["Literal `{>>not a comment<<}` text."].join("\n"),
     );
 
     expect(result.ok).toBe(true);
@@ -431,12 +425,9 @@ describe("extractInkbackReviewIndex", () => {
     });
   });
 
-  it("preserves literal CriticMarkup inside inline code and fenced code blocks", () => {
+  it("preserves literal CriticMarkup inside inline code", () => {
     const index = extractInkbackReviewIndex(
       [
-        "```md",
-        '{>>not a comment<<}{id="c1" by="user" at="2026-04-28T12:00:00.000Z"}',
-        "```",
         'Literal `{++not a suggestion++}{id="s1" by="AI" at="2026-04-28T12:01:00.000Z"}` text.',
       ].join("\n"),
     );
@@ -656,4 +647,28 @@ describe("RFM mutation helpers", () => {
       status: "resolved",
     });
   });
+});
+
+it("indexes review comments inside fenced code", () => {
+  const index = extractInkbackReviewIndex(
+    '```js\n{==const x = 1;==}{>>Explain this<<}{id="c1" by="user" at="2026-04-28T12:00:00Z"}\n```\n',
+  );
+  expect(index.items).toMatchObject([
+    { id: "c1", anchorText: "const x = 1;", text: "Explain this" },
+  ]);
+});
+
+it("allocates document comments after IDs stored only in endmatter", () => {
+  const source =
+    'Draft {#rfm}\n\n---\ncomments:\n  c9:\n    by: AI\n    at: "2026-04-28T12:00:00Z"\n';
+  const result = appendInkbackDocumentComment(source, { message: "Overall" });
+  const comments = parseRfmEndmatter(result).comments;
+  expect(comments.get("c9")?.by).toBe("AI");
+  expect(comments.get("c10")?.body).toBe("Overall");
+});
+
+it("allocates IDs from both namespaces and ignores non-numeric labels", async () => {
+  const { allocateReviewId } = await import("./index");
+  expect(allocateReviewId("c", ["c2", "note", "c7", "s9"])).toBe("c8");
+  expect(allocateReviewId("s", ["c2", "note", "s7", "s9"])).toBe("s10");
 });

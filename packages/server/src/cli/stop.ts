@@ -35,9 +35,18 @@ async function stopTrackedServer(deps: CliDependencies): Promise<{
     };
   }
 
-  if (deps.isProcessRunning(persistedState.pid)) {
-    await deps.stopProcess(persistedState.pid);
+  const payload = await getStatusPayload(persistedState.port, deps);
+  const candidate = getConfidentStopCandidate(payload);
+  if (candidate !== persistedState.pid) {
+    removeServerStateFile(stateFilePath);
+    return {
+      failedPid: null,
+      persistedState: null,
+      portIsQuiet: !payload,
+      stopped: false,
+    };
   }
+  await deps.stopProcess(candidate);
 
   const trackedPidStillRunning = deps.isProcessRunning(persistedState.pid);
   const portIsQuiet = await waitForServerToStop(persistedState.port, deps);

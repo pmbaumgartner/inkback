@@ -1,4 +1,4 @@
-import { Extension, Mark, Node, mergeAttributes } from "@tiptap/core";
+import { Extension, Mark, mergeAttributes, Node } from "@tiptap/core";
 import Code from "@tiptap/extension-code";
 import CodeBlock from "@tiptap/extension-code-block";
 import Image from "@tiptap/extension-image";
@@ -47,6 +47,7 @@ export interface CriticChangeAttrs {
   authorType?: "user" | "ai";
   authorId?: string | null;
   createdAt: string;
+  metadata?: Record<string, string>;
 }
 
 export const SUGGESTED_PARAGRAPH_SENTINEL = "\u2060";
@@ -177,6 +178,9 @@ function readCriticChangeAttrs(element: HTMLElement): CriticChangeAttrs | null {
     authorType,
     authorId: authorType === "ai" ? null : rawBy,
     createdAt,
+    metadata: JSON.parse(
+      element.getAttribute("data-critic-change-metadata") || "{}",
+    ),
   };
 }
 
@@ -271,6 +275,18 @@ const CriticChange = Mark.create({
 
   addAttributes() {
     return {
+      metadata: {
+        default: {},
+        parseHTML: (element) =>
+          JSON.parse(
+            element.getAttribute("data-critic-change-metadata") || "{}",
+          ),
+        renderHTML: (attributes) => ({
+          "data-critic-change-metadata": JSON.stringify(
+            attributes.metadata ?? {},
+          ),
+        }),
+      },
       kind: {
         default: "addition",
         parseHTML: (element) =>
@@ -767,11 +783,62 @@ const RawMarkdownBlock = Node.create({
   },
 });
 
+export const externalContentSync = "inkbackExternalContentSync";
+const ViewingGuard = Extension.create({
+  name: "viewingGuard",
+  addProseMirrorPlugins() {
+    const editor = this.editor;
+    return [
+      new Plugin({
+        filterTransaction: (tr) =>
+          !tr.docChanged ||
+          editor.isEditable ||
+          tr.getMeta(externalContentSync) === true,
+      }),
+    ];
+  },
+});
+
+const SourceBlocks = Extension.create({
+  name: "sourceBlocks",
+  addGlobalAttributes() {
+    return [
+      {
+        types: [
+          "paragraph",
+          "heading",
+          "bulletList",
+          "orderedList",
+          "taskList",
+          "blockquote",
+          "codeBlock",
+          "horizontalRule",
+          "table",
+          "image",
+          "rawMarkdownBlock",
+        ],
+        attributes: {
+          sourceGroup: { default: null, rendered: false },
+          originalSource: { default: null, rendered: false },
+          sourceSnapshot: { default: null, rendered: false },
+          sourceComments: { default: null, rendered: false },
+        },
+      },
+      {
+        types: ["doc"],
+        attributes: { reviewIds: { default: [], rendered: false } },
+      },
+    ];
+  },
+});
+
 export function createEditorExtensions(placeholder: string) {
   return [
+    SourceBlocks,
+    ViewingGuard,
     StarterKit.configure({
       heading: {
-        levels: [1, 2, 3],
+        levels: [1, 2, 3, 4, 5, 6],
       },
       code: false,
       codeBlock: false,
