@@ -391,7 +391,14 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
       res.status(404).json({ error: "Page not found" });
       return;
     }
-    const { content } = req.body as { content: string };
+    const { content, expectedVersion } = req.body ?? {};
+    if (
+      typeof content !== "string" ||
+      (expectedVersion !== undefined && typeof expectedVersion !== "string")
+    ) {
+      res.status(400).json({ error: "Invalid content or expectedVersion" });
+      return;
+    }
     fs.writeFileSync(filePath, content);
     res.json({ id, title: titleFromContent(content, id), content });
   });
@@ -401,10 +408,14 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
     if (!target) return;
     const { relativePath, absolutePath } = target;
 
-    const { content, expectedVersion } = req.body as {
-      content: string;
-      expectedVersion?: string;
-    };
+    const { content, expectedVersion } = req.body ?? {};
+    if (
+      typeof content !== "string" ||
+      (expectedVersion !== undefined && typeof expectedVersion !== "string")
+    ) {
+      res.status(400).json({ error: "Invalid content or expectedVersion" });
+      return;
+    }
     const result = writeDocument(
       absolutePath,
       content,

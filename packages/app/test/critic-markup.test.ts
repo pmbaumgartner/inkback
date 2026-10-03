@@ -25,6 +25,30 @@ function readMarkdownFixture(name: string): string {
 }
 
 describe("CriticMarkup comments", () => {
+  it("preserves CRLF on unchanged and edited reviewed documents", () => {
+    const input = [
+      "# Draft",
+      "",
+      'First {==claim==}{>>Check this<<}{id="c1" by="AI" at="2024-01-15T10:30:00.000Z"} paragraph.',
+      "",
+      "Second paragraph stays intact.",
+      "",
+    ].join("\r\n");
+    const { doc, comments } = criticMarkdownToEditorState(input);
+    expect(editorStateToCriticMarkdown(doc, comments)).toBe(input);
+
+    const edited = structuredClone(doc);
+    const paragraph = edited.content?.[1];
+    const text = paragraph?.content?.find((node) =>
+      node.text?.includes("First"),
+    );
+    if (!text?.text) throw new Error("Expected first paragraph text");
+    text.text = text.text.replace("First", "Revised");
+    const output = editorStateToCriticMarkdown(edited, comments);
+    expect(output).toBe(input.replace("First", "Revised"));
+    expect(output.replace(/\r\n/g, "")).not.toContain("\n");
+  });
+
   it("preserves YAML frontmatter delimiters and raw table-like YAML text", () => {
     const input = [
       "---",

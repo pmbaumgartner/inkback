@@ -67,6 +67,21 @@ describe("review session receipts", () => {
       expect(feedback.body.events).toHaveLength(1);
       const sequence = feedback.body.events[0].sequence;
       expect(sequence).toEqual(expect.any(Number));
+      const defaultWatch = await request(app)
+        .post("/api/review-events/watch")
+        .send({ ...target, timeoutSeconds: 0 });
+      expect(defaultWatch.body).toMatchObject({
+        events: [{ sequence, reviewId }],
+        timedOut: false,
+      });
+      const late = await request(app)
+        .post("/api/review-events/watch")
+        .send({ ...target, timeoutSeconds: 0, afterSequence: sequence });
+      expect(late.status).toBe(200);
+      expect(late.body).toMatchObject({
+        events: [{ sequence, reviewId }],
+        timedOut: false,
+      });
 
       // Returning the event to an attached watcher is not proof of receipt.
       expect(await status(reviewId)).toMatchObject({
@@ -82,6 +97,11 @@ describe("review session receipts", () => {
         reviewId,
         state: "received",
       });
+      const afterAck = await request(app)
+        .post("/api/review-events/watch")
+        .send({ ...target, timeoutSeconds: 0 });
+      expect(afterAck.status).toBe(200);
+      expect(afterAck.body).toMatchObject({ events: [], timedOut: true });
     } finally {
       await waiting;
     }

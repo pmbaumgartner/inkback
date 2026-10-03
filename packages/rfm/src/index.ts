@@ -512,7 +512,7 @@ export function appendInkbackReply(
   }
 
   const endmatter = parseRfmEndmatter(markdown);
-  if (isEndmatterBackedItem(markdown, parent)) {
+  if (isEndmatterBackedItem(markdown, parent, endmatter)) {
     const replyId =
       options.id ?? allocateReviewId("c", collectReviewIds(markdown));
     const comments = new Map(endmatter.comments);
@@ -532,7 +532,20 @@ export function appendInkbackReply(
     re: options.parentId,
   })}`;
 
-  return `${markdown.slice(0, parent.endOffset)}${reply}${markdown.slice(parent.endOffset)}`;
+  // Only the contiguous inline thread following the parent belongs at this anchor.
+  let insertionOffset = parent.endOffset;
+  const descendants = new Set([parent.id]);
+  for (const item of index.items) {
+    if (
+      item.offset !== insertionOffset ||
+      !item.parentId ||
+      !descendants.has(item.parentId)
+    )
+      continue;
+    descendants.add(item.id);
+    insertionOffset = item.endOffset;
+  }
+  return `${markdown.slice(0, insertionOffset)}${reply}${markdown.slice(insertionOffset)}`;
 }
 
 function assertSafeCommentBodyText(message: string): void {
@@ -824,8 +837,15 @@ function writeRfmEndmatter(
   return `${body}\n---\n${stringifyYaml(data)}`;
 }
 
-function isEndmatterBackedItem(markdown: string, item: RfmReviewItem): boolean {
-  return markdown.slice(item.offset, item.endOffset).includes(`{#${item.id}}`);
+function isEndmatterBackedItem(
+  markdown: string,
+  item: RfmReviewItem,
+  endmatter: RfmEndmatter,
+): boolean {
+  return (
+    markdown.slice(item.offset, item.endOffset).includes(`{#${item.id}}`) ||
+    typeof endmatter.comments.get(item.id)?.body === "string"
+  );
 }
 
 export function allocateReviewId(

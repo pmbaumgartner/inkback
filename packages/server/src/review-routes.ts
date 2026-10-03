@@ -175,7 +175,7 @@ export function registerReviewRoutes(app: Express) {
     const afterSequence =
       typeof req.body?.afterSequence === "number" ? req.body.afterSequence : 0;
     const cursor = fromNow ? reviewEvents.latestSequence() : afterSequence;
-    if (session?.completion && session.completion.event.sequence > cursor) {
+    if (session?.state === "queued" && session.completion) {
       res.json({
         events: [session.completion.event],
         timedOut: false,

@@ -124,8 +124,28 @@ function matchInlineCodeSpan(markdown: string, offset: number): number | null {
     length += 1;
   }
 
-  const closing = markdown.indexOf("`".repeat(length), offset + length);
-  return closing === -1 ? null : closing + length;
+  let cursor = offset + length;
+  while (cursor < markdown.length) {
+    if (markdown[cursor] === "\n") {
+      const lineStart = cursor + 1;
+      const line = markdown.slice(
+        lineStart,
+        nextLineOffset(markdown, lineStart),
+      );
+      if (
+        /^[ \t]*(?:\r?\n)?$/.test(line) ||
+        matchFence(markdown, lineStart, null)
+      )
+        break;
+    }
+    if (markdown[cursor] === "`") {
+      let runEnd = cursor + 1;
+      while (markdown[runEnd] === "`") runEnd++;
+      if (runEnd - cursor === length) return runEnd;
+      cursor = runEnd;
+    } else cursor++;
+  }
+  return offset + length;
 }
 
 export function parseComment(

@@ -425,6 +425,22 @@ describe("extractInkbackReviewIndex", () => {
     });
   });
 
+  it("does not let unmatched or longer backtick runs hide later review items", () => {
+    const at = 'by="user" at="2026-04-28T12:00:00Z"';
+    const source = [
+      `\` stray {==first==}{>>First<<}{id="c1" ${at}}`,
+      "",
+      `\`\` unmatched {>>Second<<}{id="c2" ${at}}`,
+      "```js",
+      `{>>Fenced<<}{id="c3" ${at}}`,
+      "```",
+      `\`{>>hidden<<}\` and \`\`{>>also hidden<<}\`\``,
+    ].join("\n");
+    expect(
+      extractInkbackReviewIndex(source).items.map((item) => item.id),
+    ).toEqual(["c1", "c2", "c3"]);
+  });
+
   it("preserves literal CriticMarkup inside inline code", () => {
     const index = extractInkbackReviewIndex(
       [
@@ -521,6 +537,43 @@ describe("RFM mutation helpers", () => {
     expect(updated).toBe(
       '# Plan\n\nKeep {==this claim==}{>>Needs proof<<}{id="c1" by="user" at="2026-04-28T12:00:00.000Z"}{>>Added a citation in the next paragraph.<<}{id="c2" by="AI" at="2026-04-28T12:10:00.000Z" re="c1"} as written.\n',
     );
+  });
+
+  it("keeps successive inline replies after their following descendants", () => {
+    const source = '{>>Root<<}{id="c1" by="user" at="2026-04-28T12:00:00Z"}\n';
+    const first = appendInkbackReply(source, {
+      parentId: "c1",
+      id: "c2",
+      message: "First",
+    });
+    const nested = appendInkbackReply(first, {
+      parentId: "c2",
+      id: "c3",
+      message: "Nested",
+    });
+    const last = appendInkbackReply(nested, {
+      parentId: "c1",
+      id: "c4",
+      message: "Last",
+    });
+    expect(
+      extractInkbackReviewIndex(last).items.map((item) => item.id),
+    ).toEqual(["c1", "c2", "c3", "c4"]);
+  });
+
+  it("replies to document-level comments in endmatter without changing the body", () => {
+    const source =
+      '# Draft\n\n---\ncomments:\n  c1:\n    body: Overall feedback\n    by: user\n    at: "2026-04-28T12:00:00Z"\n';
+    const updated = appendInkbackReply(source, {
+      parentId: "c1",
+      id: "c2",
+      message: "Addressed",
+    });
+    expect(updated.slice(0, updated.indexOf("\n---"))).toBe("# Draft\n");
+    expect(parseRfmEndmatter(updated).comments.get("c2")).toMatchObject({
+      body: "Addressed",
+      re: "c1",
+    });
   });
 
   it("appends a reply to YAML endmatter without adding inline reply markup", () => {

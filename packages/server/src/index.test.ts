@@ -47,6 +47,31 @@ describe("createApp", () => {
     expect(fs.readFileSync(filePath, "utf-8")).toBe("# Draft\n");
   });
 
+  it("rejects invalid save payloads without changing files", async () => {
+    const filePath = path.join(projectDir, "alpha.md");
+    fs.writeFileSync(filePath, "# Alpha\n");
+    const { app } = createApp({
+      allowedDirectories: [projectDir, homeDir],
+      homeDir,
+      staticDirPath: projectDir,
+    });
+    for (const route of ["/api/pages/alpha", "/api/markdown-file"]) {
+      const query =
+        route === "/api/markdown-file"
+          ? { projectPath: projectDir, path: "alpha.md" }
+          : { projectPath: projectDir };
+      for (const body of [
+        {},
+        { content: 42 },
+        { content: "changed", expectedVersion: 42 },
+      ]) {
+        const response = await request(app).put(route).query(query).send(body);
+        expect(response.status).toBe(400);
+        expect(fs.readFileSync(filePath, "utf8")).toBe("# Alpha\n");
+      }
+    }
+  });
+
   it("reads nested markdown files inside the project", async () => {
     const nestedDir = path.join(projectDir, "notes");
     fs.mkdirSync(nestedDir, { recursive: true });

@@ -21,6 +21,8 @@ If the MCP App tool is unavailable, use the terminal flow:
 4. Answer questions and address feedback within the user's existing authorization. Finish review alone does not approve implementing a plan or accepting every suggestion.
 5. Preserve unresolved items, IDs, metadata, links, images, frontmatter, and literal code examples. Reopen when useful or requested.
 
+If `open` reports that the file is outside the running server's allowed directories, stop that server and reopen, or configure `INKBACK_ALLOWED_DIRS` before restarting. In a checkout, use `node packages/server/bin/inkback.mjs stop`.
+
 After editing review data, run `inkback doctor "/absolute/path/to/file.md"` to check for duplicate IDs, broken reply links, and malformed endmatter. In a source checkout, use `node packages/server/bin/inkback.mjs doctor <path>`.
 
 ## Handle feedback

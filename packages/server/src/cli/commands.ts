@@ -156,6 +156,32 @@ export async function runOpen(
   } else {
     result = await ensureServerRunning(deps, { projectDir });
     baseUrl = buildPublicBaseUrl(result.server.port);
+    if (result.reused) {
+      try {
+        const response = await deps.fetchImpl(
+          new URL("/api/project/open", result.server.url),
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ path: projectDir }),
+            signal: AbortSignal.timeout(3000),
+          },
+        );
+        if (!response.ok) {
+          deps.error(
+            response.status === 403
+              ? `Cannot open ${projectDir}: outside the running server's allowed directories. Run \`inkback stop\` and reopen, or set INKBACK_ALLOWED_DIRS.`
+              : `Cannot open ${projectDir}: running server rejected the project (${response.status}). Run \`inkback stop\` and reopen.`,
+          );
+          return 1;
+        }
+      } catch (error) {
+        deps.error(
+          `Cannot check project access on the running server: ${error instanceof Error ? error.message : String(error)}. Run \`inkback stop\` and reopen.`,
+        );
+        return 1;
+      }
+    }
   }
 
   const viewer = new URL(buildTargetUrl(baseUrl, openPath));

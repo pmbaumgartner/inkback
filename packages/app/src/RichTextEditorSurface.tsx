@@ -128,6 +128,7 @@ export const RichTextEditorSurface = memo(function RichTextEditorSurface({
   );
   const frontmatterRef = useRef<string | null>(parsedContent.frontmatter);
   const endmatterRef = useRef<string | null>(parsedContent.endmatter);
+  const lineEndingRef = useRef(parsedContent.lineEnding);
 
   useEffect(() => {
     commentsRef.current = comments;
@@ -150,6 +151,7 @@ export const RichTextEditorSurface = memo(function RichTextEditorSurface({
           {
             frontmatter: frontmatterRef.current,
             endmatter: endmatterRef.current,
+            lineEnding: lineEndingRef.current,
           },
         ),
       );
@@ -289,6 +291,7 @@ export const RichTextEditorSurface = memo(function RichTextEditorSurface({
 
     frontmatterRef.current = parsedContent.frontmatter;
     endmatterRef.current = parsedContent.endmatter;
+    lineEndingRef.current = parsedContent.lineEnding;
     commentsRef.current = parsedContent.comments;
     setComments(parsedContent.comments);
     setSelectedCommentId(null);
@@ -298,7 +301,9 @@ export const RichTextEditorSurface = memo(function RichTextEditorSurface({
     setDraftSuggestion(null);
     setPendingFocusCommentId(null);
 
-    const nextDoc = parsedContent.doc;
+    // Compare editor content, not source metadata kept in the refs above.
+    const { type, attrs, content } = parsedContent.doc;
+    const nextDoc = { type, attrs, content };
     if (JSON.stringify(editor.getJSON()) !== JSON.stringify(nextDoc)) {
       editor
         .chain()

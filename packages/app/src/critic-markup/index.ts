@@ -657,13 +657,17 @@ export function criticMarkdownToEditorState(
   comments: Map<string, CriticComment>;
   frontmatter: string | null;
   endmatter: string | null;
+  lineEnding: "\n" | "\r\n";
 } {
-  const { frontmatter, body, endmatter } = splitYamlDocumentMetadata(markdown);
+  const lineEnding = markdown.includes("\r\n") ? "\r\n" : "\n";
+  const normalized = markdown.replace(/\r\n/g, "\n");
+  const { frontmatter, body, endmatter } =
+    splitYamlDocumentMetadata(normalized);
   const parsedEndmatter = parseReviewEndmatter(endmatter);
   const { parser, comments } = createCriticMarked(
     options,
     parsedEndmatter,
-    collectReviewIds(markdown),
+    collectReviewIds(normalized),
   );
   const tokens = marked.lexer(body, { gfm: true });
   const blocks: JSONContent[] = [];
@@ -709,9 +713,14 @@ export function criticMarkdownToEditorState(
   }
   const doc = {
     type: "doc",
-    attrs: { reviewIds: collectReviewIds(markdown) },
+    attrs: { reviewIds: collectReviewIds(normalized) },
     content: blocks,
-  } as JSONContent & { yamlFrontmatter?: string; yamlEndmatter?: string };
+  } as JSONContent & {
+    yamlFrontmatter?: string;
+    yamlEndmatter?: string;
+    lineEnding?: "\n" | "\r\n";
+  };
+  doc.lineEnding = lineEnding;
   addEndmatterFeedback(comments, parsedEndmatter);
   for (let index = 0; index < blocks.length; ) {
     const group: JSONContent[] = [blocks[index++]!];
@@ -737,7 +746,7 @@ export function criticMarkdownToEditorState(
     doc.yamlEndmatter = endmatter;
   }
 
-  return { doc, comments, frontmatter, endmatter };
+  return { doc, comments, frontmatter, endmatter, lineEnding };
 }
 
 const extensions = createEditorExtensions("");

@@ -119,7 +119,7 @@ export function createDefaultOpenUrl({
     }
 
     if (platform === "win32") {
-      openDetachedCommand("cmd", ["/c", "start", "", url]);
+      openDetachedCommand("rundll32", ["url.dll,FileProtocolHandler", url]);
       return "browser";
     }
 

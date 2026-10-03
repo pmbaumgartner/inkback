@@ -310,6 +310,10 @@ describe("cli", () => {
           });
         }
 
+        if (url.pathname === "/api/project/open" && init?.method === "POST") {
+          return new Response(JSON.stringify({ projectDir }), { status: 200 });
+        }
+
         throw new Error("connect ECONNREFUSED");
       },
       isProcessRunning: () => false,
@@ -330,6 +334,31 @@ describe("cli", () => {
     expect(exitCode).toBe(0);
     expect(postedOpenRequest).toEqual({ path: documentPath });
     expect(lastOpenedUrl).toBeNull();
+  });
+
+  it("rejects a project outside a reused server's allowed directories before opening", async () => {
+    const test = createTestDependencies();
+    const first = await ensureServerRunning(test.deps, { projectDir });
+    const otherProject = path.join(tempDir, "other-project");
+    fs.mkdirSync(otherProject);
+    const documentPath = path.join(otherProject, "draft.md");
+    fs.writeFileSync(documentPath, "# Draft\n");
+
+    const exitCode = await runCli(
+      ["open", documentPath, "--no-watch"],
+      test.deps,
+    );
+
+    expect(first.reused).toBe(false);
+    expect(exitCode).toBe(1);
+    expect(test.getSpawnCount()).toBe(1);
+    expect(test.getLastOpenedUrl()).toBeNull();
+    expect(test.errors).toHaveLength(1);
+    expect(test.errors[0]).toContain(
+      "outside the running server's allowed directories",
+    );
+    expect(test.errors[0]).toContain("inkback stop");
+    expect(test.errors[0]).toContain("INKBACK_ALLOWED_DIRS");
   });
 
   it("opens the default browser on macOS when Chrome is installed but not the default browser", () => {
@@ -436,13 +465,18 @@ describe("cli", () => {
       },
     });
 
-    const mode = openUrl("http://localhost:4020/?file=draft.md");
+    const mode = openUrl(
+      "http://localhost:4020/?path=draft.md&reviewId=review-1",
+    );
 
     expect(mode).toBe("browser");
     expect(opened).toEqual([
       {
-        command: "cmd",
-        args: ["/c", "start", "", "http://localhost:4020/?file=draft.md"],
+        command: "rundll32",
+        args: [
+          "url.dll,FileProtocolHandler",
+          "http://localhost:4020/?path=draft.md&reviewId=review-1",
+        ],
       },
     ]);
   });
@@ -1075,7 +1109,7 @@ describe("cli", () => {
         INKBACK_STATE_DIR: stateDir,
       },
       cwd: projectDir,
-      fetchImpl: async (input) => {
+      fetchImpl: async (input, init) => {
         const url =
           input instanceof URL
             ? input
@@ -1102,6 +1136,9 @@ describe("cli", () => {
           );
         }
 
+        if (url.pathname === "/api/project/open" && init?.method === "POST") {
+          return new Response(JSON.stringify({ projectDir }), { status: 200 });
+        }
         throw new Error("connect ECONNREFUSED");
       },
       isProcessRunning: () => false,

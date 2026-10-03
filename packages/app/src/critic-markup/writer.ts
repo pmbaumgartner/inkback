@@ -513,7 +513,11 @@ function collectCriticChangesFromDoc(
 export function editorStateToCriticMarkdown(
   doc: JSONContent,
   comments: Map<string, CriticComment>,
-  options?: { frontmatter?: string | null; endmatter?: string | null },
+  options?: {
+    frontmatter?: string | null;
+    endmatter?: string | null;
+    lineEnding?: "\n" | "\r\n";
+  },
 ): string {
   const service = createTurndownService();
   const frontmatter =
@@ -600,10 +604,14 @@ export function editorStateToCriticMarkdown(
       body += markdown + (separator || (index < blocks.length ? "\n\n" : "\n"));
     }
   }
-  return appendYamlEndmatter(
+  const output = appendYamlEndmatter(
     prependYamlFrontmatter(body, frontmatter),
     endmatter,
   );
+  const lineEnding =
+    options?.lineEnding ??
+    (doc as JSONContent & { lineEnding?: "\n" | "\r\n" }).lineEnding;
+  return lineEnding === "\r\n" ? output.replace(/\r?\n/g, "\r\n") : output;
 }
 
 const extensions = createEditorExtensions("");
