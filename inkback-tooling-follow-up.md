@@ -8,7 +8,9 @@ Peter decided not to support embedded MCP Apps. The desktop compatibility gate
 and verification results below remain evidence of what was tested, not future
 support requirements. Complete removal is being planned in parked placeholder
 `inkback#d31j`; no removal has been implemented. Browser CLI review remains
-supported. Retention of ordinary MCP tools and MCPB distribution is unresolved
+supported. Peter also explicitly decided to drop MCPB distribution; its manifest,
+build/package tooling, dependency and obsolete installation documentation will
+be removed within that plan. Retention of ordinary MCP tools remains unresolved
 and must be stated in that plan. Optional bundling remains deferred with its
 Apps-specific requirements withdrawn; the Markdown track remains independent.
 
