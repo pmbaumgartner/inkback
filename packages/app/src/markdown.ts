@@ -1,8 +1,6 @@
 import { parseRfmEndmatter } from "@inkback/rfm";
-import { tables, taskListItems } from "@joplin/turndown-plugin-gfm";
 import DOMPurify from "dompurify";
-import { marked } from "marked";
-import TurndownService from "turndown";
+import { marked, type Token } from "marked";
 
 export const rawMarkdownBlockAttribute = "data-markdown-raw-block";
 
@@ -23,7 +21,7 @@ export interface YamlDocumentMetadataSplit {
   endmatter: string | null;
 }
 
-function isExternalUrl(path: string): boolean {
+export function isExternalUrl(path: string): boolean {
   return /^[a-z][a-z0-9+.-]*:/i.test(path) || path.startsWith("//");
 }
 
@@ -58,80 +56,67 @@ function createRawMarkdownBlock(markdown: string): string {
 }
 
 export function protectRichTextRoundTripMarkdown(markdown: string): string {
-  const supported = new Set([
-    "paragraph",
-    "heading",
-    "list",
-    "blockquote",
-    "code",
-    "hr",
-    "table",
-    "space",
-  ]);
   let cursor = 0;
   let output = "";
   for (const token of marked.lexer(markdown, { gfm: true })) {
     const start = markdown.indexOf(token.raw, cursor);
     if (start < 0) continue;
     output += markdown.slice(cursor, start);
-    const unsupported =
-      !supported.has(token.type) ||
-      (token.type === "table" &&
-        (token.raw.includes("\\|") || /`[^`\n]*\|[^`\n]*`/.test(token.raw))) ||
-      (token.type === "list" && /\n[ \t]*\n(?: {4}|\t)/.test(token.raw));
+    const unsupported = isUnsupportedMarkdownBlock(token);
     output += unsupported ? createRawMarkdownBlock(token.raw) : token.raw;
     cursor = start + token.raw.length;
   }
   return output + markdown.slice(cursor);
 }
 
-function normalizeMarkdownPath(path: string): string {
-  if (path.startsWith("./") || path.startsWith("../")) return path;
-  return `./${path.replace(/^\/+/, "")}`;
-}
-
-function tableHasUnsupportedMarkdownContent(table: HTMLTableElement): boolean {
-  return Boolean(
-    table.querySelector(
-      "blockquote, h1, h2, h3, h4, h5, h6, hr, ol, pre, table, ul",
-    ),
+export function isUnsupportedMarkdownBlock(
+  token: Pick<Token, "type" | "raw">,
+): boolean {
+  return (
+    ![
+      "paragraph",
+      "heading",
+      "list",
+      "blockquote",
+      "code",
+      "hr",
+      "table",
+      "space",
+    ].includes(token.type) ||
+    (token.type === "table" &&
+      (token.raw.includes("\\|") || /`[^`\n]*\|[^`\n]*`/.test(token.raw))) ||
+    (token.type === "list" && /\n[ \t]*\n(?: {4}|\t)/.test(token.raw))
   );
 }
 
-function getFirstTableRow(table: HTMLTableElement): HTMLTableRowElement | null {
-  return table.rows.length > 0 ? table.rows[0] : null;
+export function serializeMarkdownDestination(url: string): string {
+  if (!/[\s()<>\\]/.test(url)) return url;
+  return `<${url
+    .replaceAll("\\", "\\\\")
+    .replaceAll("<", "\\<")
+    .replaceAll(">", "\\>")
+    .replaceAll("\r", "%0D")
+    .replaceAll("\n", "%0A")}>`;
 }
 
-function isHeaderTableRow(row: HTMLTableRowElement | null): boolean {
-  if (!row || row.cells.length === 0) return false;
-
-  return Array.from(row.cells).every((cell) => cell.tagName === "TH");
+export function escapeMarkdownImageAlt(alt: string): string {
+  return alt.replace(/[\\[\]]/g, "\\$&");
 }
 
-function isMarkdownTableDivider(line: string | undefined): boolean {
-  return Boolean(line && /^\|?(?:\s*:?-{3,}:?\s*\|)+\s*$/.test(line));
+export function markdownReferenceDefinitions(
+  links: Record<string, { href: string; title?: string | null }>,
+): string {
+  return Object.entries(links)
+    .map(([id, value]) => {
+      const title = value.title
+        ? ` "${value.title.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`
+        : "";
+      return `[${id}]: ${serializeMarkdownDestination(value.href)}${title}`;
+    })
+    .join("\n");
 }
 
-function markdownTableDividerForCell(cell: HTMLTableCellElement): string {
-  const alignment = (
-    cell.getAttribute("align") ||
-    cell.style.textAlign ||
-    ""
-  ).toLowerCase();
-
-  if (alignment === "left") return ":---";
-  if (alignment === "right") return "---:";
-  if (alignment === "center") return ":---:";
-
-  return "---";
-}
-
-function markdownTableDividerForRow(row: HTMLTableRowElement): string {
-  const dividers = Array.from(row.cells).map(markdownTableDividerForCell);
-  return `| ${dividers.join(" | ")} |`;
-}
-
-function resolveRenderedUrl(
+export function resolveRenderedUrl(
   path: string,
   resolveFileUrl?: MarkdownOptions["resolveFileUrl"],
 ) {
@@ -286,213 +271,6 @@ export function createMarkedRenderer(options?: MarkdownOptions) {
   };
 
   return renderer;
-}
-
-export function createTurndownService(): TurndownService {
-  const service = new TurndownService({
-    headingStyle: "atx",
-    codeBlockStyle: "fenced",
-    bulletListMarker: "-",
-    blankReplacement(_content, node) {
-      if (node.hasAttribute(rawMarkdownBlockAttribute)) {
-        return `\n\n${decodeRawMarkdownBlock(
-          node.getAttribute(rawMarkdownBlockAttribute) ?? "",
-        ).trimEnd()}\n\n`;
-      }
-
-      return (node as HTMLElement & { isBlock?: boolean }).isBlock
-        ? "\n\n"
-        : "";
-    },
-  });
-
-  service.use(tables as Parameters<TurndownService["use"]>[0]);
-  service.use(taskListItems as Parameters<TurndownService["use"]>[0]);
-
-  service.addRule("compactListItem", {
-    filter: "li",
-    replacement(content, node, options) {
-      const trimmed = content
-        .replace(/^\n+/, "")
-        .replace(/\n+$/, "\n")
-        .replace(/\n/gm, "\n  ");
-
-      let prefix = `${options.bulletListMarker} `;
-      const parent = node.parentNode;
-      if (parent && parent.nodeName === "OL") {
-        const start = (parent as HTMLOListElement).getAttribute("start");
-        const index = Array.prototype.indexOf.call(parent.children, node);
-        prefix = `${start ? Number(start) + index : index + 1}. `;
-      }
-
-      return (
-        prefix +
-        trimmed +
-        (node.nextSibling && !/\n$/.test(trimmed) ? "\n" : "")
-      );
-    },
-  });
-
-  service.addRule("tiptapHeaderTable", {
-    filter(node) {
-      if (node.tagName !== "TABLE") return false;
-
-      const table = node as HTMLTableElement;
-      return (
-        !tableHasUnsupportedMarkdownContent(table) &&
-        isHeaderTableRow(getFirstTableRow(table))
-      );
-    },
-    replacement(content, node) {
-      const table = node as HTMLTableElement;
-      const headerRow = getFirstTableRow(table);
-      if (!headerRow) return content;
-
-      const lines = content.replace(/\n+/g, "\n").trim().split("\n");
-      if (lines.length === 0) return content;
-
-      if (!isMarkdownTableDivider(lines[1])) {
-        lines.splice(1, 0, markdownTableDividerForRow(headerRow));
-      }
-
-      const captionContent = table.caption?.textContent || "";
-      const caption = captionContent ? `${captionContent}\n\n` : "";
-
-      return `\n\n${caption}${lines.join("\n")}\n\n`;
-    },
-  });
-
-  service.addRule("markdownAwareLinks", {
-    filter: "a",
-    replacement(content, node) {
-      const element = node as HTMLAnchorElement;
-      const href =
-        element.getAttribute("data-markdown-src") ||
-        element.getAttribute("href") ||
-        "";
-      const normalizedHref =
-        isExternalUrl(href) || isInPageAnchor(href)
-          ? href
-          : normalizeMarkdownPath(href);
-      const title = element.getAttribute("title");
-      const titleMarkdown = title
-        ? ` "${title.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`
-        : "";
-
-      if (
-        element.getAttribute("data-markdown-autolink") === "true" &&
-        !titleMarkdown
-      ) {
-        return href.startsWith("mailto:")
-          ? `<${href.slice("mailto:".length)}>`
-          : `<${normalizedHref}>`;
-      }
-
-      return `[${content}](${normalizedHref}${titleMarkdown})`;
-    },
-  });
-
-  service.addRule("markdownAwareImages", {
-    filter: "img",
-    replacement(_content, node) {
-      const element = node as HTMLImageElement;
-      const src =
-        element.getAttribute("data-markdown-src") ||
-        element.getAttribute("src") ||
-        "";
-      const normalizedSrc = isExternalUrl(src)
-        ? src
-        : normalizeMarkdownPath(src);
-      const alt = element.getAttribute("alt") || "";
-      const title = element.getAttribute("title");
-      const titleMarkdown = title
-        ? ` "${title.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`
-        : "";
-      return `![${alt}](${normalizedSrc}${titleMarkdown})`;
-    },
-  });
-
-  service.addRule("markdownStrikethrough", {
-    filter: (node) =>
-      node.nodeName === "DEL" ||
-      node.nodeName === "S" ||
-      node.nodeName === "STRIKE",
-    replacement(content) {
-      return `~~${content}~~`;
-    },
-  });
-
-  service.addRule("rawMarkdownBlock", {
-    filter: (node) =>
-      node.nodeType === 1 &&
-      (node as HTMLElement).hasAttribute(rawMarkdownBlockAttribute),
-    replacement(_content, node) {
-      const encoded =
-        (node as HTMLElement).getAttribute(rawMarkdownBlockAttribute) ?? "";
-      return `\n\n${decodeRawMarkdownBlock(encoded).trimEnd()}\n\n`;
-    },
-  });
-
-  return service;
-}
-
-const turndown = createTurndownService();
-
-/**
- * Collapse runs of 3+ newlines to 2 and remove the blank line that
- * Turndown inserts before/after ATX headings.  This keeps block
- * separation where it matters (between consecutive paragraphs) while
- * producing a more compact output that round-trips with fewer
- * gratuitous whitespace changes.
- */
-export function normalizeBlockSpacing(md: string): string {
-  // Fenced code is literal text, including blank lines and heading-like lines.
-  // Normalize the prose between fences without touching the fence bodies.
-  let output = "";
-  let prose = "";
-  let fence: string | null = null;
-  let fencePrefix = "";
-  for (const line of md.match(/[^\n]*\n|[^\n]+$/g) ?? []) {
-    const marker = line.match(/^([ \t]*(?:>[ \t]*)*)(`{3,}|~{3,})([^\n]*)\n?$/);
-    if (fence) {
-      if (
-        marker &&
-        // Turndown emits matching container prefixes for the two fence lines.
-        // A quoted or further-indented fence inside the code is literal text.
-        marker[1] === fencePrefix &&
-        marker[2]?.[0] === fence[0] &&
-        marker[2].length >= fence.length &&
-        !marker[3]?.trim()
-      ) {
-        output += line.replace(/\n$/, "");
-        prose = line.endsWith("\n") ? "\n" : "";
-        fence = null;
-      } else {
-        output += line;
-      }
-    } else if (marker) {
-      output += normalizeProseBlockSpacing(prose) + line;
-      prose = "";
-      fencePrefix = marker[1] ?? "";
-      fence = marker[2] ?? null;
-    } else {
-      prose += line;
-    }
-  }
-  return output + normalizeProseBlockSpacing(prose);
-}
-
-function normalizeProseBlockSpacing(md: string): string {
-  let normalized = md.replace(/\n{3,}/g, "\n\n");
-  // Remove blank line immediately before a heading.
-  normalized = normalized.replace(/\n\n(#{1,6} )/g, "\n$1");
-  // Remove blank line immediately after a heading line.
-  normalized = normalized.replace(/(^#{1,6} [^\n]+)\n\n/gm, "$1\n");
-  return normalized;
-}
-
-export function toMarkdown(html: string): string {
-  return normalizeBlockSpacing(`${turndown.turndown(html).trimEnd()}\n`);
 }
 
 export function toHtml(markdown: string, options?: MarkdownOptions): string {

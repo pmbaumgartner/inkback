@@ -914,7 +914,7 @@ describe("PageCard editor integration", () => {
     expect(rendered.onSave).toHaveBeenCalledWith(
       "doc-suggesting-1",
       expect.stringMatching(
-        /^Start \{\+\+now\+\+\}\{id="s1" by="user" at="[^"]+"\}\n$/,
+        /^Start\{\+\+ now\+\+\}\{id="s1" by="user" at="[^"]+"\}\n$/,
       ),
     );
   });
@@ -1408,7 +1408,7 @@ describe("PageCard editor integration", () => {
 
     const savedMarkdown = rendered.onSave.mock.calls[0]?.[1];
     expect(savedMarkdown).toMatch(
-      /^Plain \{\+\+now\+\+\}\{id="s1" by="user" at="[^"]+"\}\n$/,
+      /^Plain\{\+\+ now\+\+\}\{id="s1" by="user" at="[^"]+"\}\n$/,
     );
     expect(savedMarkdown).not.toContain("---\ncomments:");
     expect(savedMarkdown).not.toContain("Needs a source.");

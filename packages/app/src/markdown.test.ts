@@ -1,13 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-  normalizeBlockSpacing,
-  rawMarkdownBlockAttribute,
-  splitYamlFrontmatter,
-  toHtml,
-  toMarkdown,
-} from "./markdown";
+import { splitYamlFrontmatter, toHtml } from "./markdown";
 
 function readMarkdownFixture(name: string): string {
   return fs.readFileSync(
@@ -96,102 +90,5 @@ describe("toHtml", () => {
     expect(html).toContain(
       '<img src="./images/sketch.png" alt="Sketch" title="Sketch title" data-markdown-src="./images/sketch.png">',
     );
-  });
-
-  it("round-trips headerless HTML tables to valid GFM table markdown", () => {
-    expect(toMarkdown(toHtml(readMarkdownFixture("headerless-table.md")))).toBe(
-      [
-        "# Headerless Table",
-        "|     |     |",
-        "| --- | --- |",
-        "| First | Ready |",
-        "| Second | Open |",
-        "",
-      ].join("\n"),
-    );
-  });
-});
-
-describe("normalizeBlockSpacing", () => {
-  it.each([
-    "> ",
-    "    ",
-    "\t",
-  ])("keeps %j fence examples inside an unquoted code block literal", (prefix) => {
-    const markdown = `\`\`\`text\n${prefix}\`\`\`\n\n\n# Literal heading\n\n\nbody\n\`\`\`\n`;
-    expect(toMarkdown(toHtml(markdown))).toBe(markdown);
-  });
-
-  it.each([
-    "```",
-    "~~~~",
-  ])("preserves literal lines inside %s fences while compacting prose", (fence) => {
-    const code = `${fence}text\n\n# Literal heading\n\n\n    indented\n\n\n${fence}`;
-    expect(
-      normalizeBlockSpacing(`# Heading\n\nBefore\n\n\n${code}\n\n\nAfter\n`),
-    ).toBe(`# Heading\nBefore\n\n${code}\n\nAfter\n`);
-  });
-
-  it("does not add blank lines between headings and adjacent blocks on round-trip", () => {
-    const compact = [
-      "# OpenAI Chat API Compatibility Plan",
-      "## Goal",
-      "Build a Python/Flask service that exposes endpoints.",
-      "## Source References",
-      "- Codex app-server documentation",
-      "- OpenAI Chat Completions overview",
-      "## Key Capabilities",
-      "1. First capability",
-      "2. Second capability",
-      "",
-    ].join("\n");
-
-    expect(toMarkdown(toHtml(compact))).toBe(compact);
-  });
-
-  it("preserves paragraph separation", () => {
-    const spaced = "First paragraph.\n\nSecond paragraph.\n";
-
-    expect(toMarkdown(toHtml(spaced))).toBe(spaced);
-  });
-
-  it("uses dash bullet markers and compact list indentation", () => {
-    const html = "<ul><li>Alpha</li><li>Beta</li></ul>";
-
-    expect(toMarkdown(html)).toBe("- Alpha\n- Beta\n");
-  });
-});
-
-describe("toMarkdown", () => {
-  it("round-trips local links and images to normalized markdown paths", () => {
-    const markdown = toMarkdown(
-      '<p><a href="/api/files?path=notes%2Fdraft.md" data-markdown-src="../notes/draft.md">Draft</a></p><p><img src="/api/files?path=images%2Fsketch.png" alt="Sketch" data-markdown-src="images/sketch.png"></p>',
-    );
-
-    expect(markdown).toContain("[Draft](../notes/draft.md)");
-    expect(markdown).toContain("![Sketch](./images/sketch.png)");
-  });
-
-  it("keeps in-page anchors untouched", () => {
-    const markdown = toMarkdown(
-      '<p><a href="#comments">Jump to comments</a></p>',
-    );
-
-    expect(markdown).toBe("[Jump to comments](#comments)\n");
-  });
-
-  it("ends output with exactly one newline", () => {
-    expect(toMarkdown("<p>Done</p>\n\n")).toBe("Done\n");
-  });
-
-  it("documents the raw HTML policy for generic inline HTML and protected blocks", () => {
-    expect(toMarkdown('<p><span data-x="1">raw</span></p>')).toBe("raw\n");
-
-    const protectedMarkdown = "<!-- keep this source note -->\n";
-    const encoded = encodeURIComponent(protectedMarkdown);
-
-    expect(
-      toMarkdown(`<div ${rawMarkdownBlockAttribute}="${encoded}"></div>`),
-    ).toBe(protectedMarkdown);
   });
 });

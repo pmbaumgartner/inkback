@@ -160,6 +160,24 @@ function isCriticChangeKind(value: unknown): value is CriticChangeKind {
   );
 }
 
+function parseCriticChangeMetadata(
+  element: HTMLElement,
+): Record<string, string> {
+  try {
+    const metadata: unknown = JSON.parse(
+      element.getAttribute("data-critic-change-metadata") || "{}",
+    );
+    if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+      return {};
+    }
+    return Object.fromEntries(
+      Object.entries(metadata).filter((entry) => typeof entry[1] === "string"),
+    );
+  } catch {
+    return {};
+  }
+}
+
 function readCriticChangeAttrs(element: HTMLElement): CriticChangeAttrs | null {
   const kind = element.getAttribute("data-critic-change-kind");
   const changeId = element.getAttribute("data-critic-change-id");
@@ -178,9 +196,7 @@ function readCriticChangeAttrs(element: HTMLElement): CriticChangeAttrs | null {
     authorType,
     authorId: authorType === "ai" ? null : rawBy,
     createdAt,
-    metadata: JSON.parse(
-      element.getAttribute("data-critic-change-metadata") || "{}",
-    ),
+    metadata: parseCriticChangeMetadata(element),
   };
 }
 
@@ -277,10 +293,7 @@ const CriticChange = Mark.create({
     return {
       metadata: {
         default: {},
-        parseHTML: (element) =>
-          JSON.parse(
-            element.getAttribute("data-critic-change-metadata") || "{}",
-          ),
+        parseHTML: parseCriticChangeMetadata,
         renderHTML: (attributes) => ({
           "data-critic-change-metadata": JSON.stringify(
             attributes.metadata ?? {},

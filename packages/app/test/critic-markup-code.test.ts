@@ -1,7 +1,10 @@
 import { Editor } from "@tiptap/core";
 import { describe, expect, it } from "vitest";
-import { criticMarkdownToEditorState } from "../src/critic-markup";
-import { editorStateToCriticMarkdown } from "../src/critic-markup/writer";
+import {
+  parseDirect,
+  serializeDirectDocument,
+} from "../src/critic-markup/direct-parser";
+
 import { createEditorExtensions } from "../src/editor-extensions";
 
 const timestamp = "2026-04-25T22:14:08.827Z";
@@ -18,8 +21,8 @@ describe("reviewing code fences", () => {
       "````",
       "",
     ].join("\n");
-    const { doc, comments } = criticMarkdownToEditorState(input);
-    expect(editorStateToCriticMarkdown(doc, comments)).toBe(input);
+    const { doc, comments } = parseDirect(input);
+    expect(serializeDirectDocument(doc, comments)).toBe(input);
   });
 
   it("preserves code whitespace and literal syntax through an editor save and reload", () => {
@@ -39,19 +42,16 @@ describe("reviewing code fences", () => {
       "```",
       "",
     ].join("\n");
-    const parsed = criticMarkdownToEditorState(input);
+    const parsed = parseDirect(input);
     const editor = new Editor({
       extensions: createEditorExtensions(""),
       content: parsed.doc,
     });
 
     try {
-      const saved = editorStateToCriticMarkdown(
-        editor.getJSON(),
-        parsed.comments,
-      );
+      const saved = serializeDirectDocument(editor.getJSON(), parsed.comments);
       expect(saved).toBe(input);
-      const reloaded = criticMarkdownToEditorState(saved);
+      const reloaded = parseDirect(saved);
       expect(reloaded.doc).toEqual(parsed.doc);
       expect(reloaded.comments).toEqual(parsed.comments);
     } finally {
@@ -65,9 +65,7 @@ describe("reviewing code fences", () => {
   ] as const)("preserves whitespace in a multiline %s with a comment", (kind, open, close) => {
     const code = "def f():\n\tvalue = 1\n    return value  \n\nprint(f())\n";
     const selected = "\tvalue = 1\n    return value  ";
-    const { doc } = criticMarkdownToEditorState(
-      `\`\`\`python\n${code}\n\`\`\`\n`,
-    );
+    const { doc } = parseDirect(`\`\`\`python\n${code}\n\`\`\`\n`);
     const editor = new Editor({
       extensions: createEditorExtensions(""),
       content: doc,
@@ -88,7 +86,7 @@ describe("reviewing code fences", () => {
         }),
       ).toBe(true);
       expect(editor.commands.setCommentRef({ commentIds: ["c1"] })).toBe(true);
-      expect(editorStateToCriticMarkdown(editor.getJSON(), comments)).toBe(
+      expect(serializeDirectDocument(editor.getJSON(), comments)).toBe(
         `\`\`\`python\n${code.replace(selected, `${open}${selected}${close}${suggestionMetadata}{>>Review this<<}${commentMetadata}`)}\n\`\`\`\n`,
       );
     } finally {
@@ -100,9 +98,7 @@ describe("reviewing code fences", () => {
     const oldText = "    old()\n\told_again()  ";
     const newText = "    new()\n\tnew_again()  ";
     const code = `def f():\n${oldText}${newText}\n`;
-    const { doc } = criticMarkdownToEditorState(
-      `\`\`\`python\n${code}\n\`\`\`\n`,
-    );
+    const { doc } = parseDirect(`\`\`\`python\n${code}\n\`\`\`\n`);
     const editor = new Editor({
       extensions: createEditorExtensions(""),
       content: doc,
@@ -127,7 +123,7 @@ describe("reviewing code fences", () => {
         authorType: "ai",
         createdAt: timestamp,
       });
-      expect(editorStateToCriticMarkdown(editor.getJSON(), new Map())).toBe(
+      expect(serializeDirectDocument(editor.getJSON(), new Map())).toBe(
         `\`\`\`python\ndef f():\n{~~${oldText}~>${newText}~~}${suggestionMetadata}\n\n\`\`\`\n`,
       );
     } finally {

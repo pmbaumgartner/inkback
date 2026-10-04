@@ -1,25 +1,13 @@
-import {
-  collectReviewIds,
-  hydrateMetadataAttrs,
-  type Metadata,
-  parseHighlight,
-  scanReview,
-} from "@inkback/rfm";
-import { generateJSON, type JSONContent } from "@tiptap/core";
+import { collectReviewIds, parseHighlight, scanReview } from "@inkback/rfm";
 import {
   Marked,
-  marked,
   type RendererThis,
   type Token,
   type TokenizerAndRendererExtension,
   type TokenizerThis,
   type Tokens,
 } from "marked";
-import {
-  type CriticChangeAttrs,
-  type CriticChangeKind,
-  createEditorExtensions,
-} from "../editor-extensions";
+import type { CriticChangeAttrs, CriticChangeKind } from "../editor-extensions";
 import {
   createMarkedRenderer,
   type MarkdownOptions,
@@ -27,6 +15,7 @@ import {
   sanitizeMarkdownHtml,
   splitYamlDocumentMetadata,
 } from "../markdown";
+import { addEndmatterFeedback, commentMetadata } from "./hydration";
 import {
   type CriticComment,
   createChangeWithContext,
@@ -35,7 +24,8 @@ import {
   parseReviewEndmatter,
   unanchoredCommentSentinel,
 } from "./model";
-import { blockCommentSnapshot, blockSnapshot } from "./source-blocks";
+
+const ignoreDiagnostic = () => {};
 
 interface CriticCommentToken {
   type: "criticCommentAnchor";
@@ -66,78 +56,6 @@ function escapeHtml(value: string): string {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
-}
-
-function commentPartialFromEndmatterEntry(
-  id: string,
-  entry?: Record<string, unknown>,
-  options?: { includeParent?: boolean },
-): Partial<Omit<CriticComment, "content">> {
-  const author = typeof entry?.by === "string" ? entry.by : "user";
-  const includeParent = options?.includeParent ?? true;
-
-  return {
-    id,
-    metadata: Object.fromEntries(
-      Object.entries(entry ?? {}).filter(
-        (pair): pair is [string, string] => typeof pair[1] === "string",
-      ),
-    ),
-    createdAt:
-      typeof entry?.at === "string" ? entry.at : new Date().toISOString(),
-    authorType: author.toUpperCase() === "AI" ? "ai" : "user",
-    authorId: author.toUpperCase() === "AI" ? null : author,
-    parentCommentId:
-      includeParent && typeof entry?.re === "string" ? entry.re : null,
-  };
-}
-
-const ignoreDiagnostic = () => {};
-
-function commentMetadata(
-  metadata: Metadata | null,
-  endmatter: ParsedEndmatter | undefined,
-  kind: "comment" | "suggestion",
-) {
-  const fields =
-    metadata && endmatter
-      ? hydrateMetadataAttrs(metadata, endmatter, kind)
-      : (metadata?.attrs ?? new Map<string, string>());
-  const author = fields.get("by") ?? "user";
-  return {
-    id: fields.get("id"),
-    metadata: Object.fromEntries(fields),
-    createdAt: fields.get("at") ?? new Date().toISOString(),
-    authorType:
-      author.toUpperCase() === "AI" ? ("ai" as const) : ("user" as const),
-    authorId: author.toUpperCase() === "AI" ? null : author,
-    parentCommentId:
-      metadata?.kind === "reference" ? null : (fields.get("re") ?? null),
-  };
-}
-
-function addEndmatterFeedback(
-  comments: Map<string, CriticComment>,
-  endmatter: ParsedEndmatter,
-) {
-  for (const [id, entry] of endmatter.comments) {
-    if (typeof entry.body !== "string") {
-      continue;
-    }
-    if (comments.has(id)) {
-      continue;
-    }
-
-    comments.set(
-      id,
-      createCommentWithContext({
-        ...commentPartialFromEndmatterEntry(id, entry),
-        content: entry.body,
-        parentCommentId: typeof entry.re === "string" ? entry.re : null,
-        scope: typeof entry.re === "string" ? undefined : "document",
-      }),
-    );
-  }
 }
 
 function tokenizeCriticCommentAnchor(
@@ -656,111 +574,3 @@ export function criticMarkdownToRenderedHtml(
 
   return { html, comments, changes, frontmatter, endmatter };
 }
-
-export function criticMarkdownToEditorState(
-  markdown: string,
-  options?: MarkdownOptions,
-): {
-  doc: JSONContent;
-  comments: Map<string, CriticComment>;
-  frontmatter: string | null;
-  endmatter: string | null;
-  lineEnding: "\n" | "\r\n";
-} {
-  const lineEnding = markdown.includes("\r\n") ? "\r\n" : "\n";
-  const normalized = markdown.replace(/\r\n/g, "\n");
-  const { frontmatter, body, endmatter } =
-    splitYamlDocumentMetadata(normalized);
-  const parsedEndmatter = parseReviewEndmatter(endmatter);
-  const { parser, comments } = createCriticMarked(
-    options,
-    parsedEndmatter,
-    collectReviewIds(normalized),
-  );
-  const tokens = marked.lexer(body, { gfm: true });
-  const blocks: JSONContent[] = [];
-  let cursor = 0;
-  const materialTokens = tokens.filter((token) => token.type !== "space");
-  for (let index = 0; index < materialTokens.length; index++) {
-    const token = materialTokens[index];
-    if (!token) throw new Error("Expected a Markdown block token");
-    const start = body.indexOf(token.raw, cursor);
-    const next = materialTokens[index + 1];
-    const end = next
-      ? body.indexOf(next.raw, start + token.raw.length)
-      : body.length;
-    const tokenEnd = start + token.raw.length;
-    const gap = body.slice(tokenEnd, end);
-    const source = body.slice(cursor, /\S/.test(gap) ? tokenEnd : end);
-    const blockTokens = parser.lexer(
-      protectRichTextRoundTripMarkdown(token.raw),
-    );
-    blockTokens.links = tokens.links;
-    const html = sanitizeMarkdownHtml(parser.parser(blockTokens));
-    const nodes = generateJSON(html, extensions).content ?? [];
-    for (const node of nodes) {
-      node.attrs = {
-        ...node.attrs,
-        originalSource: source,
-        sourceGroup: `block-${index}`,
-      };
-      blocks.push(node);
-    }
-    if (/\S/.test(gap)) {
-      const preserved = generateJSON(
-        `<div data-markdown-raw-block="${escapeHtml(encodeURIComponent(gap))}"></div>`,
-        extensions,
-      ).content?.[0];
-      if (!preserved)
-        throw new Error("Failed to preserve Markdown between blocks");
-      preserved.attrs = {
-        ...preserved.attrs,
-        originalSource: gap,
-        sourceGroup: `gap-${index}`,
-      };
-      blocks.push(preserved);
-    }
-    cursor = end;
-  }
-  const doc = {
-    type: "doc",
-    attrs: { reviewIds: collectReviewIds(normalized) },
-    content: blocks,
-  } as JSONContent & {
-    yamlFrontmatter?: string;
-    yamlEndmatter?: string;
-    lineEnding?: "\n" | "\r\n";
-  };
-  doc.lineEnding = lineEnding;
-  addEndmatterFeedback(comments, parsedEndmatter);
-  for (let index = 0; index < blocks.length; ) {
-    const first = blocks[index++];
-    if (!first) throw new Error("Expected a parsed Markdown block");
-    const group: JSONContent[] = [first];
-    while (index < blocks.length) {
-      const next = blocks[index];
-      if (!next || next.attrs?.sourceGroup !== first.attrs?.sourceGroup) break;
-      group.push(next);
-      index++;
-    }
-    const grouped = { type: "doc", content: group };
-    const snapshot = blockSnapshot(grouped);
-    const commentSnapshot = blockCommentSnapshot(grouped, comments);
-    for (const node of group)
-      node.attrs = {
-        ...node.attrs,
-        sourceSnapshot: snapshot,
-        sourceComments: commentSnapshot,
-      };
-  }
-  if (frontmatter) {
-    doc.yamlFrontmatter = frontmatter;
-  }
-  if (endmatter) {
-    doc.yamlEndmatter = endmatter;
-  }
-
-  return { doc, comments, frontmatter, endmatter, lineEnding };
-}
-
-const extensions = createEditorExtensions("");

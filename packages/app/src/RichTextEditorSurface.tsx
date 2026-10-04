@@ -9,13 +9,15 @@ import {
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { buildLocationForLinkedMarkdownDocument } from "./app-navigation";
-import { criticMarkdownToEditorState } from "./critic-markup";
+import {
+  parseDirect,
+  serializeDirectDocument,
+} from "./critic-markup/direct-parser";
 import {
   type CriticComment,
   createCriticComment,
   getCommentDescendantIds,
 } from "./critic-markup/model";
-import { editorStateToCriticMarkdown } from "./critic-markup/writer";
 import {
   type CriticChangeRailItem,
   DocumentReviewRail,
@@ -116,7 +118,7 @@ export const RichTextEditorSurface = memo(function RichTextEditorSurface({
 
   const parsedContent = useMemo(
     () =>
-      criticMarkdownToEditorState(sourceMarkdown, {
+      parseDirect(sourceMarkdown, {
         blockRemoteImages: backend.info.kind === "mcp-app",
         resolveFileUrl,
         resolveLinkUrl,
@@ -145,7 +147,7 @@ export const RichTextEditorSurface = memo(function RichTextEditorSurface({
       if (!currentDoc) return;
 
       onMarkdownChange(
-        editorStateToCriticMarkdown(
+        serializeDirectDocument(
           currentDoc,
           nextComments ?? commentsRef.current,
           {

@@ -201,6 +201,103 @@ test("MCP App keeps files outside writable directories read-only while allowing 
   }
 });
 
+test("MCP App renders cached local images without loading remote Markdown images after save", async ({
+  page,
+}) => {
+  fs.mkdirSync(directory, { recursive: true });
+  const name = `images-${crypto.randomUUID()}`;
+  const documentPath = path.join(directory, `${name}.md`);
+  const imagePath = path.join(directory, `${name}.png`);
+  const local = `![Local](./${name}.png)`;
+  const remote = "![Remote](https://example.com/inkback-private-image.png)";
+  fs.writeFileSync(
+    imagePath,
+    Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
+      "base64",
+    ),
+  );
+  fs.writeFileSync(
+    documentPath,
+    `# Images\n\n${local}\n\n${remote}\n\nSibling.\n`,
+  );
+  try {
+    const app = await openReview(page, documentPath);
+    const editor = app.locator(".tiptap");
+    await expect(editor.locator('img[alt="Local"]')).toHaveAttribute(
+      "src",
+      /^data:image\/png;base64,/,
+    );
+    await expect(editor.locator('img[src^="https:"]')).toHaveCount(0);
+    await editor.getByText("Sibling.", { exact: true }).click();
+    await editor.press("ControlOrMeta+End");
+    await editor.pressSequentially(" Saved sibling.");
+    await editor.press("ControlOrMeta+s");
+    await expect
+      .poll(() => fs.readFileSync(documentPath, "utf8"))
+      .toContain("Saved sibling.");
+    await page.reload();
+    const reloaded = await openReview(page, documentPath);
+    await expect(reloaded.locator('.tiptap img[alt="Local"]')).toHaveAttribute(
+      "src",
+      /^data:image\/png;base64,/,
+    );
+    await expect(reloaded.locator('.tiptap img[src^="https:"]')).toHaveCount(0);
+    const saved = fs.readFileSync(documentPath, "utf8");
+    expect(saved).toContain(local);
+    expect(saved).toContain(remote);
+    expect(saved).not.toContain("data:image/");
+  } finally {
+    fs.rmSync(documentPath, { force: true });
+    fs.rmSync(imagePath, { force: true });
+  }
+});
+
+test("MCP App saves pasted HTML with malformed review metadata without executing scripts", async ({
+  page,
+}) => {
+  fs.mkdirSync(directory, { recursive: true });
+  const documentPath = path.join(directory, `paste-${crypto.randomUUID()}.md`);
+  fs.writeFileSync(documentPath, "Paste here.\n");
+  try {
+    const app = await openReview(page, documentPath);
+    await app.locator(".tiptap").click();
+    await app.locator(".tiptap").press("ControlOrMeta+End");
+    const frame = page
+      .frames()
+      .find((frame) => frame.parentFrame()?.parentFrame() === page.mainFrame());
+    expect(frame).toBeDefined();
+    await frame?.evaluate(() => {
+      const editor = document.querySelector(".ProseMirror");
+      if (!editor) throw new Error("Expected editor");
+      const data = new DataTransfer();
+      data.setData(
+        "text/html",
+        '<span data-critic-change-kind="addition" data-critic-change-id="s1" data-critic-change-at="2024" data-critic-change-metadata="{">pasted</span><script>window.__inkbackXss=1</script>',
+      );
+      editor.dispatchEvent(
+        new ClipboardEvent("paste", { clipboardData: data, bubbles: true }),
+      );
+    });
+    await expect(app.locator(".tiptap")).toContainText("pasted");
+    await expect
+      .poll(() => fs.readFileSync(documentPath, "utf8"))
+      .toContain("pasted");
+    await expect(app.locator(".tiptap script, .tiptap [onerror]")).toHaveCount(
+      0,
+    );
+    expect(
+      await frame?.evaluate(
+        () => (window as Window & { __inkbackXss?: number }).__inkbackXss,
+      ),
+    ).toBeUndefined();
+    const reloaded = await openReview(page, documentPath);
+    await expect(reloaded.locator(".tiptap")).toContainText("pasted");
+  } finally {
+    fs.rmSync(documentPath, { force: true });
+  }
+});
+
 test("MCP App shows a conflict when a model reply races with an unsaved source edit", async ({
   page,
 }) => {

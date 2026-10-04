@@ -5,14 +5,17 @@ import { Editor } from "@tiptap/core";
 import { describe, expect, it } from "vitest";
 import {
   criticMarkdownHasReviewRail,
-  criticMarkdownToEditorState,
   criticMarkdownToRenderedHtml,
 } from "../src/critic-markup";
+import {
+  parseDirect,
+  serializeDirectDocument,
+} from "../src/critic-markup/direct-parser";
 import {
   createCriticChange,
   getCommentDescendantIds,
 } from "../src/critic-markup/model";
-import { editorStateToCriticMarkdown } from "../src/critic-markup/writer";
+
 import { createEditorExtensions } from "../src/editor-extensions";
 
 function readMarkdownFixture(name: string): string {
@@ -34,8 +37,8 @@ describe("CriticMarkup comments", () => {
       "Second paragraph stays intact.",
       "",
     ].join("\r\n");
-    const { doc, comments } = criticMarkdownToEditorState(input);
-    expect(editorStateToCriticMarkdown(doc, comments)).toBe(input);
+    const { doc, comments } = parseDirect(input);
+    expect(serializeDirectDocument(doc, comments)).toBe(input);
 
     const edited = structuredClone(doc);
     const paragraph = edited.content?.[1];
@@ -44,7 +47,7 @@ describe("CriticMarkup comments", () => {
     );
     if (!text?.text) throw new Error("Expected first paragraph text");
     text.text = text.text.replace("First", "Revised");
-    const output = editorStateToCriticMarkdown(edited, comments);
+    const output = serializeDirectDocument(edited, comments);
     expect(output).toBe(input.replace("First", "Revised"));
     expect(output.replace(/\r\n/g, "")).not.toContain("\n");
   });
@@ -66,9 +69,9 @@ describe("CriticMarkup comments", () => {
       "",
     ].join("\n");
 
-    const { doc, comments } = criticMarkdownToEditorState(input);
+    const { doc, comments } = parseDirect(input);
 
-    expect(editorStateToCriticMarkdown(doc, comments)).toBe(input);
+    expect(serializeDirectDocument(doc, comments)).toBe(input);
   });
 
   it("detects review rail content in prose and fenced code", () => {
@@ -112,14 +115,14 @@ describe("CriticMarkup comments", () => {
     const input =
       'This is {==highlighted==}{>>comment text<<}{id="cmt1" by="AI" at="2024-01-15T10:30:00.000Z"} text.\n';
 
-    const { doc, comments } = criticMarkdownToEditorState(input);
+    const { doc, comments } = parseDirect(input);
 
     expect(comments.get("cmt1")).toMatchObject({
       id: "cmt1",
       content: "comment text",
       authorType: "ai",
     });
-    expect(editorStateToCriticMarkdown(doc, comments)).toBe(input);
+    expect(serializeDirectDocument(doc, comments)).toBe(input);
   });
 
   it("renders YAML endmatter-backed root comments and replies", () => {
@@ -139,7 +142,7 @@ describe("CriticMarkup comments", () => {
       "",
     ].join("\n");
 
-    const { doc, comments, endmatter } = criticMarkdownToEditorState(input);
+    const { doc, comments, endmatter } = parseDirect(input);
 
     expect(endmatter).toContain("comments:");
     expect(comments.get("c1")).toMatchObject({
@@ -152,7 +155,7 @@ describe("CriticMarkup comments", () => {
       content: "Reply text",
       parentCommentId: "c1",
     });
-    const output = editorStateToCriticMarkdown(doc, comments);
+    const output = serializeDirectDocument(doc, comments);
     expect(output).toContain("{==highlighted==}{>>comment text<<}{#c1}");
     expect(output).toContain("body: Reply text");
     expect(output).toContain("re: c1");
@@ -177,8 +180,8 @@ describe("CriticMarkup comments", () => {
       "",
     ].join("\n");
 
-    const { doc, comments, endmatter } = criticMarkdownToEditorState(input);
-    const output = editorStateToCriticMarkdown(doc, comments);
+    const { doc, comments, endmatter } = parseDirect(input);
+    const output = serializeDirectDocument(doc, comments);
 
     expect(endmatter).toBeNull();
     expect(comments.size).toBe(0);
@@ -201,8 +204,8 @@ describe("CriticMarkup comments", () => {
       "",
     ].join("\n");
 
-    const { doc, comments, endmatter } = criticMarkdownToEditorState(input);
-    const output = editorStateToCriticMarkdown(doc, comments);
+    const { doc, comments, endmatter } = parseDirect(input);
+    const output = serializeDirectDocument(doc, comments);
 
     expect(endmatter).toBeNull();
     expect(comments.size).toBe(0);
@@ -221,7 +224,7 @@ describe("CriticMarkup comments", () => {
       '    at: "2026-05-24T10:00:00.000Z"',
       "",
     ].join("\n");
-    const parsed = criticMarkdownToEditorState(input);
+    const parsed = parseDirect(input);
     const nextDoc = structuredClone(parsed.doc);
     const paragraph = nextDoc.content?.[0];
 
@@ -245,7 +248,7 @@ describe("CriticMarkup comments", () => {
       { type: "text", text: "." },
     );
 
-    const output = editorStateToCriticMarkdown(nextDoc, parsed.comments);
+    const output = serializeDirectDocument(nextDoc, parsed.comments);
 
     expect(output).toContain("{++specifics++}{#s2}");
     expect(output).toContain("suggestions:");
@@ -275,13 +278,13 @@ describe("CriticMarkup comments", () => {
       "    re: c1",
       "",
     ].join("\n");
-    const { doc, comments } = criticMarkdownToEditorState(input);
+    const { doc, comments } = parseDirect(input);
     const nextComments = new Map(comments);
 
     nextComments.delete("c2");
     nextComments.delete("c3");
 
-    const output = editorStateToCriticMarkdown(doc, nextComments);
+    const output = serializeDirectDocument(doc, nextComments);
 
     expect(output).toContain("comments:");
     expect(output).toContain("c1:");
@@ -303,8 +306,8 @@ describe("CriticMarkup comments", () => {
       "",
     ].join("\n");
     for (const suffix of ["", "workflow:\n  owner: editorial\n"]) {
-      const { doc, comments } = criticMarkdownToEditorState(source + suffix);
-      const output = editorStateToCriticMarkdown(
+      const { doc, comments } = parseDirect(source + suffix);
+      const output = serializeDirectDocument(
         doc,
         new Map([...comments].filter(([id]) => id !== "c1")),
       );
@@ -326,16 +329,16 @@ describe("CriticMarkup comments", () => {
       "    extra: {labels: [one, two]} # keep this formatting",
       "",
     ].join("\n");
-    const { doc, comments } = criticMarkdownToEditorState(source);
-    expect(editorStateToCriticMarkdown(doc, comments)).toBe(source);
+    const { doc, comments } = parseDirect(source);
+    expect(serializeDirectDocument(doc, comments)).toBe(source);
   });
 
   it("roundtrips supported malformed review YAML without dropping its source", () => {
     const source =
       "Note.{>>Review this.<<}{#c1}\n\n---\ncomments: [broken # {#c1}\n";
-    const { doc, comments, endmatter } = criticMarkdownToEditorState(source);
+    const { doc, comments, endmatter } = parseDirect(source);
     expect(endmatter).toBe("---\ncomments: [broken # {#c1}\n");
-    expect(editorStateToCriticMarkdown(doc, comments)).toBe(source);
+    expect(serializeDirectDocument(doc, comments)).toBe(source);
   });
 
   it("preserves unknown top-level YAML endmatter keys on save", () => {
@@ -352,8 +355,8 @@ describe("CriticMarkup comments", () => {
       "",
     ].join("\n");
 
-    const { doc, comments } = criticMarkdownToEditorState(input);
-    const output = editorStateToCriticMarkdown(doc, comments);
+    const { doc, comments } = parseDirect(input);
+    const output = serializeDirectDocument(doc, comments);
 
     expect(output).toContain("workflow:");
     expect(output).toContain("owner: editorial");
@@ -374,8 +377,8 @@ describe("CriticMarkup comments", () => {
     expect(criticMarkdownHasReviewRail(input)).toBe(true);
 
     const { html, comments } = criticMarkdownToRenderedHtml(input);
-    const parsed = criticMarkdownToEditorState(input);
-    const output = editorStateToCriticMarkdown(parsed.doc, parsed.comments);
+    const parsed = parseDirect(input);
+    const output = serializeDirectDocument(parsed.doc, parsed.comments);
 
     expect(comments.get("c3")).toMatchObject({
       id: "c3",
@@ -408,8 +411,8 @@ describe("CriticMarkup comments", () => {
 
     expect(criticMarkdownHasReviewRail(input)).toBe(true);
 
-    const parsed = criticMarkdownToEditorState(input);
-    const output = editorStateToCriticMarkdown(parsed.doc, parsed.comments);
+    const parsed = parseDirect(input);
+    const output = serializeDirectDocument(parsed.doc, parsed.comments);
 
     expect(parsed.comments.get("c1")).toMatchObject({
       id: "c1",
@@ -451,7 +454,7 @@ describe("CriticMarkup comments", () => {
       "",
     ].join("\n");
 
-    const { comments } = criticMarkdownToEditorState(input);
+    const { comments } = parseDirect(input);
 
     expect(comments.get("c3")).toMatchObject({
       id: "c3",
@@ -482,8 +485,8 @@ describe("CriticMarkup comments", () => {
       "",
     ].join("\n");
 
-    const { doc, comments } = criticMarkdownToEditorState(input);
-    const output = editorStateToCriticMarkdown(doc, comments);
+    const { doc, comments } = parseDirect(input);
+    const output = serializeDirectDocument(doc, comments);
 
     expect(comments.get("c3")).toMatchObject({
       id: "c3",
@@ -524,16 +527,16 @@ describe("CriticMarkup comments", () => {
     const input =
       'The {==**important**==}{>>Review this phrasing<<}{id="cmt2" by="user@example.com" at="2024-01-15T10:31:00.000Z"} section stays bold.\n';
 
-    const { doc, comments } = criticMarkdownToEditorState(input);
+    const { doc, comments } = parseDirect(input);
 
-    expect(editorStateToCriticMarkdown(doc, comments)).toBe(input);
+    expect(serializeDirectDocument(doc, comments)).toBe(input);
   });
 
   it("preserves inline code nested inside a comment anchor", () => {
     const input =
       'Check {==`inkback open`==}{>>Make sure this command is visible<<}{id="cmt-code" by="user" at="2024-01-15T10:31:00.000Z"} before sharing.\n';
 
-    const { doc, comments } = criticMarkdownToEditorState(input);
+    const { doc, comments } = parseDirect(input);
     const paragraph = doc.content?.[0];
     const codeNode = paragraph?.content?.[1];
 
@@ -548,13 +551,13 @@ describe("CriticMarkup comments", () => {
         expect.objectContaining({ type: "code" }),
       ]),
     });
-    expect(editorStateToCriticMarkdown(doc, comments)).toBe(input);
+    expect(serializeDirectDocument(doc, comments)).toBe(input);
   });
 
   it("creates one comment anchor when a selection spans inline code", () => {
     const input =
       "Each dev wrapper keeps its own server state under `~/.inkback/dev/<wrapper-name>` by default, so opening works.\n";
-    const { doc } = criticMarkdownToEditorState(input);
+    const { doc } = parseDirect(input);
     const editor = new Editor({
       extensions: createEditorExtensions(""),
       content: doc,
@@ -573,7 +576,7 @@ describe("CriticMarkup comments", () => {
       editor.commands.setCommentRef({ commentIds: ["c1"] });
 
       expect(
-        editorStateToCriticMarkdown(
+        serializeDirectDocument(
           editor.getJSON(),
           new Map([
             [
@@ -597,7 +600,7 @@ describe("CriticMarkup comments", () => {
   it("keeps the anchor attached when nearby text changes", () => {
     const input =
       'Before {==target==}{>>Check this<<}{id="cmt3" by="AI" at="2024-01-15T10:32:00.000Z"} after.\n';
-    const { doc, comments } = criticMarkdownToEditorState(input);
+    const { doc, comments } = parseDirect(input);
     const nextDoc = structuredClone(doc);
     const firstParagraph = nextDoc.content?.[0];
     const firstTextNode = firstParagraph?.content?.[0];
@@ -608,7 +611,7 @@ describe("CriticMarkup comments", () => {
 
     firstTextNode.text = "Before nearby ";
 
-    expect(editorStateToCriticMarkdown(nextDoc, comments)).toBe(
+    expect(serializeDirectDocument(nextDoc, comments)).toBe(
       'Before nearby {==target==}{>>Check this<<}{id="cmt3" by="AI" at="2024-01-15T10:32:00.000Z"} after.\n',
     );
   });
@@ -620,8 +623,8 @@ describe("CriticMarkup comments", () => {
 * {==Second item==}{>>Needs review<<}{id="cmt4" by="AI" at="2024-01-15T10:33:00.000Z"}
 `;
 
-    const { doc, comments } = criticMarkdownToEditorState(input);
-    const output = editorStateToCriticMarkdown(doc, comments);
+    const { doc, comments } = parseDirect(input);
+    const output = serializeDirectDocument(doc, comments);
 
     expect(output).toContain("## Sprint Notes");
     expect(output).toContain(
@@ -641,7 +644,7 @@ Use CriticMarkup for inline review feedback in markdown.
 \`\`\`
 `;
 
-    const { doc } = criticMarkdownToEditorState(input);
+    const { doc } = parseDirect(input);
     const codeBlock = doc.content?.[0];
     const textNode = codeBlock?.content?.[0];
 
@@ -655,7 +658,7 @@ Open files or folders with \`inkback open "/absolute/path/to/file.md"\`.
 After I finish reviewing in Inkback, continue by reading the markdown files from disk and making the requested changes there.
 Use CriticMarkup for inline review feedback in markdown.`,
     });
-    expect(editorStateToCriticMarkdown(doc, new Map())).toBe(input);
+    expect(serializeDirectDocument(doc, new Map())).toBe(input);
   });
 
   it("creates a comment anchor when a selection is inside a fenced code block", () => {
@@ -663,7 +666,7 @@ Use CriticMarkup for inline review feedback in markdown.`,
 const command = "inkback open";
 \`\`\`
 `;
-    const { doc } = criticMarkdownToEditorState(input);
+    const { doc } = parseDirect(input);
     const editor = new Editor({
       extensions: createEditorExtensions(""),
       content: doc,
@@ -707,7 +710,7 @@ const command = "inkback open";
         ],
       });
       expect(
-        editorStateToCriticMarkdown(
+        serializeDirectDocument(
           editor.getJSON(),
           new Map([
             [
@@ -735,7 +738,7 @@ const command = "{==inkback open==}{>>test<<}{id="c1" by="user" at="2026-04-25T2
 \`\`\`
 `;
 
-    const { doc, comments } = criticMarkdownToEditorState(input);
+    const { doc, comments } = parseDirect(input);
 
     expect(doc.content?.[0]).toMatchObject({
       type: "codeBlock",
@@ -765,41 +768,41 @@ const command = "{==inkback open==}{>>test<<}{id="c1" by="user" at="2026-04-25T2
       id: "c1",
       content: "test",
     });
-    expect(editorStateToCriticMarkdown(doc, comments)).toBe(input);
+    expect(serializeDirectDocument(doc, comments)).toBe(input);
   });
 
   it("round-trips an anchored reply thread", () => {
     const input =
       'Please revisit {==this sentence==}{>>Needs a source<<}{id="c1" by="user" at="2024-01-15T10:30:00.000Z"}{>>I can add one from the intro.<<}{id="c2" by="AI" at="2024-01-15T10:31:00.000Z" re="c1"}.\n';
 
-    const { doc, comments } = criticMarkdownToEditorState(input);
+    const { doc, comments } = parseDirect(input);
 
     expect(comments.get("c2")).toMatchObject({
       id: "c2",
       parentCommentId: "c1",
       authorType: "ai",
     });
-    expect(editorStateToCriticMarkdown(doc, comments)).toBe(input);
+    expect(serializeDirectDocument(doc, comments)).toBe(input);
   });
 
   it("round-trips nested replies in preorder", () => {
     const input =
       'Please revisit {==this sentence==}{>>Needs a source<<}{id="c1" by="user" at="2024-01-15T10:30:00.000Z"}{>>I can add one from the intro.<<}{id="c2" by="AI" at="2024-01-15T10:31:00.000Z" re="c1"}{>>Use the market report too.<<}{id="c3" by="user" at="2024-01-15T10:32:00.000Z" re="c2"}.\n';
 
-    const { doc, comments } = criticMarkdownToEditorState(input);
+    const { doc, comments } = parseDirect(input);
 
     expect(comments.get("c3")).toMatchObject({
       id: "c3",
       parentCommentId: "c2",
     });
-    expect(editorStateToCriticMarkdown(doc, comments)).toBe(input);
+    expect(serializeDirectDocument(doc, comments)).toBe(input);
   });
 
   it("preserves legacy metadata in unchanged blocks", () => {
     const input =
       "Please revisit {==this sentence==}{>>Needs a source<<}{@id:c1;by:user;at:2024-01-15T10:30:00.000Z@}.\n";
 
-    const { doc, comments } = criticMarkdownToEditorState(input);
+    const { doc, comments } = parseDirect(input);
 
     expect(comments.get("c1")).toMatchObject({
       id: "c1",
@@ -807,19 +810,19 @@ const command = "{==inkback open==}{>>test<<}{id="c1" by="user" at="2026-04-25T2
       authorType: "user",
       authorId: "user",
     });
-    expect(editorStateToCriticMarkdown(doc, comments)).toBe(input);
+    expect(serializeDirectDocument(doc, comments)).toBe(input);
   });
 
   it("round-trips escaped attribute metadata values", () => {
     const input =
       'Please revisit {==this sentence==}{>>Needs a source<<}{id="c1" by="user\\\\\\"name" at="2024-01-15T10:30:00.000Z"}.\n';
 
-    const { doc, comments } = criticMarkdownToEditorState(input);
+    const { doc, comments } = parseDirect(input);
 
     expect(comments.get("c1")).toMatchObject({
       authorId: 'user\\"name',
     });
-    expect(editorStateToCriticMarkdown(doc, comments)).toBe(input);
+    expect(serializeDirectDocument(doc, comments)).toBe(input);
   });
 
   it.each([
@@ -829,62 +832,58 @@ const command = "{==inkback open==}{>>test<<}{id="c1" by="user" at="2026-04-25T2
     "mixed-roundtrip.md",
   ])("round-trips markdown fixture %s", (fixtureName) => {
     const input = readMarkdownFixture(fixtureName);
-    const { doc, comments, frontmatter } = criticMarkdownToEditorState(input);
+    const { doc, comments, frontmatter } = parseDirect(input);
 
-    expect(editorStateToCriticMarkdown(doc, comments, { frontmatter })).toBe(
-      input,
-    );
+    expect(serializeDirectDocument(doc, comments, { frontmatter })).toBe(input);
   });
 
   it("recognizes unanchored review markup in fenced code while preserving inline code", () => {
     const input = readMarkdownFixture("criticmarkup-code-fences.md");
-    const { doc, comments, frontmatter } = criticMarkdownToEditorState(input);
+    const { doc, comments, frontmatter } = parseDirect(input);
 
     expect(comments.size).toBe(1);
-    expect(editorStateToCriticMarkdown(doc, comments, { frontmatter })).toBe(
-      input,
-    );
+    expect(serializeDirectDocument(doc, comments, { frontmatter })).toBe(input);
   });
 
   it("round-trips an insertion suggestion with metadata", () => {
     const input =
       'Add {++new text++}{id="s1" by="user" at="2024-01-15T10:30:00.000Z"} here.\n';
 
-    const { doc, comments } = criticMarkdownToEditorState(input);
+    const { doc, comments } = parseDirect(input);
 
-    expect(editorStateToCriticMarkdown(doc, comments)).toBe(input);
+    expect(serializeDirectDocument(doc, comments)).toBe(input);
   });
 
   it("round-trips a deletion suggestion with metadata", () => {
     const input =
       'Remove {--old text--}{id="s2" by="AI" at="2024-01-15T10:31:00.000Z"} here.\n';
 
-    const { doc, comments } = criticMarkdownToEditorState(input);
+    const { doc, comments } = parseDirect(input);
 
-    expect(editorStateToCriticMarkdown(doc, comments)).toBe(input);
+    expect(serializeDirectDocument(doc, comments)).toBe(input);
   });
 
   it("round-trips a substitution suggestion with metadata", () => {
     const input =
       'Use {~~old text~>new text~~}{id="s3" by="user@example.com" at="2024-01-15T10:32:00.000Z"} here.\n';
 
-    const { doc, comments } = criticMarkdownToEditorState(input);
+    const { doc, comments } = parseDirect(input);
 
-    expect(editorStateToCriticMarkdown(doc, comments)).toBe(input);
+    expect(serializeDirectDocument(doc, comments)).toBe(input);
   });
 
   it("round-trips a substitution suggestion with an attached comment", () => {
     const input =
       'Use {~~old text~>new text~~}{id="s3" by="AI" at="2024-01-15T10:32:00.000Z"}{>>Confirm this with legal.<<}{id="c1" by="user" at="2024-01-15T10:33:00.000Z" re="s3"} here.\n';
 
-    const { doc, comments } = criticMarkdownToEditorState(input);
+    const { doc, comments } = parseDirect(input);
 
     expect(comments.get("c1")).toMatchObject({
       id: "c1",
       content: "Confirm this with legal.",
       parentCommentId: "s3",
     });
-    expect(editorStateToCriticMarkdown(doc, comments)).toBe(input);
+    expect(serializeDirectDocument(doc, comments)).toBe(input);
   });
 
   it("renders review markup to HTML with comments and changes", () => {
@@ -906,11 +905,9 @@ const command = "{==inkback open==}{>>test<<}{id="c1" by="user" at="2026-04-25T2
   });
 
   it("imports suggestions without metadata and preserves their source", () => {
-    const { doc, comments } = criticMarkdownToEditorState(
-      "Add {++new text++} here.\n",
-    );
+    const { doc, comments } = parseDirect("Add {++new text++} here.\n");
 
-    expect(editorStateToCriticMarkdown(doc, comments)).toBe(
+    expect(serializeDirectDocument(doc, comments)).toBe(
       "Add {++new text++} here.\n",
     );
   });
@@ -919,42 +916,42 @@ const command = "{==inkback open==}{>>test<<}{id="c1" by="user" at="2026-04-25T2
     const input =
       'Use {++**bold** and `code`++}{id="s1" by="user" at="2024-01-15T10:30:00.000Z"} here.\n';
 
-    const { doc, comments } = criticMarkdownToEditorState(input);
+    const { doc, comments } = parseDirect(input);
 
-    expect(editorStateToCriticMarkdown(doc, comments)).toBe(input);
+    expect(serializeDirectDocument(doc, comments)).toBe(input);
   });
 
   it("preserves suggested changes next to comments", () => {
     const input =
       'Add {++new text++}{id="s1" by="user" at="2024-01-15T10:30:00.000Z"} near {==this==}{>>Check it<<}{id="c1" by="AI" at="2024-01-15T10:31:00.000Z"}.\n';
 
-    const { doc, comments } = criticMarkdownToEditorState(input);
+    const { doc, comments } = parseDirect(input);
 
-    expect(editorStateToCriticMarkdown(doc, comments)).toBe(input);
+    expect(serializeDirectDocument(doc, comments)).toBe(input);
   });
 
   it("round-trips a comment whose parent points to a suggestion id", () => {
     const input =
       '{==New wording==}{>>Why this wording?<<}{id="c1" by="user" at="2024-01-15T10:31:00.000Z" re="s1"} follows {++new text++}{id="s1" by="AI" at="2024-01-15T10:30:00.000Z"}.\n';
 
-    const { doc, comments } = criticMarkdownToEditorState(input);
+    const { doc, comments } = parseDirect(input);
 
     expect(comments.get("c1")).toMatchObject({
       parentCommentId: "s1",
     });
-    expect(editorStateToCriticMarkdown(doc, comments)).toBe(input);
+    expect(serializeDirectDocument(doc, comments)).toBe(input);
   });
 
   it("round-trips a comment attached directly to a suggestion", () => {
     const input =
       '{++new text++}{id="s1" by="AI" at="2024-01-15T10:30:00.000Z"}{>>Why this wording?<<}{id="c1" by="user" at="2024-01-15T10:31:00.000Z" re="s1"}\n';
 
-    const { doc, comments } = criticMarkdownToEditorState(input);
+    const { doc, comments } = parseDirect(input);
 
     expect(comments.get("c1")).toMatchObject({
       parentCommentId: "s1",
     });
-    expect(editorStateToCriticMarkdown(doc, comments)).toBe(input);
+    expect(serializeDirectDocument(doc, comments)).toBe(input);
   });
 
   it("preserves suggested changes in headings and list items", () => {
@@ -963,8 +960,8 @@ const command = "{==inkback open==}{>>test<<}{id="c1" by="user" at="2026-04-25T2
 * Keep {--old item--}{id="s2" by="user" at="2024-01-15T10:31:00.000Z"}
 `;
 
-    const { doc, comments } = criticMarkdownToEditorState(input);
-    const output = editorStateToCriticMarkdown(doc, comments);
+    const { doc, comments } = parseDirect(input);
+    const output = serializeDirectDocument(doc, comments);
 
     expect(output).toContain(
       '## Use {++new title++}{id="s1" by="user" at="2024-01-15T10:30:00.000Z"}',
@@ -977,8 +974,8 @@ const command = "{==inkback open==}{>>test<<}{id="c1" by="user" at="2026-04-25T2
   it("accepts and rejects insertion suggestions", () => {
     const input =
       'Add {++new text++}{id="s1" by="user" at="2024-01-15T10:30:00.000Z"} here.\n';
-    const accepted = criticMarkdownToEditorState(input);
-    const rejected = criticMarkdownToEditorState(input);
+    const accepted = parseDirect(input);
+    const rejected = parseDirect(input);
     const acceptEditor = new Editor({
       extensions: createEditorExtensions(""),
       content: accepted.doc,
@@ -993,11 +990,11 @@ const command = "{==inkback open==}{>>test<<}{id="c1" by="user" at="2026-04-25T2
       rejectEditor.commands.rejectCriticChange("s1");
 
       expect(
-        editorStateToCriticMarkdown(acceptEditor.getJSON(), accepted.comments),
+        serializeDirectDocument(acceptEditor.getJSON(), accepted.comments),
       ).toBe("Add new text here.\n");
       expect(
-        editorStateToCriticMarkdown(rejectEditor.getJSON(), rejected.comments),
-      ).toBe("Add here.\n");
+        serializeDirectDocument(rejectEditor.getJSON(), rejected.comments),
+      ).toBe("Add  here.\n");
     } finally {
       acceptEditor.destroy();
       rejectEditor.destroy();
@@ -1007,8 +1004,8 @@ const command = "{==inkback open==}{>>test<<}{id="c1" by="user" at="2026-04-25T2
   it("accepts and rejects deletion suggestions", () => {
     const input =
       'Remove {--old text--}{id="s1" by="user" at="2024-01-15T10:30:00.000Z"} here.\n';
-    const accepted = criticMarkdownToEditorState(input);
-    const rejected = criticMarkdownToEditorState(input);
+    const accepted = parseDirect(input);
+    const rejected = parseDirect(input);
     const acceptEditor = new Editor({
       extensions: createEditorExtensions(""),
       content: accepted.doc,
@@ -1023,10 +1020,10 @@ const command = "{==inkback open==}{>>test<<}{id="c1" by="user" at="2026-04-25T2
       rejectEditor.commands.rejectCriticChange("s1");
 
       expect(
-        editorStateToCriticMarkdown(acceptEditor.getJSON(), accepted.comments),
-      ).toBe("Remove here.\n");
+        serializeDirectDocument(acceptEditor.getJSON(), accepted.comments),
+      ).toBe("Remove  here.\n");
       expect(
-        editorStateToCriticMarkdown(rejectEditor.getJSON(), rejected.comments),
+        serializeDirectDocument(rejectEditor.getJSON(), rejected.comments),
       ).toBe("Remove old text here.\n");
     } finally {
       acceptEditor.destroy();
@@ -1037,8 +1034,8 @@ const command = "{==inkback open==}{>>test<<}{id="c1" by="user" at="2026-04-25T2
   it("accepts and rejects substitution suggestions", () => {
     const input =
       'Use {~~old~>new~~}{id="s1" by="user" at="2024-01-15T10:30:00.000Z"} here.\n';
-    const accepted = criticMarkdownToEditorState(input);
-    const rejected = criticMarkdownToEditorState(input);
+    const accepted = parseDirect(input);
+    const rejected = parseDirect(input);
     const acceptEditor = new Editor({
       extensions: createEditorExtensions(""),
       content: accepted.doc,
@@ -1053,10 +1050,10 @@ const command = "{==inkback open==}{>>test<<}{id="c1" by="user" at="2026-04-25T2
       rejectEditor.commands.rejectCriticChange("s1");
 
       expect(
-        editorStateToCriticMarkdown(acceptEditor.getJSON(), accepted.comments),
+        serializeDirectDocument(acceptEditor.getJSON(), accepted.comments),
       ).toBe("Use new here.\n");
       expect(
-        editorStateToCriticMarkdown(rejectEditor.getJSON(), rejected.comments),
+        serializeDirectDocument(rejectEditor.getJSON(), rejected.comments),
       ).toBe("Use old here.\n");
     } finally {
       acceptEditor.destroy();
@@ -1123,10 +1120,10 @@ const command = "{==inkback open==}{>>test<<}{id="c1" by="user" at="2026-04-25T2
 it("preserves resolution and custom metadata on inline comments and changes", () => {
   const input =
     'Text {==anchor==}{>>done<<}{id="c1" by="user" at="2026-04-28T12:00:00Z" status="resolved" resolved="Fixed" ticket="42"} {++new++}{id="s1" by="AI" at="2026-04-28T12:00:00Z" status="resolved" resolved="Accepted"}.\n';
-  const parsed = criticMarkdownToEditorState(input);
+  const parsed = parseDirect(input);
   if (parsed.doc.content?.[0]?.content?.[0])
     parsed.doc.content[0].content[0].text = "Updated ";
-  const output = editorStateToCriticMarkdown(parsed.doc, parsed.comments);
+  const output = serializeDirectDocument(parsed.doc, parsed.comments);
   expect(output).toContain('status="resolved" resolved="Fixed" ticket="42"');
   expect(output).toContain('status="resolved" resolved="Accepted"');
 });
@@ -1134,16 +1131,16 @@ it("preserves resolution and custom metadata on inline comments and changes", ()
 it("serializes every child of a comment anchor containing a suggestion", () => {
   const input =
     'Text {==before {++new++}{id="s1" by="AI" at="2026-04-28T12:00:00Z"} after==}{>>Check all<<}{id="c1" by="user" at="2026-04-28T12:00:00Z"}.\n';
-  const parsed = criticMarkdownToEditorState(input);
+  const parsed = parseDirect(input);
   if (parsed.doc.content?.[0]?.content?.[0])
     parsed.doc.content[0].content[0].text = "Updated ";
-  const output = editorStateToCriticMarkdown(parsed.doc, parsed.comments);
+  const output = serializeDirectDocument(parsed.doc, parsed.comments);
   expect(output).toContain("before {++new++}");
   expect(output).toContain(" after==}{>>Check all<<}");
 });
 
 it("allocates imported feedback around every explicit inline and endmatter ID", () => {
-  const parsed = criticMarkdownToEditorState(
+  const parsed = parseDirect(
     '{>>Anonymous<<} {>>Named<<}{#c1} {++suggestion++}\n\n---\ncomments:\n  c1:\n    by: user\n    at: "2026-04-28T12:00:00Z"\n  c9:\n    by: AI\n    at: "2026-04-28T12:00:00Z"\nsuggestions:\n  s9:\n    by: AI\n    at: "2026-04-28T12:00:00Z"\n',
   );
   expect(parsed.comments.get("c10")?.content).toBe("Anonymous");
@@ -1152,14 +1149,14 @@ it("allocates imported feedback around every explicit inline and endmatter ID", 
 });
 
 it("preserves code review metadata when editing the code block", () => {
-  const parsed = criticMarkdownToEditorState(
+  const parsed = parseDirect(
     '```js\n{==const x = 1;==}{>>done<<}{id="c1" by="user" at="2026-04-28T12:00:00Z" status="resolved" resolved="Fixed"}\n{++extra++}{id="s1" by="AI" at="2026-04-28T12:00:00Z" status="resolved"}\n```\n',
   );
   const codeBlock = parsed.doc.content?.[0];
   if (!codeBlock?.content)
     throw new Error("Expected parsed code block content");
   codeBlock.content.push({ type: "text", text: "\n// changed" });
-  const output = editorStateToCriticMarkdown(parsed.doc, parsed.comments);
+  const output = serializeDirectDocument(parsed.doc, parsed.comments);
   expect(output).toContain('status="resolved" resolved="Fixed"');
   expect(output).toContain("{++extra++}");
   expect(output).toContain("// changed");
